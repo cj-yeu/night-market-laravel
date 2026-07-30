@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\NightMarketController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Client\ClientHomeController;
+use App\Http\Controllers\Client\ReviewController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -25,6 +26,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/client/home', ClientHomeController::class)
         ->middleware('role:client')
         ->name('client.home');
+
+    Route::middleware('role:client')->prefix('client')->name('client.')->group(function () {
+        Route::get('/reviews/create', [ReviewController::class, 'create'])->name('reviews.create');
+        Route::post('/reviews', [ReviewController::class, 'store'])->name('reviews.store');
+    });
 
     Route::get('/admin/dashboard', AdminDashboardController::class)
         ->middleware('role:admin')

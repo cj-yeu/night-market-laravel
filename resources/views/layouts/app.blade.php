@@ -95,6 +95,9 @@
                             <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">
                                 Client Home
                             </a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('client.reviews.create') }}">
+                                Submit Review
+                            </a>
                         @endif
 
                         <form method="POST" action="{{ route('logout') }}">
