@@ -88,6 +88,9 @@
                             <a class="nav-link active fw-semibold me-2" href="{{ route('admin.dashboard') }}">
                                 Admin Dashboard
                             </a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.night-markets.create') }}">
+                                Add Night Market
+                            </a>
                         @else
                             <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">
                                 Client Home

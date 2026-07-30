@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\NightMarketController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Client\ClientHomeController;
@@ -28,4 +29,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/dashboard', AdminDashboardController::class)
         ->middleware('role:admin')
         ->name('admin.dashboard');
+
+    Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
+        Route::get('/night-markets/create', [NightMarketController::class, 'create'])
+            ->name('night-markets.create');
+        Route::post('/night-markets', [NightMarketController::class, 'store'])
+            ->name('night-markets.store');
+    });
 });
