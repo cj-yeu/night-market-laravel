@@ -27,4 +27,9 @@ class NightMarket extends Model
     {
         return $this->hasMany(MarketOperatingDay::class);
     }
+
+    public function visitPlans(): HasMany
+    {
+        return $this->hasMany(VisitPlan::class);
+    }
 }

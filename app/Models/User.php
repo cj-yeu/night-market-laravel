@@ -53,4 +53,9 @@ class User extends Authenticatable
             'is_active' => 'boolean',
         ];
     }
+
+    public function visitPlans(): HasMany
+    {
+        return $this->hasMany(VisitPlan::class);
+    }
 }
