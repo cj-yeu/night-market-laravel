@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\NightMarketController;
+use App\Http\Controllers\Admin\SocialMediaRecordController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Client\ClientHomeController;
@@ -35,5 +36,10 @@ Route::middleware('auth')->group(function () {
             ->name('night-markets.create');
         Route::post('/night-markets', [NightMarketController::class, 'store'])
             ->name('night-markets.store');
+
+        Route::get('/social-media-records/create', [SocialMediaRecordController::class, 'create'])
+            ->name('social-media-records.create');
+        Route::post('/social-media-records', [SocialMediaRecordController::class, 'store'])
+            ->name('social-media-records.store');
     });
 });
