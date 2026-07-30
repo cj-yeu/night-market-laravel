@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
+use App\Http\Controllers\Admin\StallController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Client\ClientHomeController;
@@ -35,5 +37,11 @@ Route::middleware('auth')->group(function () {
             ->name('night-markets.create');
         Route::post('/night-markets', [NightMarketController::class, 'store'])
             ->name('night-markets.store');
+
+        Route::get('/stalls/create', [StallController::class, 'create'])->name('stalls.create');
+        Route::post('/stalls', [StallController::class, 'store'])->name('stalls.store');
+
+        Route::get('/foods/create', [FoodController::class, 'create'])->name('foods.create');
+        Route::post('/foods', [FoodController::class, 'store'])->name('foods.store');
     });
 });
