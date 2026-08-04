@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\NightMarketController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Client\ClientHomeController;
+use App\Http\Controllers\Client\NightMarketDiscoveryController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -25,6 +26,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/client/home', ClientHomeController::class)
         ->middleware('role:client')
         ->name('client.home');
+
+    Route::middleware('role:client')->prefix('client')->name('client.')->group(function () {
+        Route::get('/night-markets', [NightMarketDiscoveryController::class, 'index'])
+            ->name('night-markets.index');
+        Route::get('/night-markets/{nightMarket}', [NightMarketDiscoveryController::class, 'show'])
+            ->whereNumber('nightMarket')
+            ->name('night-markets.show');
+    });
 
     Route::get('/admin/dashboard', AdminDashboardController::class)
         ->middleware('role:admin')
