@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Client\ClientHomeController;
 use App\Http\Controllers\Client\NightMarketDiscoveryController;
+use App\Http\Controllers\Client\StallFoodDiscoveryController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -32,9 +33,18 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:client')->prefix('client')->name('client.')->group(function () {
         Route::get('/night-markets', [NightMarketDiscoveryController::class, 'index'])
             ->name('night-markets.index');
+
         Route::get('/night-markets/{nightMarket}', [NightMarketDiscoveryController::class, 'show'])
             ->whereNumber('nightMarket')
             ->name('night-markets.show');
+
+        Route::get('/night-markets/{nightMarket}/stalls', [StallFoodDiscoveryController::class, 'index'])
+            ->whereNumber('nightMarket')
+            ->name('night-markets.stalls.index');
+
+        Route::get('/foods/{food}', [StallFoodDiscoveryController::class, 'show'])
+            ->whereNumber('food')
+            ->name('foods.show');
     });
 
     Route::get('/admin/dashboard', AdminDashboardController::class)

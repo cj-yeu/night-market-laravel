@@ -13,6 +13,9 @@
                     <span class="badge text-bg-warning mb-3">{{ $nightMarket->city }}</span>
                     <h1 class="display-6 fw-bold text-market">{{ $nightMarket->name }}</h1>
 
+                    <a href="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}"
+                        class="btn btn-market mt-3">Browse Stalls &amp; Must-Try Foods</a>
+
                     <dl class="row mt-4 mb-0">
                         <dt class="col-sm-3">Address</dt>
                         <dd class="col-sm-9">{{ $nightMarket->address }}</dd>

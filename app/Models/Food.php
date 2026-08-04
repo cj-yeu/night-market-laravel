@@ -10,6 +10,8 @@ class Food extends Model
 {
     use HasFactory;
 
+    protected $table = 'foods';
+
     public const STATUS_ACTIVE = 'active';
 
     public const STATUS_INACTIVE = 'inactive';
