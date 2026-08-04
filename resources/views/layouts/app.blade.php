@@ -102,6 +102,8 @@
                             </a>
                         @endif
 
+                        <a class="nav-link fw-semibold me-2" href="{{ route('profile.edit') }}">Profile</a>
+
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit" class="btn btn-sm btn-outline-danger">Logout</button>
