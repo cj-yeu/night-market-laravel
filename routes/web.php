@@ -1,11 +1,14 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
+use App\Http\Controllers\Admin\StallController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Client\ClientHomeController;
 use App\Http\Controllers\Client\NightMarketDiscoveryController;
+use App\Http\Controllers\Client\StallFoodDiscoveryController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -30,9 +33,18 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:client')->prefix('client')->name('client.')->group(function () {
         Route::get('/night-markets', [NightMarketDiscoveryController::class, 'index'])
             ->name('night-markets.index');
+
         Route::get('/night-markets/{nightMarket}', [NightMarketDiscoveryController::class, 'show'])
             ->whereNumber('nightMarket')
             ->name('night-markets.show');
+
+        Route::get('/night-markets/{nightMarket}/stalls', [StallFoodDiscoveryController::class, 'index'])
+            ->whereNumber('nightMarket')
+            ->name('night-markets.stalls.index');
+
+        Route::get('/foods/{food}', [StallFoodDiscoveryController::class, 'show'])
+            ->whereNumber('food')
+            ->name('foods.show');
     });
 
     Route::get('/admin/dashboard', AdminDashboardController::class)
@@ -44,5 +56,11 @@ Route::middleware('auth')->group(function () {
             ->name('night-markets.create');
         Route::post('/night-markets', [NightMarketController::class, 'store'])
             ->name('night-markets.store');
+
+        Route::get('/stalls/create', [StallController::class, 'create'])->name('stalls.create');
+        Route::post('/stalls', [StallController::class, 'store'])->name('stalls.store');
+
+        Route::get('/foods/create', [FoodController::class, 'create'])->name('foods.create');
+        Route::post('/foods', [FoodController::class, 'store'])->name('foods.store');
     });
 });
