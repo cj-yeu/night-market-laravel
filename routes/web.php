@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
+use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Admin\StallController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
@@ -53,11 +54,13 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('food')
             ->name('foods.show');
 
-        Route::get('/reviews/create', [ReviewController::class, 'create'])
-            ->name('reviews.create');
+        Route::get('/night-markets/{nightMarket}/reviews/create', [ReviewController::class, 'create'])
+            ->whereNumber('nightMarket')
+            ->name('night-markets.reviews.create');
 
-        Route::post('/reviews', [ReviewController::class, 'store'])
-            ->name('reviews.store');
+        Route::post('/night-markets/{nightMarket}/reviews', [ReviewController::class, 'store'])
+            ->whereNumber('nightMarket')
+            ->name('night-markets.reviews.store');
     });
 
     Route::get('/admin/dashboard', AdminDashboardController::class)
@@ -82,5 +85,12 @@ Route::middleware('auth')->group(function () {
 
         Route::post('/foods', [FoodController::class, 'store'])
             ->name('foods.store');
+
+        Route::get('/reviews', [AdminReviewController::class, 'index'])
+            ->name('reviews.index');
+
+        Route::patch('/reviews/{review}', [AdminReviewController::class, 'update'])
+            ->whereNumber('review')
+            ->name('reviews.update');
     });
 });

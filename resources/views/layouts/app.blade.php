@@ -93,15 +93,15 @@
                             </a>
                             <a class="nav-link fw-semibold me-2" href="{{ route('admin.stalls.create') }}">Add Stall</a>
                             <a class="nav-link fw-semibold me-2" href="{{ route('admin.foods.create') }}">Add Food</a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.reviews.index') }}">
+                                Review Management
+                            </a>
                         @else
                             <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">
                                 Client Home
                             </a>
                             <a class="nav-link fw-semibold me-2" href="{{ route('client.night-markets.index') }}">
                                 Discover Markets
-                            </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('client.reviews.create') }}">
-                                Submit Review
                             </a>
                         @endif
 

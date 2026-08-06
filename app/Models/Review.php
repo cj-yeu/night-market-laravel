@@ -13,6 +13,10 @@ class Review extends Model
 
     public const STATUS_PENDING = 'pending';
 
+    public const STATUS_APPROVED = 'approved';
+
+    public const STATUS_REJECTED = 'rejected';
+
     protected $fillable = [
         'user_id',
         'night_market_id',

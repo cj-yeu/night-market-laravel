@@ -13,8 +13,12 @@
                     <span class="badge text-bg-warning mb-3">{{ $nightMarket->city }}</span>
                     <h1 class="display-6 fw-bold text-market">{{ $nightMarket->name }}</h1>
 
-                    <a href="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}"
-                        class="btn btn-market mt-3">Browse Stalls &amp; Must-Try Foods</a>
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <a href="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}"
+                            class="btn btn-market">Browse Stalls &amp; Must-Try Foods</a>
+                        <a href="{{ route('client.night-markets.reviews.create', $nightMarket) }}"
+                            class="btn btn-outline-secondary">Write a Review</a>
+                    </div>
 
                     <dl class="row mt-4 mb-0">
                         <dt class="col-sm-3">Address</dt>
@@ -29,7 +33,7 @@
                 </div>
             </div>
 
-            <div class="card market-card">
+            <div class="card market-card mb-4">
                 <div class="card-body p-4 p-md-5">
                     <h2 class="h4 fw-bold text-market mb-4">Operating Hours</h2>
 
@@ -55,6 +59,45 @@
                                     @endforeach
                                 </tbody>
                             </table>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            <div class="card market-card">
+                <div class="card-body p-4 p-md-5">
+                    <div class="d-flex flex-column flex-sm-row justify-content-between gap-3 mb-4">
+                        <div>
+                            <h2 class="h4 fw-bold text-market mb-1">Approved Reviews</h2>
+                            <p class="text-secondary mb-0">Feedback shared by verified client accounts.</p>
+                        </div>
+
+                        @if ($reviewCount > 0)
+                            <div class="text-sm-end">
+                                <div class="fs-4 fw-bold text-market">{{ number_format($averageRating, 1) }}/5</div>
+                                <div class="small text-secondary">
+                                    {{ $reviewCount }} {{ $reviewCount === 1 ? 'review' : 'reviews' }}
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+
+                    @if ($reviews->isEmpty())
+                        <div class="alert alert-info mb-0" role="alert">
+                            No approved reviews yet. Be the first to submit a review for moderation.
+                        </div>
+                    @else
+                        <div class="vstack gap-3">
+                            @foreach ($reviews as $review)
+                                <article class="border rounded-3 p-3 bg-white">
+                                    <div class="d-flex justify-content-between gap-3 mb-2">
+                                        <strong>{{ $review->user->name }}</strong>
+                                        <span class="badge text-bg-warning">{{ $review->rating }}/5 stars</span>
+                                    </div>
+                                    <p class="mb-1">{{ $review->comment }}</p>
+                                    <small class="text-secondary">{{ $review->created_at->format('M j, Y') }}</small>
+                                </article>
+                            @endforeach
                         </div>
                     @endif
                 </div>

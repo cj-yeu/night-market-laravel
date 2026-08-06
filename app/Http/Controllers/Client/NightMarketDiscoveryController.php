@@ -5,11 +5,15 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\NightMarket\MarketDiscoveryRequest;
 use App\Services\NightMarketService;
+use App\Services\ReviewService;
 use Illuminate\View\View;
 
 class NightMarketDiscoveryController extends Controller
 {
-    public function __construct(private readonly NightMarketService $nightMarketService) {}
+    public function __construct(
+        private readonly NightMarketService $nightMarketService,
+        private readonly ReviewService $reviewService,
+    ) {}
 
     public function index(MarketDiscoveryRequest $request): View
     {
@@ -24,8 +28,11 @@ class NightMarketDiscoveryController extends Controller
 
     public function show(int $nightMarket): View
     {
+        $nightMarket = $this->nightMarketService->findActiveForClient($nightMarket);
+
         return view('client.night-markets.show', [
-            'nightMarket' => $this->nightMarketService->findActiveForClient($nightMarket),
+            'nightMarket' => $nightMarket,
+            ...$this->reviewService->approvedSummaryForMarket($nightMarket),
         ]);
     }
 }
