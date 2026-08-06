@@ -37,4 +37,9 @@ class NightMarket extends Model
     {
         return $this->hasMany(Stall::class);
     }
+
+    public function socialMediaRecords(): HasMany
+    {
+        return $this->hasMany(SocialMediaRecord::class);
+    }
 }

@@ -96,8 +96,8 @@
                             <a class="nav-link fw-semibold me-2" href="{{ route('admin.reviews.index') }}">
                                 Review Management
                             </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.social-media-records.create') }}">
-                                Social Media Data
+                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.social-media-records.index') }}">
+                                Social Media Records
                             </a>
                         @else
                             <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">

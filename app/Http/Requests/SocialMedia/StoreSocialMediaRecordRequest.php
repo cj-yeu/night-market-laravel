@@ -2,14 +2,17 @@
 
 namespace App\Http\Requests\SocialMedia;
 
+use App\Models\SocialMediaRecord;
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreSocialMediaRecordRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === 'admin';
+        return $this->user()?->role === User::ROLE_ADMIN;
     }
 
     /**
@@ -18,13 +21,15 @@ class StoreSocialMediaRecordRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'platform' => ['required', 'string', 'max:100'],
-            'post_url' => ['nullable', 'url:http,https', 'max:2048'],
-            'content' => ['required', 'string', 'max:50000'],
-            'post_date' => ['required', 'date'],
-            'engagement_count' => ['required', 'integer', 'min:0'],
-            'mentioned_market_name' => ['nullable', 'string', 'max:255'],
-            'mentioned_food_name' => ['nullable', 'string', 'max:255'],
+            'night_market_id' => ['required', 'integer', 'exists:night_markets,id'],
+            'food_id' => ['nullable', 'integer', 'exists:foods,id'],
+            'platform' => ['required', Rule::in(SocialMediaRecord::PLATFORMS)],
+            'original_post_url' => ['required', 'url:http,https', 'max:2048'],
+            'content_summary' => ['required', 'string', 'max:2000'],
+            'posted_date' => ['required', 'date', 'before_or_equal:today'],
+            'likes' => ['required', 'integer', 'min:0'],
+            'comments' => ['required', 'integer', 'min:0'],
+            'shares' => ['required', 'integer', 'min:0'],
         ];
     }
 
@@ -32,14 +37,22 @@ class StoreSocialMediaRecordRequest extends FormRequest
     {
         $this->merge([
             'platform' => trim((string) $this->platform),
-            'post_url' => $this->filled('post_url') ? trim((string) $this->post_url) : null,
-            'content' => trim((string) $this->content),
-            'mentioned_market_name' => $this->filled('mentioned_market_name')
-                ? trim((string) $this->mentioned_market_name)
-                : null,
-            'mentioned_food_name' => $this->filled('mentioned_food_name')
-                ? trim((string) $this->mentioned_food_name)
-                : null,
+            'original_post_url' => trim((string) $this->original_post_url),
+            'content_summary' => trim((string) $this->content_summary),
         ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return [
+            'night_market_id' => 'night market',
+            'food_id' => 'related food',
+            'original_post_url' => 'original post URL',
+            'content_summary' => 'caption / content summary',
+            'posted_date' => 'posted date',
+        ];
     }
 }

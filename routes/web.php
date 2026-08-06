@@ -91,9 +91,20 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('review')
             ->name('reviews.update');
 
+        Route::get('/social-media-records', [SocialMediaRecordController::class, 'index'])
+            ->name('social-media-records.index');
         Route::get('/social-media-records/create', [SocialMediaRecordController::class, 'create'])
             ->name('social-media-records.create');
         Route::post('/social-media-records', [SocialMediaRecordController::class, 'store'])
             ->name('social-media-records.store');
+        Route::get('/social-media-records/{socialMediaRecord}/edit', [SocialMediaRecordController::class, 'edit'])
+            ->whereNumber('socialMediaRecord')
+            ->name('social-media-records.edit');
+        Route::patch('/social-media-records/{socialMediaRecord}', [SocialMediaRecordController::class, 'update'])
+            ->whereNumber('socialMediaRecord')
+            ->name('social-media-records.update');
+        Route::delete('/social-media-records/{socialMediaRecord}', [SocialMediaRecordController::class, 'destroy'])
+            ->whereNumber('socialMediaRecord')
+            ->name('social-media-records.destroy');
     });
 });
