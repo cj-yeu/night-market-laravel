@@ -106,6 +106,9 @@
                             <a class="nav-link fw-semibold me-2" href="{{ route('client.night-markets.index') }}">
                                 Discover Markets
                             </a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('client.visit-plans.index') }}">
+                                My Visit Plans
+                            </a>
                         @endif
 
                         <a class="nav-link fw-semibold me-2" href="{{ route('profile.edit') }}">Profile</a>

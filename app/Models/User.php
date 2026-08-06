@@ -55,6 +55,11 @@ class User extends Authenticatable
         ];
     }
 
+    public function visitPlans(): HasMany
+    {
+        return $this->hasMany(VisitPlan::class);
+    }
+
     public function reviews(): HasMany
     {
         return $this->hasMany(Review::class);
