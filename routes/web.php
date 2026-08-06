@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
 use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
+use App\Http\Controllers\Admin\SocialMediaRecordController;
 use App\Http\Controllers\Admin\StallController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
@@ -61,6 +62,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/night-markets/{nightMarket}/reviews', [ReviewController::class, 'store'])
             ->whereNumber('nightMarket')
             ->name('night-markets.reviews.store');
+
     });
 
     Route::get('/admin/dashboard', AdminDashboardController::class)
@@ -70,27 +72,39 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/night-markets/create', [NightMarketController::class, 'create'])
             ->name('night-markets.create');
-
         Route::post('/night-markets', [NightMarketController::class, 'store'])
             ->name('night-markets.store');
 
         Route::get('/stalls/create', [StallController::class, 'create'])
             ->name('stalls.create');
-
         Route::post('/stalls', [StallController::class, 'store'])
             ->name('stalls.store');
 
         Route::get('/foods/create', [FoodController::class, 'create'])
             ->name('foods.create');
-
         Route::post('/foods', [FoodController::class, 'store'])
             ->name('foods.store');
 
         Route::get('/reviews', [AdminReviewController::class, 'index'])
             ->name('reviews.index');
-
         Route::patch('/reviews/{review}', [AdminReviewController::class, 'update'])
             ->whereNumber('review')
             ->name('reviews.update');
+
+        Route::get('/social-media-records', [SocialMediaRecordController::class, 'index'])
+            ->name('social-media-records.index');
+        Route::get('/social-media-records/create', [SocialMediaRecordController::class, 'create'])
+            ->name('social-media-records.create');
+        Route::post('/social-media-records', [SocialMediaRecordController::class, 'store'])
+            ->name('social-media-records.store');
+        Route::get('/social-media-records/{socialMediaRecord}/edit', [SocialMediaRecordController::class, 'edit'])
+            ->whereNumber('socialMediaRecord')
+            ->name('social-media-records.edit');
+        Route::patch('/social-media-records/{socialMediaRecord}', [SocialMediaRecordController::class, 'update'])
+            ->whereNumber('socialMediaRecord')
+            ->name('social-media-records.update');
+        Route::delete('/social-media-records/{socialMediaRecord}', [SocialMediaRecordController::class, 'destroy'])
+            ->whereNumber('socialMediaRecord')
+            ->name('social-media-records.destroy');
     });
 });

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Food extends Model
 {
@@ -35,5 +36,10 @@ class Food extends Model
     public function stall(): BelongsTo
     {
         return $this->belongsTo(Stall::class);
+    }
+
+    public function socialMediaRecords(): HasMany
+    {
+        return $this->hasMany(SocialMediaRecord::class);
     }
 }
