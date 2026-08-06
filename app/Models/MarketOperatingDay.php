@@ -26,6 +26,14 @@ class MarketOperatingDay extends Model
         'closing_time',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'opening_time' => 'datetime:H:i',
+            'closing_time' => 'datetime:H:i',
+        ];
+    }
+
     public function nightMarket(): BelongsTo
     {
         return $this->belongsTo(NightMarket::class);

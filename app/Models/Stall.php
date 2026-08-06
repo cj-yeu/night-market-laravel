@@ -4,9 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class NightMarket extends Model
+class Stall extends Model
 {
     use HasFactory;
 
@@ -15,26 +16,19 @@ class NightMarket extends Model
     public const STATUS_INACTIVE = 'inactive';
 
     protected $fillable = [
+        'night_market_id',
         'name',
-        'address',
-        'city',
-        'state',
         'description',
         'status',
     ];
 
-    public function operatingDays(): HasMany
+    public function nightMarket(): BelongsTo
     {
-        return $this->hasMany(MarketOperatingDay::class);
+        return $this->belongsTo(NightMarket::class);
     }
 
-    public function reviews(): HasMany
+    public function foods(): HasMany
     {
-        return $this->hasMany(Review::class);
-    }
-
-    public function stalls(): HasMany
-    {
-        return $this->hasMany(Stall::class);
+        return $this->hasMany(Food::class);
     }
 }
