@@ -71,6 +71,30 @@ Route::middleware('auth')->group(function () {
 
         Route::post('/visit-plans', [VisitPlanController::class, 'store'])
             ->name('visit-plans.store');
+
+        Route::get('/visit-plans/{visitPlan}', [VisitPlanController::class, 'show'])
+            ->whereNumber('visitPlan')
+            ->name('visit-plans.show');
+
+        Route::get('/visit-plans/{visitPlan}/edit', [VisitPlanController::class, 'edit'])
+            ->whereNumber('visitPlan')
+            ->name('visit-plans.edit');
+
+        Route::patch('/visit-plans/{visitPlan}', [VisitPlanController::class, 'update'])
+            ->whereNumber('visitPlan')
+            ->name('visit-plans.update');
+
+        Route::delete('/visit-plans/{visitPlan}', [VisitPlanController::class, 'destroy'])
+            ->whereNumber('visitPlan')
+            ->name('visit-plans.destroy');
+
+        Route::post('/visit-plans/{visitPlan}/items', [VisitPlanController::class, 'storeItem'])
+            ->whereNumber('visitPlan')
+            ->name('visit-plans.items.store');
+
+        Route::delete('/visit-plans/{visitPlan}/items/{visitPlanItem}', [VisitPlanController::class, 'destroyItem'])
+            ->whereNumber(['visitPlan', 'visitPlanItem'])
+            ->name('visit-plans.items.destroy');
     });
 
     Route::get('/admin/dashboard', AdminDashboardController::class)

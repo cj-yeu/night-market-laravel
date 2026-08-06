@@ -32,6 +32,11 @@
                             <p class="text-secondary mb-0">
                                 {{ $visitPlan->visit_date->format('d M Y') }}
                             </p>
+                            <p class="small text-secondary mt-2 mb-3">
+                                {{ $visitPlan->items_count }} planned {{ $visitPlan->items_count === 1 ? 'item' : 'items' }}
+                            </p>
+                            <a href="{{ route('client.visit-plans.show', $visitPlan) }}"
+                                class="btn btn-market">View Plan</a>
                         </div>
                     </article>
                 </div>

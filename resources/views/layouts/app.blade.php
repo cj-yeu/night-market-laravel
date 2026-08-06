@@ -100,7 +100,6 @@
                             <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">
                                 Client Home
                             </a>
-<<<<<<< HEAD
                             <a class="nav-link fw-semibold me-2" href="{{ route('client.night-markets.index') }}">
                                 Discover Markets
                             </a>

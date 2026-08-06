@@ -21,7 +21,7 @@
                             <div class="mb-3">
                                 <label for="title" class="form-label">Plan Title</label>
                                 <input type="text" class="form-control @error('title') is-invalid @enderror"
-                                    id="title" name="title" value="{{ old('title') }}" required>
+                                    id="title" name="title" value="{{ old('title') }}" maxlength="255" required>
                                 @error('title')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
@@ -35,13 +35,41 @@
                                     @foreach ($nightMarkets as $nightMarket)
                                         <option value="{{ $nightMarket->id }}"
                                             @selected((string) old('night_market_id') === (string) $nightMarket->id)>
+                                            {{--
                                             {{ $nightMarket->name }} — {{ $nightMarket->city }}
+                                            --}}
+                                            {{ $nightMarket->name }} &mdash; {{ $nightMarket->city }}
                                         </option>
                                     @endforeach
                                 </select>
                                 @error('night_market_id')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="form-label">Operating Schedule</div>
+                                <div id="schedule-placeholder" class="alert alert-secondary py-2">
+                                    Select a night market to view its operating days and hours.
+                                </div>
+                                @foreach ($nightMarkets as $nightMarket)
+                                    <div class="alert alert-info py-2 d-none"
+                                        data-market-schedule="{{ $nightMarket->id }}">
+                                        <strong>{{ $nightMarket->name }}</strong>
+                                        @if ($nightMarket->operatingDays->isEmpty())
+                                            <div>No operating schedule is currently available.</div>
+                                        @else
+                                            <ul class="mb-0 mt-1 ps-3">
+                                                @foreach ($nightMarket->operatingDays as $operatingDay)
+                                                    <li>
+                                                        {{ $operatingDay->day_of_week }}:
+                                                        {{ $operatingDay->opening_time->format('g:i A') }}&ndash;{{ $operatingDay->closing_time->format('g:i A') }}
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+                                    </div>
+                                @endforeach
                             </div>
 
                             <div class="mb-3">
@@ -55,9 +83,9 @@
                             </div>
 
                             <div class="mb-4">
-                                <label for="notes" class="form-label">Notes</label>
+                                <label for="notes" class="form-label">Notes <span class="text-secondary">(optional)</span></label>
                                 <textarea class="form-control @error('notes') is-invalid @enderror"
-                                    id="notes" name="notes" rows="4">{{ old('notes') }}</textarea>
+                                    id="notes" name="notes" rows="4" maxlength="5000">{{ old('notes') }}</textarea>
                                 @error('notes')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
@@ -75,3 +103,26 @@
         </div>
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const marketSelect = document.getElementById('night_market_id');
+            const placeholder = document.getElementById('schedule-placeholder');
+            const schedules = document.querySelectorAll('[data-market-schedule]');
+
+            const showSelectedSchedule = () => {
+                let hasSchedule = false;
+                schedules.forEach((schedule) => {
+                    const selected = schedule.dataset.marketSchedule === marketSelect.value;
+                    schedule.classList.toggle('d-none', !selected);
+                    hasSchedule = hasSchedule || selected;
+                });
+                placeholder.classList.toggle('d-none', hasSchedule);
+            };
+
+            marketSelect.addEventListener('change', showSelectedSchedule);
+            showSelectedSchedule();
+        });
+    </script>
+@endpush
