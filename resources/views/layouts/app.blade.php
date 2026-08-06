@@ -91,14 +91,25 @@
                             <a class="nav-link fw-semibold me-2" href="{{ route('admin.night-markets.create') }}">
                                 Add Night Market
                             </a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.stalls.create') }}">Add Stall</a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.foods.create') }}">Add Food</a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.reviews.index') }}">
+                                Review Management
+                            </a>
                         @else
                             <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">
                                 Client Home
                             </a>
+<<<<<<< HEAD
+                            <a class="nav-link fw-semibold me-2" href="{{ route('client.night-markets.index') }}">
+                                Discover Markets
+                            </a>
                             <a class="nav-link fw-semibold me-2" href="{{ route('client.visit-plans.index') }}">
-                                Visit Plans
+                                My Visit Plans
                             </a>
                         @endif
+
+                        <a class="nav-link fw-semibold me-2" href="{{ route('profile.edit') }}">Profile</a>
 
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
