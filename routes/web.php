@@ -1,3 +1,5 @@
+<?php
+
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
@@ -65,13 +67,20 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/night-markets/create', [NightMarketController::class, 'create'])
             ->name('night-markets.create');
+
         Route::post('/night-markets', [NightMarketController::class, 'store'])
             ->name('night-markets.store');
 
-        Route::get('/stalls/create', [StallController::class, 'create'])->name('stalls.create');
-        Route::post('/stalls', [StallController::class, 'store'])->name('stalls.store');
+        Route::get('/stalls/create', [StallController::class, 'create'])
+            ->name('stalls.create');
 
-        Route::get('/foods/create', [FoodController::class, 'create'])->name('foods.create');
-        Route::post('/foods', [FoodController::class, 'store'])->name('foods.store');
+        Route::post('/stalls', [StallController::class, 'store'])
+            ->name('stalls.store');
+
+        Route::get('/foods/create', [FoodController::class, 'create'])
+            ->name('foods.create');
+
+        Route::post('/foods', [FoodController::class, 'store'])
+            ->name('foods.store');
     });
 });
