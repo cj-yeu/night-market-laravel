@@ -28,14 +28,19 @@ class NightMarket extends Model
         return $this->hasMany(MarketOperatingDay::class);
     }
 
+    public function stalls(): HasMany
+    {
+        return $this->hasMany(Stall::class);
+    }
+
     public function reviews(): HasMany
     {
         return $this->hasMany(Review::class);
     }
 
-    public function stalls(): HasMany
+    public function visitPlans(): HasMany
     {
-        return $this->hasMany(Stall::class);
+        return $this->hasMany(VisitPlan::class);
     }
 
     public function socialMediaRecords(): HasMany
