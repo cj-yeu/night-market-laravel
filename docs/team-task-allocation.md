@@ -39,3 +39,5 @@ The team follows a Modular Monolith architecture with Laravel MVC and a Service 
 6. No `.env`, `vendor/` folder or sensitive database credentials may be committed.
 7. All UI implementation must follow the approved Figma design system.
 8. The final ERD, Use Case Diagram and Architecture Diagram will be produced from the actual Laravel implementation.
+
+## Week 9 Responsibilities
