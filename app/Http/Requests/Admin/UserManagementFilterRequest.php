@@ -1,0 +1,35 @@
+<?php
+
+namespace App\Http\Requests\Admin;
+
+use App\Models\User;
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
+class UserManagementFilterRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return $this->user()?->role === User::ROLE_ADMIN;
+    }
+
+    /**
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+            'search' => ['nullable', 'string', 'max:255'],
+            'role' => ['nullable', Rule::in([User::ROLE_ADMIN, User::ROLE_CLIENT])],
+            'status' => ['nullable', Rule::in(['active', 'inactive'])],
+        ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'search' => $this->filled('search') ? trim((string) $this->search) : null,
+        ]);
+    }
+}
