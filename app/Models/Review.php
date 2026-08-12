@@ -17,6 +17,12 @@ class Review extends Model
 
     public const STATUS_REJECTED = 'rejected';
 
+    public const STATUSES = [
+        self::STATUS_PENDING,
+        self::STATUS_APPROVED,
+        self::STATUS_REJECTED,
+    ];
+
     protected $fillable = [
         'user_id',
         'night_market_id',

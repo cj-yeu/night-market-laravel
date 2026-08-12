@@ -53,21 +53,58 @@ class ReviewService
     }
 
     /**
+     * @param  array{search?: string|null, market_id?: int|null, status?: string|null}  $filters
      * @return Collection<int, Review>
      */
-    public function pendingReviews(): Collection
+    public function reviewsForModeration(array $filters): Collection
     {
         return Review::query()
-            ->where('status', Review::STATUS_PENDING)
             ->with(['user:id,name,email', 'nightMarket:id,name,city'])
-            ->oldest()
+            ->when($filters['search'] ?? null, function ($query, string $search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('comment', 'like', '%'.$search.'%')
+                        ->orWhereHas('user', function ($query) use ($search) {
+                            $query->where('name', 'like', '%'.$search.'%')
+                                ->orWhere('email', 'like', '%'.$search.'%');
+                        })
+                        ->orWhereHas('nightMarket', fn ($query) => $query
+                            ->where('name', 'like', '%'.$search.'%'));
+                });
+            })
+            ->when($filters['market_id'] ?? null, fn ($query, int $marketId) => $query
+                ->where('night_market_id', $marketId))
+            ->when($filters['status'] ?? null, fn ($query, string $status) => $query
+                ->where('status', $status))
+            ->latest()
             ->get();
+    }
+
+    /**
+     * @return Collection<int, NightMarket>
+     */
+    public function marketsWithReviews(): Collection
+    {
+        return NightMarket::query()
+            ->whereHas('reviews')
+            ->select(['id', 'name'])
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function moderationStatusOptions(): array
+    {
+        return [
+            Review::STATUS_PENDING => 'Pending',
+            Review::STATUS_APPROVED => 'Approved',
+            Review::STATUS_REJECTED => 'Rejected',
+        ];
     }
 
     public function moderate(Review $review, string $status): Review
     {
-        abort_unless($review->status === Review::STATUS_PENDING, 404);
-
         $review->update(['status' => $status]);
 
         return $review->refresh();
