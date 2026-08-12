@@ -99,6 +99,9 @@
                             <a class="nav-link fw-semibold me-2" href="{{ route('admin.social-media-records.index') }}">
                                 Social Media Records
                             </a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.users.index') }}">
+                                User Management
+                            </a>
                         @else
                             <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">
                                 Client Home

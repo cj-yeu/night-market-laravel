@@ -1,9 +1,3 @@
-Worked for 24s
-
-现在只需要解决 routes/web.php 的冲突。package-lock.json 不要动。
-
-在 VS Code 打开 routes/web.php，按 Ctrl + A，把内容全部换成下面这版（Social Media 和 Visit Planner 都会保留）：
-
 <?php
 
 use App\Http\Controllers\Admin\AdminDashboardController;
@@ -12,6 +6,7 @@ use App\Http\Controllers\Admin\NightMarketController;
 use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Admin\SocialMediaRecordController;
 use App\Http\Controllers\Admin\StallController;
+use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Client\ClientHomeController;
@@ -117,5 +112,11 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('socialMediaRecord')->name('social-media-records.update');
         Route::delete('/social-media-records/{socialMediaRecord}', [SocialMediaRecordController::class, 'destroy'])
             ->whereNumber('socialMediaRecord')->name('social-media-records.destroy');
+
+        Route::get('/users', [UserManagementController::class, 'index'])
+            ->name('users.index');
+        Route::patch('/users/{user}/status', [UserManagementController::class, 'updateStatus'])
+            ->whereNumber('user')
+            ->name('users.status.update');
     });
 });
