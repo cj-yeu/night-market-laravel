@@ -1,16 +1,24 @@
 @extends('layouts.app')
 
-@section('title', 'Add Night Market | Night Market Selangor')
+@section('title', 'Create Night Market | Night Market Selangor')
 
 @section('content')
-    <div class="row justify-content-center">
-        <div class="col-12 col-xl-9">
-            <div class="card market-card">
-                <div class="card-body p-4 p-md-5">
-                    <div class="mb-4">
-                        <h1 class="h3 fw-bold text-market mb-1">Add Night Market</h1>
-                        <p class="text-secondary mb-0">Create a Selangor night market and its weekly operating hours.</p>
-                    </div>
+    <div class="mx-auto" style="max-width: 960px;">
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb small mb-0">
+                <li class="breadcrumb-item text-secondary">Management</li>
+                <li class="breadcrumb-item text-secondary">Night Markets</li>
+                <li class="breadcrumb-item active" aria-current="page">Create</li>
+            </ol>
+        </nav>
+
+        <header class="mb-4">
+            <h1 class="h2 fw-bold mb-2">Create Night Market</h1>
+            <p class="text-secondary mb-0">Add a new night market for visitors to discover.</p>
+        </header>
+
+        <div class="card market-card">
+            <div class="card-body p-4 p-md-5">
 
                     <form method="POST" action="{{ route('admin.night-markets.store') }}" novalidate>
                         @csrf
@@ -121,9 +129,11 @@
                             </div>
                         </fieldset>
 
-                        <button type="submit" class="btn btn-market mt-4">Add Night Market</button>
+                        <div class="d-flex flex-wrap gap-2 mt-4">
+                            <button type="submit" class="btn btn-market">Create Night Market</button>
+                            <a href="{{ route('admin.dashboard') }}" class="btn btn-admin-secondary">Cancel</a>
+                        </div>
                     </form>
-                </div>
             </div>
         </div>
     </div>

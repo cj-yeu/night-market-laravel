@@ -1,3 +1,4 @@
+@php($isAdmin = auth()->check() && auth()->user()->role === \App\Models\User::ROLE_ADMIN)
 <!doctype html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
@@ -13,12 +14,27 @@
             integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
             crossorigin="anonymous"
         >
+        <link
+            href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+            rel="stylesheet"
+        >
 
         <style>
             :root {
                 --market-orange: #d85b1f;
                 --market-orange-dark: #a84013;
                 --market-cream: #fff7eb;
+                --admin-primary: #f97316;
+                --admin-primary-dark: #c2410c;
+                --admin-gold: #fbbf24;
+                --admin-charcoal: #1f2937;
+                --admin-body-text: #475569;
+                --admin-cream: #fff7ed;
+                --admin-surface: #ffffff;
+                --admin-border: #e5e7eb;
+                --admin-success: #16a34a;
+                --admin-warning: #d97706;
+                --admin-danger: #dc2626;
             }
 
             body {
@@ -32,8 +48,8 @@
                 border-bottom: 3px solid #f3b46f;
             }
 
-            .navbar-brand,
-            .nav-link.active {
+            .navbar-market .navbar-brand,
+            .navbar-market .nav-link.active {
                 color: var(--market-orange-dark) !important;
             }
 
@@ -60,12 +76,308 @@
             .text-market {
                 color: var(--market-orange-dark);
             }
+
+            .admin-layout {
+                background: var(--admin-cream);
+                color: var(--admin-body-text);
+                font-family: Inter, Arial, sans-serif;
+            }
+
+            .admin-layout h1,
+            .admin-layout h2,
+            .admin-layout h3,
+            .admin-layout h4,
+            .admin-layout h5,
+            .admin-layout h6 {
+                color: var(--admin-charcoal);
+            }
+
+            .admin-layout .text-market {
+                color: var(--admin-primary-dark) !important;
+            }
+
+            .admin-layout .market-card,
+            .admin-surface-card {
+                background-color: var(--admin-surface);
+                border: 1px solid var(--admin-border);
+                border-radius: 12px;
+                box-shadow: 0 0.25rem 1rem rgba(31, 41, 55, 0.06);
+            }
+
+            .admin-layout .btn,
+            .admin-layout .form-control,
+            .admin-layout .form-select {
+                border-radius: 8px;
+            }
+
+            .admin-layout .form-control,
+            .admin-layout .form-select {
+                border-color: var(--admin-border);
+            }
+
+            .admin-layout .btn-market {
+                --bs-btn-bg: var(--admin-primary);
+                --bs-btn-border-color: var(--admin-primary);
+                --bs-btn-hover-bg: var(--admin-primary-dark);
+                --bs-btn-hover-border-color: var(--admin-primary-dark);
+                --bs-btn-active-bg: var(--admin-primary-dark);
+                --bs-btn-active-border-color: var(--admin-primary-dark);
+                --bs-btn-focus-shadow-rgb: 249, 115, 22;
+            }
+
+            .btn-admin-secondary {
+                --bs-btn-color: var(--admin-primary-dark);
+                --bs-btn-bg: var(--admin-surface);
+                --bs-btn-border-color: var(--admin-primary);
+                --bs-btn-hover-color: #fff;
+                --bs-btn-hover-bg: var(--admin-primary);
+                --bs-btn-hover-border-color: var(--admin-primary);
+                --bs-btn-active-color: #fff;
+                --bs-btn-active-bg: var(--admin-primary-dark);
+                --bs-btn-active-border-color: var(--admin-primary-dark);
+                --bs-btn-focus-shadow-rgb: 249, 115, 22;
+            }
+
+            .admin-content-shell {
+                width: 100%;
+                max-width: 90rem;
+                margin-inline: auto;
+            }
+
+            .admin-surface-card {
+                transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+            }
+
+            .admin-surface-card:hover,
+            .admin-surface-card:focus {
+                border-color: rgba(249, 115, 22, 0.45);
+                box-shadow: 0 0.5rem 1.25rem rgba(31, 41, 55, 0.09);
+                transform: translateY(-2px);
+            }
+
+            .admin-card-icon {
+                color: var(--admin-primary-dark);
+                background-color: rgba(251, 191, 36, 0.18);
+            }
+
+            .admin-sidebar {
+                --bs-offcanvas-width: 260px;
+                --bs-offcanvas-bg: var(--admin-charcoal);
+                --bs-offcanvas-color: #f8fafc;
+                --bs-nav-link-color: #f8fafc;
+                --bs-nav-link-hover-color: #fff;
+                --bs-nav-pills-link-active-bg: var(--admin-primary);
+                width: 260px !important;
+                color: #f8fafc;
+                background-color: var(--admin-charcoal);
+                border-right: 1px solid rgba(255, 255, 255, 0.08);
+                box-shadow: 0.5rem 0 1.5rem rgba(31, 41, 55, 0.12);
+            }
+
+            .admin-sidebar .offcanvas-header,
+            .admin-sidebar .offcanvas-body {
+                color: #f8fafc;
+                background-color: var(--admin-charcoal);
+            }
+
+            .admin-sidebar-brand {
+                color: #fff;
+                font-weight: 700;
+                line-height: 1.25;
+            }
+
+            .admin-sidebar-brand:hover,
+            .admin-sidebar-brand:focus {
+                color: #fff;
+            }
+
+            .admin-brand-mark {
+                display: grid;
+                width: 2.5rem;
+                height: 2.5rem;
+                flex: 0 0 2.5rem;
+                place-items: center;
+                color: var(--admin-charcoal);
+                background: var(--admin-gold);
+                border-radius: 10px;
+            }
+
+            .admin-nav-heading {
+                margin: 1.25rem 0.75rem 0.5rem;
+                color: #cbd5e1;
+                font-size: 0.68rem;
+                font-weight: 700;
+                letter-spacing: 0.1em;
+            }
+
+            .admin-sidebar .nav-pills .admin-sidebar-link {
+                color: #f8fafc;
+                border-radius: 8px;
+                padding: 0.625rem 0.75rem;
+                font-size: 0.94rem;
+                font-weight: 500;
+                text-align: left;
+                transition: color 0.15s ease, background-color 0.15s ease;
+            }
+
+            .admin-sidebar .nav-pills .admin-sidebar-link:hover,
+            .admin-sidebar .nav-pills .admin-sidebar-link:focus {
+                color: #fff;
+                background-color: rgba(255, 255, 255, 0.10);
+            }
+
+            .admin-sidebar .nav-pills .admin-sidebar-link.active {
+                color: #fff;
+                background-color: var(--admin-primary);
+                box-shadow: none;
+            }
+
+            .admin-sidebar-link .bi {
+                width: 1.25rem;
+                margin-right: 0.55rem;
+                font-size: 1rem;
+                text-align: center;
+            }
+
+            .admin-sidebar-link .admin-menu-chevron {
+                width: auto;
+                margin-right: 0;
+            }
+
+            .admin-sidebar-submenu {
+                margin: 0.35rem 0 0.25rem 1.35rem;
+                padding-left: 0.75rem;
+                border-left: 1px solid rgba(255, 255, 255, 0.18);
+            }
+
+            .admin-sidebar .admin-sidebar-submenu .nav-link {
+                color: #cbd5e1;
+                padding: 0.4rem 0.625rem;
+                border-radius: 6px;
+                font-size: 0.84rem;
+            }
+
+            .admin-sidebar .admin-sidebar-submenu .nav-link:hover,
+            .admin-sidebar .admin-sidebar-submenu .nav-link:focus,
+            .admin-sidebar .admin-sidebar-submenu .nav-link.active {
+                color: #fff;
+                background-color: rgba(255, 255, 255, 0.10);
+            }
+
+            .admin-menu-chevron {
+                font-size: 0.85rem;
+                transition: transform 0.2s ease;
+            }
+
+            [aria-expanded="true"] .admin-menu-chevron {
+                transform: rotate(180deg);
+            }
+
+            .admin-account {
+                background-color: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+            }
+
+            .admin-account .min-w-0 {
+                min-width: 0;
+            }
+
+            .admin-avatar {
+                display: grid;
+                width: 2.25rem;
+                height: 2.25rem;
+                flex: 0 0 2.25rem;
+                place-items: center;
+                color: #fff;
+                background-color: var(--admin-primary);
+                border-radius: 50%;
+                font-size: 0.78rem;
+                font-weight: 700;
+            }
+
+            .admin-account-link {
+                color: #f8fafc;
+                border-radius: 8px;
+                font-size: 0.82rem;
+                text-decoration: none;
+            }
+
+            .admin-supporting-text {
+                color: #cbd5e1;
+            }
+
+            .admin-account-link:hover,
+            .admin-account-link:focus,
+            .admin-account-link.active {
+                color: #fff;
+                background-color: rgba(255, 255, 255, 0.10);
+            }
+
+            .admin-logout-link {
+                border: 0;
+                background: transparent;
+                color: #f8fafc;
+            }
+
+            .admin-logout-link:hover,
+            .admin-logout-link:focus {
+                color: #fff;
+                background-color: rgba(220, 38, 38, 0.72);
+            }
+
+            .admin-mobile-header {
+                position: sticky;
+                top: 0;
+                z-index: 1020;
+                background-color: var(--admin-surface);
+                border-bottom: 1px solid var(--admin-border);
+            }
+
+            .admin-main-content {
+                min-width: 0;
+                min-height: 100vh;
+            }
+
+            @media (min-width: 992px) {
+                .admin-sidebar.offcanvas-lg {
+                    position: fixed;
+                    inset: 0 auto 0 0;
+                    z-index: 1030;
+                    height: 100vh;
+                    background-color: var(--admin-charcoal) !important;
+                    visibility: visible !important;
+                    transform: none !important;
+                }
+
+                .admin-sidebar .offcanvas-body {
+                    overflow-y: auto;
+                }
+
+                .admin-main-content {
+                    margin-left: 260px;
+                }
+            }
         </style>
 
         @stack('styles')
     </head>
-    <body>
-        <nav class="navbar navbar-expand-lg navbar-light navbar-market">
+    <body class="{{ $isAdmin ? 'admin-layout' : '' }}">
+        @if ($isAdmin)
+            @include('layouts.partials.admin-sidebar')
+
+            <div class="admin-main-content">
+                <header class="admin-mobile-header d-lg-none px-3 py-2">
+                    <div class="d-flex align-items-center justify-content-between gap-3">
+                        <button class="btn btn-market" type="button" data-bs-toggle="offcanvas"
+                            data-bs-target="#adminSidebar" aria-controls="adminSidebar" aria-label="Open admin navigation">
+                            <i class="bi bi-list me-1" aria-hidden="true"></i>Menu
+                        </button>
+                        <span class="fw-bold text-market text-end">Night Market Admin Portal</span>
+                    </div>
+                </header>
+        @else
+            <nav class="navbar navbar-expand-lg navbar-light navbar-market">
             <div class="container">
                 <a class="navbar-brand fw-bold" href="{{ url('/') }}">Night Market Selangor</a>
 
@@ -84,25 +396,7 @@
                             Register
                         </a>
                     @else
-                        @if (auth()->user()->role === \App\Models\User::ROLE_ADMIN)
-                            <a class="nav-link active fw-semibold me-2" href="{{ route('admin.dashboard') }}">
-                                Admin Dashboard
-                            </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.night-markets.create') }}">
-                                Add Night Market
-                            </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.stalls.create') }}">Add Stall</a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.foods.create') }}">Add Food</a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.reviews.index') }}">
-                                Review Management
-                            </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.social-media-records.index') }}">
-                                Social Media Records
-                            </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('admin.users.index') }}">
-                                User Management
-                            </a>
-                        @else
+                        @if (auth()->user()->role !== \App\Models\User::ROLE_ADMIN)
                             <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">
                                 Client Home
                             </a>
@@ -126,9 +420,11 @@
                     @endguest
                 </div>
             </div>
-        </nav>
+            </nav>
+        @endif
 
-        <main class="container py-5">
+        <main class="{{ $isAdmin ? 'container-fluid px-3 px-md-4 px-xl-5' : 'container' }} py-4 py-lg-5">
+            <div class="{{ $isAdmin ? 'admin-content-shell' : '' }}">
             @if (session('status'))
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
                     {{ session('status') }}
@@ -143,7 +439,12 @@
             @endif
 
             @yield('content')
+            </div>
         </main>
+
+        @if ($isAdmin)
+            </div>
+        @endif
 
         <script
             src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
