@@ -14,10 +14,18 @@
                     <h1 class="display-6 fw-bold text-market">{{ $nightMarket->name }}</h1>
 
                     <div class="d-flex flex-wrap gap-2 mt-3">
-                        <a href="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}"
-                            class="btn btn-market">Browse Stalls &amp; Must-Try Foods</a>
-                        <a href="{{ route('client.night-markets.reviews.create', $nightMarket) }}"
-                            class="btn btn-outline-secondary">Write a Review</a>
+                        @if (Route::has('client.night-markets.stalls.index'))
+                            <a href="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}"
+                                class="btn btn-market">Browse Stalls</a>
+                        @endif
+                        @if (Route::has('client.night-markets.reviews.create'))
+                            <a href="{{ route('client.night-markets.reviews.create', $nightMarket) }}"
+                                class="btn btn-outline-secondary">Write a Review</a>
+                        @endif
+                        @if (Route::has('client.visit-plans.create'))
+                            <a href="{{ route('client.visit-plans.create') }}"
+                                class="btn btn-outline-secondary">Plan a Visit</a>
+                        @endif
                     </div>
 
                     <dl class="row mt-4 mb-0">
@@ -61,6 +69,64 @@
                             </table>
                         </div>
                     @endif
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-lg-6">
+                    <section class="card market-card h-100">
+                        <div class="card-body p-4 p-md-5">
+                            <h2 class="h4 fw-bold text-market mb-3">Active Stalls</h2>
+
+                            @if ($activeStalls->isEmpty())
+                                <div class="alert alert-secondary mb-0">
+                                    No active stalls are currently listed for this market.
+                                </div>
+                            @else
+                                <div class="vstack gap-3">
+                                    @foreach ($activeStalls as $stall)
+                                        <article class="border rounded-3 bg-white p-3">
+                                            <h3 class="h6 fw-bold mb-1">{{ $stall->name }}</h3>
+                                            <p class="text-secondary mb-0">
+                                                {{ $stall->description ?: 'No stall description available.' }}
+                                            </p>
+                                        </article>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    </section>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                    <section class="card market-card h-100">
+                        <div class="card-body p-4 p-md-5">
+                            <h2 class="h4 fw-bold text-market mb-3">Must-Try Foods</h2>
+
+                            @if ($mustTryFoods->isEmpty())
+                                <div class="alert alert-secondary mb-0">
+                                    No active must-try foods are currently listed for this market.
+                                </div>
+                            @else
+                                <div class="vstack gap-3">
+                                    @foreach ($mustTryFoods as $food)
+                                        <article class="border rounded-3 bg-white p-3">
+                                            <div class="d-flex justify-content-between gap-2 mb-1">
+                                                <h3 class="h6 fw-bold mb-0">{{ $food->name }}</h3>
+                                                <span class="badge text-bg-warning">Must-Try</span>
+                                            </div>
+                                            @if ($food->category)
+                                                <div class="small text-market fw-semibold mb-1">{{ $food->category }}</div>
+                                            @endif
+                                            <p class="text-secondary mb-0">
+                                                {{ $food->description ?: 'No food description available.' }}
+                                            </p>
+                                        </article>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    </section>
                 </div>
             </div>
 

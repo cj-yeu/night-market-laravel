@@ -22,6 +22,7 @@ class NightMarketDiscoveryController extends Controller
         return view('client.night-markets.index', [
             'nightMarkets' => $this->nightMarketService->discoverActiveMarkets($filters),
             'districts' => $this->nightMarketService->activeDistricts(),
+            'operatingDays' => $this->nightMarketService->operatingDayOptions(),
             'filters' => $filters,
         ]);
     }
@@ -32,6 +33,8 @@ class NightMarketDiscoveryController extends Controller
 
         return view('client.night-markets.show', [
             'nightMarket' => $nightMarket,
+            'activeStalls' => $nightMarket->stalls,
+            'mustTryFoods' => $this->nightMarketService->mustTryFoods($nightMarket),
             ...$this->reviewService->approvedSummaryForMarket($nightMarket),
         ]);
     }
