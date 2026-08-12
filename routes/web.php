@@ -12,6 +12,7 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Client\ClientHomeController;
 use App\Http\Controllers\Client\NightMarketDiscoveryController;
 use App\Http\Controllers\Client\ReviewController;
+use App\Http\Controllers\Client\SocialMediaHighlightController;
 use App\Http\Controllers\Client\StallFoodDiscoveryController;
 use App\Http\Controllers\Client\VisitPlanController;
 use App\Http\Controllers\UserAccount\ProfileController;
@@ -80,6 +81,9 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('visitPlan')
             ->whereNumber('visitPlanItem')
             ->name('visit-plans.items.destroy');
+
+        Route::get('/social-media-highlights', [SocialMediaHighlightController::class, 'index'])
+            ->name('social-media-highlights.index');
     });
 
     Route::get('/admin/dashboard', AdminDashboardController::class)

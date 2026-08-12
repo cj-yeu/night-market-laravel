@@ -64,4 +64,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(Review::class);
     }
+
+    public function approvedSocialMediaRecords(): HasMany
+    {
+        return $this->hasMany(SocialMediaRecord::class, 'approved_by');
+    }
 }

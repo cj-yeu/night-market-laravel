@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SocialMedia\SocialMediaRecordFilterRequest;
+use App\Http\Requests\SocialMedia\ModerateSocialMediaRecordRequest;
 use App\Http\Requests\SocialMedia\StoreSocialMediaRecordRequest;
 use App\Http\Requests\SocialMedia\UpdateSocialMediaRecordRequest;
 use App\Models\SocialMediaRecord;
@@ -21,6 +22,7 @@ class SocialMediaRecordController extends Controller
             'records' => $this->socialMediaDataService->records($request->validated()),
             'nightMarkets' => $this->socialMediaDataService->activeSelangorMarkets(),
             'platforms' => SocialMediaRecord::PLATFORMS,
+            'statuses' => SocialMediaRecord::STATUSES,
             'filters' => $request->validated(),
         ]);
     }
@@ -65,5 +67,26 @@ class SocialMediaRecordController extends Controller
         return redirect()
             ->route('admin.social-media-records.index')
             ->with('status', 'The social media record was deleted successfully.');
+    }
+
+    public function moderate(
+        ModerateSocialMediaRecordRequest $request,
+        SocialMediaRecord $socialMediaRecord,
+    ): RedirectResponse {
+        $status = $request->validated('status');
+        $this->socialMediaDataService->moderate(
+            $socialMediaRecord,
+            $request->user(),
+            $status,
+        );
+
+        return redirect()
+            ->route('admin.social-media-records.index')
+            ->with(
+                'status',
+                $status === SocialMediaRecord::STATUS_APPROVED
+                    ? 'The social media record was approved successfully.'
+                    : 'The social media record was rejected successfully.',
+            );
     }
 }

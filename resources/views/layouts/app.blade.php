@@ -112,6 +112,9 @@
                             <a class="nav-link fw-semibold me-2" href="{{ route('client.visit-plans.index') }}">
                                 My Visit Plans
                             </a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('client.social-media-highlights.index') }}">
+                                Social Media Highlights
+                            </a>
                         @endif
 
                         <a class="nav-link fw-semibold me-2" href="{{ route('profile.edit') }}">Profile</a>
