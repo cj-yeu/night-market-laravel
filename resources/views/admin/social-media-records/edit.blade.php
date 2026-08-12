@@ -8,7 +8,9 @@
             <div class="card market-card">
                 <div class="card-body p-4 p-md-5">
                     <h1 class="h3 fw-bold text-market">Edit Social Media Record</h1>
-                    <p class="text-secondary mb-4">Update the manually collected public post information.</p>
+                    <p class="text-secondary mb-4">
+                        Check and edit the extracted results, then confirm the related market and optional food.
+                    </p>
 
                     <form method="POST" action="{{ route('admin.social-media-records.update', $socialMediaRecord) }}" novalidate>
                         @csrf

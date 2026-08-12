@@ -1,9 +1,9 @@
 <div class="row g-3">
     <div class="col-md-6">
-        <label for="night_market_id" class="form-label">Night Market</label>
+        <label for="night_market_id" class="form-label">Confirmed Night Market <span class="text-secondary">(optional until approval)</span></label>
         <select id="night_market_id" name="night_market_id"
-            class="form-select @error('night_market_id') is-invalid @enderror" required>
-            <option value="">Select a night market</option>
+            class="form-select @error('night_market_id') is-invalid @enderror">
+            <option value="">Not confirmed yet</option>
             @foreach ($nightMarkets as $nightMarket)
                 <option value="{{ $nightMarket->id }}"
                     @selected((string) old('night_market_id', $socialMediaRecord?->night_market_id) === (string) $nightMarket->id)>
@@ -15,7 +15,7 @@
     </div>
 
     <div class="col-md-6">
-        <label for="food_id" class="form-label">Related Food <span class="text-secondary">(optional)</span></label>
+        <label for="food_id" class="form-label">Confirmed Food <span class="text-secondary">(optional)</span></label>
         <select id="food_id" name="food_id" class="form-select @error('food_id') is-invalid @enderror">
             <option value="">No related food</option>
             @foreach ($foods as $food)
@@ -59,12 +59,29 @@
     </div>
 
     <div class="col-12">
-        <label for="content_summary" class="form-label">Caption / Content Summary</label>
-        <textarea id="content_summary" name="content_summary" rows="6" maxlength="2000"
+        <label for="content_summary" class="form-label">Public Caption, Description, or Transcript</label>
+        <textarea id="content_summary" name="content_summary" rows="9" maxlength="50000"
             class="form-control @error('content_summary') is-invalid @enderror"
             required>{{ old('content_summary', $socialMediaRecord?->content_summary) }}</textarea>
+        <div class="form-text">Paste the public text itself. A URL alone cannot be extracted.</div>
         @error('content_summary')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
+
+    @foreach ([
+        'extracted_hashtags' => 'Extracted Hashtags',
+        'extracted_location_mentions' => 'Possible Location Mentions',
+        'extracted_market_mentions' => 'Possible Night Market Mentions',
+        'extracted_food_mentions' => 'Possible Food Mentions',
+    ] as $field => $label)
+        <div class="col-md-6">
+            <label for="{{ $field }}" class="form-label">{{ $label }}</label>
+            <textarea id="{{ $field }}" name="{{ $field }}" rows="3" maxlength="10000"
+                class="form-control @error($field) is-invalid @enderror"
+                placeholder="Automatically extracted; edit as a comma-separated list">{{ old($field, implode(', ', $socialMediaRecord?->{$field} ?? [])) }}</textarea>
+            <div class="form-text">Leave blank on creation to extract automatically from the pasted text.</div>
+            @error($field)<div class="invalid-feedback">{{ $message }}</div>@enderror
+        </div>
+    @endforeach
 
     @foreach (['likes' => 'Likes', 'comments' => 'Comments', 'shares' => 'Shares'] as $field => $label)
         <div class="col-md-4">

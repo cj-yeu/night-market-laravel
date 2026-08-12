@@ -8,7 +8,9 @@
             <div class="card market-card">
                 <div class="card-body p-4 p-md-5">
                     <h1 class="h3 fw-bold text-market">Add Social Media Record</h1>
-                    <p class="text-secondary mb-4">Manually record public social media content for later analysis.</p>
+                    <p class="text-secondary mb-4">
+                        Paste public post text to extract hashtags and possible market, location, and food mentions.
+                    </p>
 
                     <form method="POST" action="{{ route('admin.social-media-records.store') }}" novalidate>
                         @csrf

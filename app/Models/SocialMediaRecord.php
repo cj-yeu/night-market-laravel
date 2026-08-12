@@ -10,10 +10,23 @@ class SocialMediaRecord extends Model
 {
     use HasFactory;
 
+    public const STATUS_PENDING = 'pending';
+
+    public const STATUS_APPROVED = 'approved';
+
+    public const STATUS_REJECTED = 'rejected';
+
+    public const STATUSES = [
+        self::STATUS_PENDING,
+        self::STATUS_APPROVED,
+        self::STATUS_REJECTED,
+    ];
+
     public const PLATFORMS = [
         'Facebook',
         'Instagram',
         'TikTok',
+        'YouTube',
         'X / Twitter',
     ];
 
@@ -27,6 +40,14 @@ class SocialMediaRecord extends Model
         'likes',
         'comments',
         'shares',
+        'engagement_count',
+        'status',
+        'extracted_hashtags',
+        'extracted_location_mentions',
+        'extracted_market_mentions',
+        'extracted_food_mentions',
+        'approved_by',
+        'approved_at',
     ];
 
     protected function casts(): array
@@ -36,6 +57,12 @@ class SocialMediaRecord extends Model
             'likes' => 'integer',
             'comments' => 'integer',
             'shares' => 'integer',
+            'engagement_count' => 'integer',
+            'extracted_hashtags' => 'array',
+            'extracted_location_mentions' => 'array',
+            'extracted_market_mentions' => 'array',
+            'extracted_food_mentions' => 'array',
+            'approved_at' => 'datetime',
         ];
     }
 
@@ -47,5 +74,10 @@ class SocialMediaRecord extends Model
     public function food(): BelongsTo
     {
         return $this->belongsTo(Food::class);
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 }
