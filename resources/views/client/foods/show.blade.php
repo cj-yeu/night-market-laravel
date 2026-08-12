@@ -5,8 +5,20 @@
 @section('content')
     <div class="row justify-content-center">
         <div class="col-12 col-lg-8">
-            <a href="{{ route('client.night-markets.stalls.index', $food->stall->night_market_id) }}"
-                class="btn btn-outline-secondary mb-4">Back to Stalls</a>
+            <div class="d-flex flex-wrap gap-2 mb-4">
+                <a href="{{ route('client.night-markets.stalls.index', $food->stall->night_market_id) }}"
+                    class="btn btn-outline-secondary">Back to Stalls</a>
+                <a href="{{ route('client.night-markets.show', $food->stall->night_market_id) }}"
+                    class="btn btn-outline-secondary">Back to Market</a>
+                @if (Route::has('client.night-markets.reviews.create'))
+                    <a href="{{ route('client.night-markets.reviews.create', $food->stall->nightMarket) }}"
+                        class="btn btn-outline-secondary">Write a Review</a>
+                @endif
+                @if (Route::has('client.visit-plans.create'))
+                    <a href="{{ route('client.visit-plans.create') }}"
+                        class="btn btn-market">Plan a Visit</a>
+                @endif
+            </div>
 
             <div class="card market-card">
                 <div class="card-body p-4 p-md-5">

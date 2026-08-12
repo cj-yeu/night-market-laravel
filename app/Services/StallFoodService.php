@@ -23,6 +23,9 @@ class StallFoodService
      */
     public function discoverStallsForMarket(NightMarket $nightMarket, array $filters): Collection
     {
+        $search = $filters['search'] ?? null;
+        $category = $filters['category'] ?? null;
+
         return Stall::query()
             ->where('night_market_id', $nightMarket->id)
             ->where('status', Stall::STATUS_ACTIVE)
@@ -30,20 +33,52 @@ class StallFoodService
                 ->where('status', Food::STATUS_ACTIVE)
                 ->orderByDesc('is_must_try')
                 ->orderBy('name')])
-            ->when($filters['search'] ?? null, function ($query, string $search) {
-                $query->where(function ($query) use ($search) {
-                    $query->where('name', 'like', '%'.$search.'%')
-                        ->orWhereHas('foods', fn ($query) => $query
-                            ->where('status', Food::STATUS_ACTIVE)
-                            ->where('name', 'like', '%'.$search.'%'));
-                });
-            })
-            ->when($filters['category'] ?? null, fn ($query, string $category) => $query
-                ->whereHas('foods', fn ($query) => $query
-                    ->where('status', Food::STATUS_ACTIVE)
-                    ->where('category', $category)))
+            ->when($search && $category, fn ($query) => $this
+                ->applyCombinedSearchAndCategory($query, $search, $category))
+            ->when($search && ! $category, fn ($query) => $this->applyKeywordSearch($query, $search))
+            ->when(! $search && $category, fn ($query) => $this->applyCategoryFilter($query, $category))
             ->orderBy('name')
             ->get();
+    }
+
+    private function applyKeywordSearch($query, string $search): void
+    {
+        $query->where(function ($query) use ($search) {
+            $query->where('name', 'like', '%'.$search.'%')
+                ->orWhere('description', 'like', '%'.$search.'%')
+                ->orWhereHas('foods', fn ($query) => $query
+                    ->where('status', Food::STATUS_ACTIVE)
+                    ->where(function ($query) use ($search) {
+                        $query->where('name', 'like', '%'.$search.'%')
+                            ->orWhere('description', 'like', '%'.$search.'%');
+                    }));
+        });
+    }
+
+    private function applyCategoryFilter($query, string $category): void
+    {
+        $query->whereHas('foods', fn ($query) => $query
+            ->where('status', Food::STATUS_ACTIVE)
+            ->where('category', $category));
+    }
+
+    private function applyCombinedSearchAndCategory($query, string $search, string $category): void
+    {
+        $query->where(function ($query) use ($search, $category) {
+            $query->where(function ($query) use ($search, $category) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('name', 'like', '%'.$search.'%')
+                        ->orWhere('description', 'like', '%'.$search.'%');
+                });
+                $this->applyCategoryFilter($query, $category);
+            })->orWhereHas('foods', fn ($query) => $query
+                ->where('status', Food::STATUS_ACTIVE)
+                ->where('category', $category)
+                ->where(function ($query) use ($search) {
+                    $query->where('name', 'like', '%'.$search.'%')
+                        ->orWhere('description', 'like', '%'.$search.'%');
+                }));
+        });
     }
 
     /**
