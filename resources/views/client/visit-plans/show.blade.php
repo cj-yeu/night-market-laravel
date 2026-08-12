@@ -11,6 +11,14 @@
             <p class="text-secondary mb-0">{{ $visitPlan->nightMarket->name }}</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
+            @if (Route::has('client.night-markets.show'))
+                <a href="{{ route('client.night-markets.show', $visitPlan->night_market_id) }}"
+                    class="btn btn-outline-secondary">View Market</a>
+            @endif
+            @if (Route::has('client.night-markets.stalls.index'))
+                <a href="{{ route('client.night-markets.stalls.index', $visitPlan->night_market_id) }}"
+                    class="btn btn-outline-secondary">Browse Market Stalls</a>
+            @endif
             <a href="{{ route('client.visit-plans.edit', $visitPlan) }}" class="btn btn-market">Edit Plan</a>
             <form method="POST" action="{{ route('client.visit-plans.destroy', $visitPlan) }}"
                 onsubmit="return confirm('Delete this visit plan?');">
@@ -39,17 +47,44 @@
                 </div>
             </div>
 
-            <div class="card market-card">
+            <div class="card market-card mb-4">
                 <div class="card-body p-4">
-                    <h2 class="h4 fw-bold text-market mb-3">Planned Stalls &amp; Foods</h2>
-                    @if ($visitPlan->items->isEmpty())
-                        <div class="alert alert-info mb-0">No stalls or foods have been added yet.</div>
+                    <h2 class="h4 fw-bold text-market mb-3">Selected Stalls</h2>
+                    @if ($selectedStalls->isEmpty())
+                        <div class="alert alert-info mb-0">No stalls have been added yet.</div>
                     @else
                         <div class="list-group list-group-flush">
-                            @foreach ($visitPlan->items as $item)
+                            @foreach ($selectedStalls as $item)
                                 <div class="list-group-item px-0 d-flex justify-content-between gap-3">
                                     <div>
-                                        <span class="badge text-bg-warning mb-1">{{ ucfirst($item->item_type) }}</span>
+                                        <div class="fw-semibold">{{ $item->item_name }}</div>
+                                        @if ($item->notes)
+                                            <div class="small text-secondary">{{ $item->notes }}</div>
+                                        @endif
+                                    </div>
+                                    <form method="POST"
+                                        action="{{ route('client.visit-plans.items.destroy', [$visitPlan, $item]) }}">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                                    </form>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            <div class="card market-card">
+                <div class="card-body p-4">
+                    <h2 class="h4 fw-bold text-market mb-3">Selected Must-Try Foods</h2>
+                    @if ($selectedFoods->isEmpty())
+                        <div class="alert alert-info mb-0">No must-try foods have been added yet.</div>
+                    @else
+                        <div class="list-group list-group-flush">
+                            @foreach ($selectedFoods as $item)
+                                <div class="list-group-item px-0 d-flex justify-content-between gap-3">
+                                    <div>
                                         <div class="fw-semibold">{{ $item->item_name }}</div>
                                         @if ($item->notes)
                                             <div class="small text-secondary">{{ $item->notes }}</div>
@@ -106,7 +141,7 @@
                                 @error('item_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
                             </div>
                             <div class="mb-3">
-                                <label for="item_id" class="form-label">Stall or Food</label>
+                                <label for="item_id" class="form-label">Stall or Must-Try Food</label>
                                 <select id="item_id" name="item_id"
                                     class="form-select @error('item_id') is-invalid @enderror" required>
                                     <option value="">Select an item</option>

@@ -3,6 +3,7 @@
 namespace App\Http\Requests\VisitPlan;
 
 use App\Models\NightMarket;
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
@@ -12,7 +13,7 @@ class StoreVisitPlanRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === 'client';
+        return $this->user()?->role === User::ROLE_CLIENT;
     }
 
     /**
@@ -26,7 +27,9 @@ class StoreVisitPlanRequest extends FormRequest
                 'required',
                 'integer',
                 Rule::exists('night_markets', 'id')
-                    ->where(fn (Builder $query) => $query->where('status', NightMarket::STATUS_ACTIVE)),
+                    ->where(fn (Builder $query) => $query
+                        ->where('status', NightMarket::STATUS_ACTIVE)
+                        ->where('state', 'Selangor')),
             ],
             'visit_date' => ['required', 'date', 'after_or_equal:today'],
             'notes' => ['nullable', 'string', 'max:5000'],

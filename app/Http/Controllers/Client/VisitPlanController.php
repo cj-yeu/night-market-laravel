@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\VisitPlan\StoreVisitPlanItemRequest;
 use App\Http\Requests\VisitPlan\StoreVisitPlanRequest;
 use App\Http\Requests\VisitPlan\UpdateVisitPlanRequest;
+use App\Http\Requests\VisitPlan\VisitPlanIndexRequest;
 use App\Services\VisitPlanService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,10 +16,13 @@ class VisitPlanController extends Controller
 {
     public function __construct(private readonly VisitPlanService $visitPlanService) {}
 
-    public function index(Request $request): View
+    public function index(VisitPlanIndexRequest $request): View
     {
+        $filters = $request->validated();
+
         return view('client.visit-plans.index', [
-            'visitPlans' => $this->visitPlanService->plansForClient($request->user()),
+            'visitPlans' => $this->visitPlanService->plansForClient($request->user(), $filters),
+            'filters' => $filters,
         ]);
     }
 
@@ -44,6 +48,8 @@ class VisitPlanController extends Controller
 
         return view('client.visit-plans.show', [
             'visitPlan' => $visitPlan,
+            'selectedStalls' => $this->visitPlanService->selectedStallsForPlan($visitPlan),
+            'selectedFoods' => $this->visitPlanService->selectedFoodsForPlan($visitPlan),
             'eligibleStalls' => $this->visitPlanService->eligibleStallsForPlan($visitPlan),
             'eligibleFoods' => $this->visitPlanService->eligibleFoodsForPlan($visitPlan),
         ]);

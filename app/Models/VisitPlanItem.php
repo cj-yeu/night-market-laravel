@@ -11,6 +11,8 @@ class VisitPlanItem extends Model
     use HasFactory;
 
     protected $fillable = [
+        'stall_id',
+        'food_id',
         'item_type',
         'item_name',
         'notes',
@@ -27,5 +29,15 @@ class VisitPlanItem extends Model
     public function visitPlan(): BelongsTo
     {
         return $this->belongsTo(VisitPlan::class);
+    }
+
+    public function stall(): BelongsTo
+    {
+        return $this->belongsTo(Stall::class);
+    }
+
+    public function food(): BelongsTo
+    {
+        return $this->belongsTo(Food::class);
     }
 }

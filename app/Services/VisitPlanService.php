@@ -17,13 +17,27 @@ class VisitPlanService
     /**
      * @return Collection<int, VisitPlan>
      */
-    public function plansForClient(User $user): Collection
+    public function plansForClient(User $user, array $filters = []): Collection
     {
-        return $user->visitPlans()
+        $visitPlans = $user->visitPlans()
             ->with('nightMarket:id,name,city,state')
             ->withCount('items')
+            ->when($filters['search'] ?? null, function ($query, string $search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('title', 'like', '%'.$search.'%')
+                        ->orWhereHas('nightMarket', fn ($query) => $query
+                            ->where('name', 'like', '%'.$search.'%'));
+                });
+            })
             ->orderBy('visit_date')
             ->get();
+
+        $visitPlans->each(fn (VisitPlan $visitPlan) => $visitPlan->setAttribute(
+            'visit_status',
+            $this->statusForDate($visitPlan->visit_date),
+        ));
+
+        return $visitPlans;
     }
 
     /**
@@ -66,7 +80,11 @@ class VisitPlanService
     {
         return VisitPlan::query()
             ->where('user_id', $user->id)
-            ->with(['nightMarket.operatingDays', 'items'])
+            ->with([
+                'nightMarket.operatingDays',
+                'items.stall:id,name',
+                'items.food:id,name',
+            ])
             ->findOrFail($visitPlanId);
     }
 
@@ -106,15 +124,25 @@ class VisitPlanService
     public function addItemForClient(User $user, int $visitPlanId, array $data): VisitPlanItem
     {
         $visitPlan = $this->findForClient($user, $visitPlanId);
-        $itemName = $this->eligibleItemName(
+        $item = $this->eligibleItem(
             $visitPlan,
             $data['item_type'],
             (int) $data['item_id'],
         );
 
+        $foreignKey = $data['item_type'] === 'stall' ? 'stall_id' : 'food_id';
+
+        if ($visitPlan->items()->where($foreignKey, $item->id)->exists()) {
+            throw ValidationException::withMessages([
+                'item_id' => 'This item has already been added to the visit plan.',
+            ]);
+        }
+
         return $visitPlan->items()->create([
+            'stall_id' => $data['item_type'] === 'stall' ? $item->id : null,
+            'food_id' => $data['item_type'] === 'food' ? $item->id : null,
             'item_type' => $data['item_type'],
-            'item_name' => $itemName,
+            'item_name' => $item->name,
             'notes' => $data['notes'] ?? null,
             'sort_order' => ((int) $visitPlan->items()->max('sort_order')) + 1,
         ]);
@@ -149,6 +177,7 @@ class VisitPlanService
     {
         return Food::query()
             ->where('status', Food::STATUS_ACTIVE)
+            ->where('is_must_try', true)
             ->whereHas('stall', fn ($query) => $query
                 ->where('night_market_id', $visitPlan->night_market_id)
                 ->where('status', Stall::STATUS_ACTIVE))
@@ -158,6 +187,26 @@ class VisitPlanService
             ->with('stall:id,name')
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * @return Collection<int, VisitPlanItem>
+     */
+    public function selectedStallsForPlan(VisitPlan $visitPlan): Collection
+    {
+        return $visitPlan->items
+            ->where('item_type', 'stall')
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, VisitPlanItem>
+     */
+    public function selectedFoodsForPlan(VisitPlan $visitPlan): Collection
+    {
+        return $visitPlan->items
+            ->where('item_type', 'food')
+            ->values();
     }
 
     private function eligibleMarket(int $nightMarketId): NightMarket
@@ -189,7 +238,7 @@ class VisitPlanService
         }
     }
 
-    private function eligibleItemName(VisitPlan $visitPlan, string $itemType, int $itemId): string
+    private function eligibleItem(VisitPlan $visitPlan, string $itemType, int $itemId): Stall|Food
     {
         if ($itemType === 'stall') {
             return Stall::query()
@@ -199,7 +248,7 @@ class VisitPlanService
                 ->whereHas('nightMarket', fn ($query) => $query
                     ->where('status', NightMarket::STATUS_ACTIVE)
                     ->where('state', 'Selangor'))
-                ->value('name')
+                ->first()
                 ?? throw ValidationException::withMessages([
                     'item_id' => 'The selected stall is not available for this night market.',
                 ]);
@@ -208,15 +257,25 @@ class VisitPlanService
         return Food::query()
             ->whereKey($itemId)
             ->where('status', Food::STATUS_ACTIVE)
+            ->where('is_must_try', true)
             ->whereHas('stall', fn ($query) => $query
                 ->where('night_market_id', $visitPlan->night_market_id)
                 ->where('status', Stall::STATUS_ACTIVE))
             ->whereHas('stall.nightMarket', fn ($query) => $query
                 ->where('status', NightMarket::STATUS_ACTIVE)
                 ->where('state', 'Selangor'))
-            ->value('name')
+            ->first()
             ?? throw ValidationException::withMessages([
-                'item_id' => 'The selected food is not available for this night market.',
+                'item_id' => 'The selected must-try food is not available for this night market.',
             ]);
+    }
+
+    private function statusForDate(Carbon $visitDate): string
+    {
+        if ($visitDate->isToday()) {
+            return 'Today';
+        }
+
+        return $visitDate->isPast() ? 'Completed' : 'Upcoming';
     }
 }
