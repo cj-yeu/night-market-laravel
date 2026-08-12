@@ -12,7 +12,7 @@
         <div class="card-body p-4">
             <form method="GET" action="{{ route('client.night-markets.index') }}">
                 <div class="row g-3 align-items-end">
-                    <div class="col-12 col-lg-6">
+                    <div class="col-12 col-xl-5">
                         <label for="search" class="form-label">Search</label>
                         <input type="search" class="form-control @error('search') is-invalid @enderror"
                             id="search" name="search" value="{{ $filters['search'] ?? '' }}"
@@ -22,7 +22,7 @@
                         @enderror
                     </div>
 
-                    <div class="col-12 col-md-6 col-lg-3">
+                    <div class="col-12 col-md-6 col-xl-2">
                         <label for="district" class="form-label">District</label>
                         <select class="form-select @error('district') is-invalid @enderror"
                             id="district" name="district">
@@ -39,11 +39,28 @@
                         @enderror
                     </div>
 
-                    <div class="col-12 col-md-6 col-lg-3 d-flex flex-wrap gap-2">
+                    <div class="col-12 col-md-6 col-xl-2">
+                        <label for="operating_day" class="form-label">Operating Day</label>
+                        <select class="form-select @error('operating_day') is-invalid @enderror"
+                            id="operating_day" name="operating_day">
+                            <option value="">All Days</option>
+                            @foreach ($operatingDays as $operatingDay)
+                                <option value="{{ $operatingDay }}"
+                                    @selected(($filters['operating_day'] ?? '') === $operatingDay)>
+                                    {{ $operatingDay }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('operating_day')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="col-12 col-xl-3 d-flex flex-wrap gap-2">
                         <button type="submit" class="btn btn-market">Apply Filters</button>
-                        @if (($filters['search'] ?? null) || ($filters['district'] ?? null))
+                        @if (($filters['search'] ?? null) || ($filters['district'] ?? null) || ($filters['operating_day'] ?? null))
                             <a href="{{ route('client.night-markets.index') }}"
-                                class="btn btn-outline-secondary">Clear Filters</a>
+                                class="btn btn-outline-secondary" aria-label="Clear Filters">Reset Filters</a>
                         @endif
                     </div>
                 </div>
@@ -54,7 +71,9 @@
     @if ($nightMarkets->isEmpty())
         <div class="alert alert-warning text-center py-4" role="status">
             <h2 class="h5 mb-2">No night markets found</h2>
-            <p class="mb-0">Try changing your search or district filter.</p>
+            <p class="mb-3">Try changing your search, district, or operating day filter.</p>
+            <a href="{{ route('client.night-markets.index') }}"
+                class="btn btn-outline-secondary" aria-label="Clear Filters">Reset Filters</a>
         </div>
     @else
         <div class="row g-4">
@@ -70,6 +89,18 @@
                             <p class="text-secondary mb-3">
                                 <strong>District:</strong> {{ $nightMarket->city }}, {{ $nightMarket->state }}
                             </p>
+                            <div class="mb-3">
+                                <strong class="d-block mb-2">Operating Days:</strong>
+                                @if ($nightMarket->operatingDays->isEmpty())
+                                    <span class="text-secondary">Schedule not available.</span>
+                                @else
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @foreach ($nightMarket->operatingDays as $operatingDay)
+                                            <span class="badge text-bg-light border">{{ $operatingDay->day_of_week }}</span>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </div>
                             <p class="mb-4">
                                 {{ \Illuminate\Support\Str::limit($nightMarket->description ?: 'No description available.', 140) }}
                             </p>

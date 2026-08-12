@@ -2,14 +2,17 @@
 
 namespace App\Http\Requests\NightMarket;
 
+use App\Models\MarketOperatingDay;
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class MarketDiscoveryRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === 'client';
+        return $this->user()?->role === User::ROLE_CLIENT;
     }
 
     /**
@@ -20,6 +23,7 @@ class MarketDiscoveryRequest extends FormRequest
         return [
             'search' => ['nullable', 'string', 'max:255'],
             'district' => ['nullable', 'string', 'max:100'],
+            'operating_day' => ['nullable', Rule::in(MarketOperatingDay::DAYS)],
         ];
     }
 
@@ -28,6 +32,9 @@ class MarketDiscoveryRequest extends FormRequest
         $this->merge([
             'search' => $this->filled('search') ? trim((string) $this->search) : null,
             'district' => $this->filled('district') ? trim((string) $this->district) : null,
+            'operating_day' => $this->filled('operating_day')
+                ? trim((string) $this->operating_day)
+                : null,
         ]);
     }
 }
