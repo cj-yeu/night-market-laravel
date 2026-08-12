@@ -8,8 +8,18 @@
             <h1 class="h3 fw-bold text-market mb-1">Stalls at {{ $nightMarket->name }}</h1>
             <p class="text-secondary mb-0">Browse active stalls and their food items.</p>
         </div>
-        <a href="{{ route('client.night-markets.show', $nightMarket->id) }}"
-            class="btn btn-outline-secondary align-self-start">Back to Market Details</a>
+        <div class="d-flex flex-wrap gap-2 align-self-start">
+            <a href="{{ route('client.night-markets.show', $nightMarket->id) }}"
+                class="btn btn-outline-secondary">Back to Market Details</a>
+            @if (Route::has('client.night-markets.reviews.create'))
+                <a href="{{ route('client.night-markets.reviews.create', $nightMarket) }}"
+                    class="btn btn-outline-secondary">Write a Review</a>
+            @endif
+            @if (Route::has('client.visit-plans.create'))
+                <a href="{{ route('client.visit-plans.create') }}"
+                    class="btn btn-market">Plan a Visit</a>
+            @endif
+        </div>
     </div>
 
     <div class="card market-card mb-4">
@@ -20,7 +30,7 @@
                         <label for="search" class="form-label">Search</label>
                         <input type="search" class="form-control @error('search') is-invalid @enderror"
                             id="search" name="search" value="{{ $filters['search'] ?? '' }}"
-                            placeholder="Search by stall or food name">
+                            placeholder="Search stall or food name and description">
                         @error('search')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -47,7 +57,7 @@
                         <button type="submit" class="btn btn-market">Apply Filters</button>
                         @if (($filters['search'] ?? null) || ($filters['category'] ?? null))
                             <a href="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}"
-                                class="btn btn-outline-secondary">Clear Filters</a>
+                                class="btn btn-outline-secondary" aria-label="Clear Filters">Reset Search/Filters</a>
                         @endif
                     </div>
                 </div>
@@ -58,7 +68,9 @@
     @if ($stalls->isEmpty())
         <div class="alert alert-warning text-center py-4" role="status">
             <h2 class="h5 mb-2">No stalls or foods found</h2>
-            <p class="mb-0">Try changing your search or food category filter.</p>
+            <p class="mb-3">Try changing your keyword search or food category filter.</p>
+            <a href="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}"
+                class="btn btn-outline-secondary" aria-label="Clear Filters">Reset Search/Filters</a>
         </div>
     @else
         <div class="row g-4">
@@ -67,16 +79,18 @@
                     <article class="card h-100 market-card">
                         <div class="card-body p-4">
                             <h2 class="h4 fw-bold">{{ $stall->name }}</h2>
+                            <p class="small text-market fw-semibold mb-2">
+                                Night Market: {{ $nightMarket->name }}
+                            </p>
                             <p class="text-secondary">{{ $stall->description ?: 'No stall description available.' }}</p>
 
                             <h3 class="h6 text-market fw-bold mt-4">Food Items &amp; Must-Try Foods</h3>
                             @if ($stall->foods->isEmpty())
                                 <p class="text-secondary mb-0">No active food items are listed for this stall.</p>
                             @else
-                                <div class="list-group list-group-flush">
+                                <div class="vstack gap-2">
                                     @foreach ($stall->foods as $food)
-                                        <a href="{{ route('client.foods.show', $food->id) }}"
-                                            class="list-group-item list-group-item-action px-0">
+                                        <div class="border rounded-3 p-3 bg-white">
                                             <div class="d-flex justify-content-between align-items-start gap-3">
                                                 <div>
                                                     <span class="fw-semibold">{{ $food->name }}</span>
@@ -88,7 +102,11 @@
                                                     <span class="badge text-bg-warning">Must-Try</span>
                                                 @endif
                                             </div>
-                                        </a>
+                                            <a href="{{ route('client.foods.show', $food->id) }}"
+                                                class="btn btn-sm btn-outline-secondary mt-3">
+                                                View Food Details
+                                            </a>
+                                        </div>
                                     @endforeach
                                 </div>
                             @endif
