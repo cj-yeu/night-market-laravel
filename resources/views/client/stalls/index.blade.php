@@ -9,6 +9,8 @@
             <p class="text-secondary mb-0">Browse active stalls and their food items.</p>
         </div>
         <div class="d-flex flex-wrap gap-2 align-self-start">
+            <a href="{{ route('stalls.index', ['night_market_id' => $nightMarket->id]) }}"
+                class="btn btn-outline-secondary">Explore Stall Directory</a>
             <a href="{{ route('night-markets.show', $nightMarket->id) }}"
                 class="btn btn-outline-secondary">Back to Market Details</a>
             @if (Route::has('client.night-markets.reviews.create'))
@@ -90,6 +92,8 @@
                                 <x-halal-status :stall="$stall" />
                             </div>
                             <p class="text-secondary">{{ $stall->description ?: 'No stall description available.' }}</p>
+                            <a href="{{ route('foods.index', ['stall_id' => $stall->id, 'night_market_id' => $nightMarket->id]) }}"
+                                class="btn btn-sm btn-outline-secondary mb-3">Browse this Stall’s Foods</a>
                             @if ($stall->hasCurrentHalalEvidence() || $stall->sourceUrl() || $stall->verified_at)
                                 <div class="small text-secondary mb-3">
                                     @if ($stall->verified_at)

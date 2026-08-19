@@ -11,6 +11,122 @@ use Illuminate\Database\Eloquent\Collection;
 class StallFoodService
 {
     /**
+     * @param  array{search?: string|null, night_market_id?: int|null, city?: string|null, category?: string|null, halal_status?: string|null, sort?: string|null}  $filters
+     * @return LengthAwarePaginator<Stall>
+     */
+    public function discoverPublicStalls(array $filters): LengthAwarePaginator
+    {
+        $search = $this->literalLikePattern($filters['search'] ?? null);
+        $query = Stall::query()
+            ->publiclyVisible()
+            ->with('nightMarket:id,name,city,state,status')
+            ->when($search, fn ($query, string $pattern) => $query->where(function ($query) use ($pattern) {
+                $query->where('name', 'like', $pattern)
+                    ->orWhere('description', 'like', $pattern);
+            }))
+            ->when($filters['night_market_id'] ?? null, fn ($query, int $marketId) => $query
+                ->where('night_market_id', $marketId))
+            ->when($filters['city'] ?? null, fn ($query, string $city) => $query
+                ->whereHas('nightMarket', fn ($query) => $query->publiclyVisible()->where('city', $city)))
+            ->when($filters['category'] ?? null, fn ($query, string $category) => $query->where('category', $category))
+            ->when($filters['halal_status'] ?? null, fn ($query, string $status) => $query->where('halal_status', $status));
+
+        match ($filters['sort'] ?? 'name_asc') {
+            'name_desc' => $query->orderByDesc('name')->orderByDesc('id'),
+            'market_asc' => $query
+                ->orderBy(NightMarket::query()->select('name')->whereColumn('night_markets.id', 'stalls.night_market_id'))
+                ->orderBy('name')
+                ->orderBy('id'),
+            default => $query->orderBy('name')->orderBy('id'),
+        };
+
+        return $query->paginate(12)->withQueryString();
+    }
+
+    /**
+     * @return array{nightMarkets: Collection<int, NightMarket>, cities: Collection<int, NightMarket>, stallCategories: Collection<int, Stall>}
+     */
+    public function publicStallFilterOptions(): array
+    {
+        return [
+            'nightMarkets' => $this->publicNightMarketOptions(),
+            'cities' => NightMarket::query()->publiclyVisible()
+                ->whereNotNull('city')->where('city', '!=', '')->select('city')->distinct()->orderBy('city')->get(),
+            'stallCategories' => Stall::query()->publiclyVisible()
+                ->whereNotNull('category')->where('category', '!=', '')->select('category')->distinct()->orderBy('category')->get(),
+        ];
+    }
+
+    /**
+     * @param  array{search?: string|null, night_market_id?: int|null, stall_id?: int|null, category?: string|null, halal_status?: string|null, is_must_try?: string|null, min_price?: numeric-string|int|float|null, max_price?: numeric-string|int|float|null, sort?: string|null}  $filters
+     * @return LengthAwarePaginator<Food>
+     */
+    public function discoverPublicFoods(array $filters): LengthAwarePaginator
+    {
+        $search = $this->literalLikePattern($filters['search'] ?? null);
+        $query = Food::query()
+            ->publiclyVisible()
+            ->with(['stall:id,night_market_id,name,halal_status,status', 'stall.nightMarket:id,name,city,state,status'])
+            ->when($search, fn ($query, string $pattern) => $query->where(function ($query) use ($pattern) {
+                $query->where('name', 'like', $pattern)
+                    ->orWhere('description', 'like', $pattern);
+            }))
+            ->when($filters['night_market_id'] ?? null, fn ($query, int $marketId) => $query
+                ->whereHas('stall', fn ($query) => $query->publiclyVisible()->where('night_market_id', $marketId)))
+            ->when($filters['stall_id'] ?? null, fn ($query, int $stallId) => $query->where('stall_id', $stallId))
+            ->when($filters['category'] ?? null, fn ($query, string $category) => $query->where('category', $category))
+            ->when($filters['halal_status'] ?? null, fn ($query, string $status) => $query
+                ->whereHas('stall', fn ($query) => $query->publiclyVisible()->where('halal_status', $status)))
+            ->when(array_key_exists('is_must_try', $filters) && $filters['is_must_try'] !== null,
+                fn ($query) => $query->where('is_must_try', $filters['is_must_try'] === '1'))
+            ->when(array_key_exists('min_price', $filters) && $filters['min_price'] !== null,
+                fn ($query) => $this->applyMinimumPrice($query, $filters['min_price']))
+            ->when(array_key_exists('max_price', $filters) && $filters['max_price'] !== null,
+                fn ($query) => $this->applyMaximumPrice($query, $filters['max_price']));
+
+        match ($filters['sort'] ?? 'name_asc') {
+            'name_desc' => $query->orderByDesc('name')->orderByDesc('id'),
+            'price_low_high' => $query->orderByRaw('price_min IS NULL AND price_max IS NULL')
+                ->orderByRaw('COALESCE(price_min, price_max) ASC')->orderBy('name')->orderBy('id'),
+            'price_high_low' => $query->orderByRaw('price_min IS NULL AND price_max IS NULL')
+                ->orderByRaw('COALESCE(price_max, price_min) DESC')->orderBy('name')->orderBy('id'),
+            'must_try_first' => $query->orderByDesc('is_must_try')->orderBy('name')->orderBy('id'),
+            default => $query->orderBy('name')->orderBy('id'),
+        };
+
+        return $query->paginate(12)->withQueryString();
+    }
+
+    /**
+     * @return array{nightMarkets: Collection<int, NightMarket>, publicStalls: Collection<int, Stall>, foodCategories: Collection<int, Food>, halalStatuses: array<string, string>}
+     */
+    public function publicFoodFilterOptions(): array
+    {
+        return [
+            'nightMarkets' => $this->publicNightMarketOptions(),
+            'publicStalls' => Stall::query()->publiclyVisible()
+                ->with('nightMarket:id,name')->select(['id', 'night_market_id', 'name'])->orderBy('name')->get(),
+            'foodCategories' => Food::query()->publiclyVisible()
+                ->whereNotNull('category')->where('category', '!=', '')->select('category')->distinct()->orderBy('category')->get(),
+            'halalStatuses' => collect(Stall::halalStatusOptions())->only(
+                Stall::query()->publiclyVisible()
+                    ->whereHas('foods', fn ($query) => $query->where('status', Food::STATUS_ACTIVE))
+                    ->distinct()->pluck('halal_status')->all()
+            )->all(),
+        ];
+    }
+
+    /**
+     * @return Collection<int, Food>
+     */
+    public function featuredMustTryFoods(int $limit = 6): Collection
+    {
+        return Food::query()->publiclyVisible()->where('is_must_try', true)
+            ->with(['stall:id,night_market_id,name,halal_status,status', 'stall.nightMarket:id,name,city,state,status'])
+            ->orderBy('name')->orderBy('id')->limit($limit)->get();
+    }
+
+    /**
      * @param  array{search?: string|null, night_market_id?: int|null, category?: string|null, halal_status?: string|null, status?: string|null}  $filters
      * @return LengthAwarePaginator<Stall>
      */
@@ -137,7 +253,7 @@ class StallFoodService
      */
     public function discoverStallsForMarket(NightMarket $nightMarket, array $filters): Collection
     {
-        $search = $filters['search'] ?? null;
+        $search = $this->literalLikePattern($filters['search'] ?? null);
         $category = $filters['category'] ?? null;
 
         return Stall::query()
@@ -158,13 +274,13 @@ class StallFoodService
     private function applyKeywordSearch($query, string $search): void
     {
         $query->where(function ($query) use ($search) {
-            $query->where('name', 'like', '%'.$search.'%')
-                ->orWhere('description', 'like', '%'.$search.'%')
+            $query->where('name', 'like', $search)
+                ->orWhere('description', 'like', $search)
                 ->orWhereHas('foods', fn ($query) => $query
                     ->where('status', Food::STATUS_ACTIVE)
                     ->where(function ($query) use ($search) {
-                        $query->where('name', 'like', '%'.$search.'%')
-                            ->orWhere('description', 'like', '%'.$search.'%');
+                        $query->where('name', 'like', $search)
+                            ->orWhere('description', 'like', $search);
                     }));
         });
     }
@@ -181,16 +297,16 @@ class StallFoodService
         $query->where(function ($query) use ($search, $category) {
             $query->where(function ($query) use ($search, $category) {
                 $query->where(function ($query) use ($search) {
-                    $query->where('name', 'like', '%'.$search.'%')
-                        ->orWhere('description', 'like', '%'.$search.'%');
+                    $query->where('name', 'like', $search)
+                        ->orWhere('description', 'like', $search);
                 });
                 $this->applyCategoryFilter($query, $category);
             })->orWhereHas('foods', fn ($query) => $query
                 ->where('status', Food::STATUS_ACTIVE)
                 ->where('category', $category)
                 ->where(function ($query) use ($search) {
-                    $query->where('name', 'like', '%'.$search.'%')
-                        ->orWhere('description', 'like', '%'.$search.'%');
+                    $query->where('name', 'like', $search)
+                        ->orWhere('description', 'like', $search);
                 }));
         });
     }
@@ -294,6 +410,35 @@ class StallFoodService
         }
 
         return $food->refresh();
+    }
+
+    /**
+     * @return Collection<int, NightMarket>
+     */
+    private function publicNightMarketOptions(): Collection
+    {
+        return NightMarket::query()->publiclyVisible()
+            ->select(['id', 'name', 'city'])->orderBy('name')->orderBy('id')->get();
+    }
+
+    private function applyMinimumPrice($query, string|int|float $minimum): void
+    {
+        $query->where(function ($query) use ($minimum) {
+            $query->where('price_max', '>=', $minimum)
+                ->orWhere(function ($query) use ($minimum) {
+                    $query->whereNull('price_max')->where('price_min', '>=', $minimum);
+                });
+        });
+    }
+
+    private function applyMaximumPrice($query, string|int|float $maximum): void
+    {
+        $query->where(function ($query) use ($maximum) {
+            $query->where('price_min', '<=', $maximum)
+                ->orWhere(function ($query) use ($maximum) {
+                    $query->whereNull('price_min')->where('price_max', '<=', $maximum);
+                });
+        });
     }
 
     private function literalLikePattern(?string $value): ?string

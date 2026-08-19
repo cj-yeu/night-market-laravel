@@ -6,6 +6,8 @@
     <div class="row justify-content-center">
         <div class="col-12 col-lg-8">
             <div class="d-flex flex-wrap gap-2 mb-4">
+                <a href="{{ route('foods.index', ['stall_id' => $food->stall->id, 'night_market_id' => $food->stall->night_market_id]) }}"
+                    class="btn btn-outline-secondary">Foods at {{ $food->stall->name }}</a>
                 <a href="{{ route('night-markets.stalls.index', $food->stall->night_market_id) }}"
                     class="btn btn-outline-secondary">Back to Stalls</a>
                 <a href="{{ route('night-markets.show', $food->stall->night_market_id) }}"
@@ -36,10 +38,10 @@
 
                     <dl class="row mt-4 mb-0">
                         <dt class="col-sm-3">Stall</dt>
-                        <dd class="col-sm-9">{{ $food->stall->name }}</dd>
+                        <dd class="col-sm-9"><a href="{{ route('foods.index', ['stall_id' => $food->stall->id]) }}">{{ $food->stall->name }}</a></dd>
 
                         <dt class="col-sm-3">Night Market</dt>
-                        <dd class="col-sm-9">{{ $food->stall->nightMarket->name }}</dd>
+                        <dd class="col-sm-9"><a href="{{ route('night-markets.show', $food->stall->nightMarket) }}">{{ $food->stall->nightMarket->name }}</a></dd>
 
                         <dt class="col-sm-3">Category</dt>
                         <dd class="col-sm-9">{{ $food->category ?: 'Not specified' }}</dd>
@@ -81,6 +83,36 @@
                     </dl>
                 </div>
             </div>
+
+            <section class="card market-card mt-4" aria-labelledby="food-market-reviews-heading">
+                <div class="card-body p-4 p-md-5">
+                    <div class="d-flex flex-column flex-sm-row justify-content-between gap-2 mb-4">
+                        <div>
+                            <h2 id="food-market-reviews-heading" class="h4 fw-bold text-market mb-1">Approved Market Reviews</h2>
+                            <p class="text-secondary mb-0">Approved reviews for {{ $food->stall->nightMarket->name }}.</p>
+                        </div>
+                        @if ($reviewCount > 0)
+                            <div><strong>{{ number_format($averageRating, 1) }}/5</strong> · {{ $reviewCount }} {{ $reviewCount === 1 ? 'review' : 'reviews' }}</div>
+                        @endif
+                    </div>
+                    @if ($reviews->isEmpty())
+                        <div class="alert alert-info mb-0">No approved reviews are available for this market yet.</div>
+                    @else
+                        <div class="vstack gap-3">
+                            @foreach ($reviews as $review)
+                                <article class="border rounded-3 p-3 bg-white">
+                                    <div class="d-flex justify-content-between gap-3 mb-2">
+                                        <div class="d-flex align-items-center gap-2"><x-user-avatar :user="$review->user" size="sm" /><strong>{{ $review->user->name }}</strong></div>
+                                        <span class="badge text-bg-warning">{{ $review->rating }}/5 stars</span>
+                                    </div>
+                                    <p class="mb-1">{{ $review->comment }}</p>
+                                    <small class="text-secondary">{{ $review->created_at->format('M j, Y') }}</small>
+                                </article>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            </section>
         </div>
     </div>
 @endsection

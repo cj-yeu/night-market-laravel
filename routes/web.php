@@ -34,6 +34,10 @@ Route::get('/night-markets/{nightMarket}', [NightMarketDiscoveryController::clas
 Route::get('/night-markets/{nightMarket}/stalls', [StallFoodDiscoveryController::class, 'index'])
     ->whereNumber('nightMarket')
     ->name('night-markets.stalls.index');
+Route::get('/stalls', [StallFoodDiscoveryController::class, 'stalls'])
+    ->name('stalls.index');
+Route::get('/foods', [StallFoodDiscoveryController::class, 'foods'])
+    ->name('foods.index');
 Route::get('/foods/{food}', [StallFoodDiscoveryController::class, 'show'])
     ->whereNumber('food')
     ->name('foods.show');

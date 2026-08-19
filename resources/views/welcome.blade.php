@@ -15,6 +15,8 @@
             </p>
             <div class="d-flex flex-wrap gap-2 mt-4">
                 <a href="{{ route('night-markets.index') }}" class="btn btn-market btn-lg">Discover Markets</a>
+                <a href="{{ route('stalls.index') }}" class="btn btn-outline-secondary btn-lg">Explore Stalls</a>
+                <a href="{{ route('foods.index', ['is_must_try' => '1']) }}" class="btn btn-outline-secondary btn-lg">Must-Try Foods</a>
                 <a href="{{ route('social-media-highlights.index') }}" class="btn btn-outline-secondary btn-lg">
                     View Social Media Highlights
                 </a>
@@ -73,6 +75,26 @@
                             </div>
                         </article>
                     </div>
+                @endforeach
+            </div>
+        @endif
+    </section>
+
+    <section class="py-4" aria-labelledby="must-try-heading">
+        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-end gap-2 mb-4">
+            <div>
+                <h2 id="must-try-heading" class="h3 fw-bold text-market mb-1">Must-Try Food Showcase</h2>
+                <p class="text-secondary mb-0">Catalog recommendations from active stalls at public markets.</p>
+            </div>
+            <a href="{{ route('foods.index', ['is_must_try' => '1', 'sort' => 'must_try_first']) }}" class="btn btn-outline-secondary align-self-start">View all Must-Try foods</a>
+        </div>
+
+        @if ($mustTryFoods->isEmpty())
+            <div class="alert alert-info mb-0">No Must-Try foods are available right now.</div>
+        @else
+            <div class="row g-4">
+                @foreach ($mustTryFoods as $food)
+                    <div class="col-12 col-md-6 col-xl-4"><x-public-food-card :food="$food" :show-recommendation="true" /></div>
                 @endforeach
             </div>
         @endif

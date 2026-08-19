@@ -464,12 +464,14 @@
             <div class="container">
                 <a class="navbar-brand fw-bold" href="{{ url('/') }}">Night Market Selangor</a>
 
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex flex-wrap justify-content-end align-items-center gap-2">
                     @guest
                         <a class="nav-link fw-semibold me-2" href="{{ route('home') }}">Home</a>
                         <a class="nav-link fw-semibold me-2" href="{{ route('night-markets.index') }}">
                             Discover Markets
                         </a>
+                        <a class="nav-link fw-semibold me-2" href="{{ route('stalls.index') }}">Explore Stalls</a>
+                        <a class="nav-link fw-semibold me-2" href="{{ route('foods.index', ['is_must_try' => '1']) }}">Must-Try Foods</a>
                         <a
                             class="btn btn-sm {{ request()->routeIs('login') ? 'btn-market' : 'btn-outline-secondary' }}"
                             href="{{ route('login') }}"
@@ -490,6 +492,8 @@
                             <a class="nav-link fw-semibold me-2" href="{{ route('night-markets.index') }}">
                                 Discover Markets
                             </a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('stalls.index') }}">Explore Stalls</a>
+                            <a class="nav-link fw-semibold me-2" href="{{ route('foods.index', ['is_must_try' => '1']) }}">Must-Try Foods</a>
                             <a class="nav-link fw-semibold me-2" href="{{ route('client.visit-plans.index') }}">
                                 My Visit Plans
                             </a>

@@ -73,6 +73,8 @@
                                             <p class="text-secondary mb-0">
                                                 {{ $stall->description ?: 'No stall description available.' }}
                                             </p>
+                                            <a href="{{ route('foods.index', ['stall_id' => $stall->id, 'night_market_id' => $nightMarket->id]) }}"
+                                                class="btn btn-sm btn-outline-secondary mt-3">Browse this Stall’s Foods</a>
                                         </article>
                                     @endforeach
                                 </div>
@@ -105,6 +107,12 @@
                                             <p class="text-secondary mb-0">
                                                 {{ $food->description ?: 'No food description available.' }}
                                             </p>
+                                            @if ($food->recommendation_reason)
+                                                <p class="small border-start border-warning border-3 ps-3 mt-2 mb-0">
+                                                    <strong>Why try it:</strong> {{ $food->recommendation_reason }}
+                                                </p>
+                                            @endif
+                                            <a href="{{ route('foods.show', $food) }}" class="btn btn-sm btn-outline-secondary mt-3">View Food Details</a>
                                         </article>
                                     @endforeach
                                 </div>

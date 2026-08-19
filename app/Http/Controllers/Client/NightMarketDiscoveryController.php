@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\NightMarket\MarketDiscoveryRequest;
 use App\Services\NightMarketService;
 use App\Services\ReviewService;
+use App\Services\StallFoodService;
 use Illuminate\View\View;
 
 class NightMarketDiscoveryController extends Controller
@@ -13,12 +14,14 @@ class NightMarketDiscoveryController extends Controller
     public function __construct(
         private readonly NightMarketService $nightMarketService,
         private readonly ReviewService $reviewService,
+        private readonly StallFoodService $stallFoodService,
     ) {}
 
     public function home(): View
     {
         return view('welcome', [
             'featuredNightMarkets' => $this->nightMarketService->featuredPublicMarkets(),
+            'mustTryFoods' => $this->stallFoodService->featuredMustTryFoods(),
         ]);
     }
 
