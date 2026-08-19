@@ -23,7 +23,18 @@ class ProfileController extends Controller
 
     public function update(UpdateProfileRequest $request): RedirectResponse
     {
-        $this->userAccountService->updateProfile($request->user(), $request->validated());
+        $result = $this->userAccountService->updateProfile($request->user(), $request->validated());
+
+        if ($result['email_changed']) {
+            return redirect()
+                ->route('verification.notice')
+                ->with(
+                    $result['notification_sent'] ? 'status' : 'error',
+                    $result['notification_sent']
+                        ? 'Your email address was updated. Check the new address for a verification link.'
+                        : 'Your email address was updated, but the verification email could not be sent. Please resend it.',
+                );
+        }
 
         return redirect()
             ->route('profile.edit')

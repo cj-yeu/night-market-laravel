@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\SocialMediaRecordController;
 use App\Http\Controllers\Admin\StallController;
 use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\GoogleAuthenticationController;
 use App\Http\Controllers\Auth\RegisteredUserController;
@@ -65,6 +66,15 @@ Route::get('/auth/google/callback', [GoogleAuthenticationController::class, 'cal
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
+    Route::get('/verify-email', [EmailVerificationController::class, 'notice'])
+        ->name('verification.notice');
+    Route::get('/verify-email/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+        ->middleware(['signed', 'throttle:6,1'])
+        ->name('verification.verify');
+    Route::post('/email/verification-notification', [EmailVerificationController::class, 'store'])
+        ->middleware('throttle:verification-email')
+        ->name('verification.send');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::patch('/profile/avatar', [ProfileImageController::class, 'update'])->name('profile.avatar.update');
@@ -79,10 +89,10 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 
     Route::get('/client/home', ClientHomeController::class)
-        ->middleware('role:client')
+        ->middleware(['role:client', 'verified'])
         ->name('client.home');
 
-    Route::middleware('role:client')->prefix('client')->name('client.')->group(function () {
+    Route::middleware(['role:client', 'verified'])->prefix('client')->name('client.')->group(function () {
         Route::get('/night-markets/{nightMarket}/reviews/create', [ReviewController::class, 'create'])
             ->whereNumber('nightMarket')
             ->name('night-markets.reviews.create');

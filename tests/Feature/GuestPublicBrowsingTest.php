@@ -208,7 +208,7 @@ class GuestPublicBrowsingTest extends TestCase
         ])->assertRedirect($intendedUrl);
     }
 
-    public function test_registration_returns_client_to_the_intended_protected_page(): void
+    public function test_registration_preserves_the_intended_protected_page_until_verification(): void
     {
         $intendedUrl = route('client.visit-plans.create');
 
@@ -219,7 +219,9 @@ class GuestPublicBrowsingTest extends TestCase
             'email' => 'new-public-browser@example.test',
             'password' => 'Password123!',
             'password_confirmation' => 'Password123!',
-        ])->assertRedirect($intendedUrl);
+        ])->assertRedirect(route('verification.notice'));
+
+        $this->assertSame($intendedUrl, session('url.intended'));
     }
 
     public function test_authenticated_client_can_browse_and_use_protected_action_pages(): void

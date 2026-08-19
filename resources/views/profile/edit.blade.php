@@ -11,6 +11,9 @@
                         <div>
                             <h1 class="h3 fw-bold text-market mb-1">My Profile</h1>
                             <p class="text-secondary mb-0">Update your personal account information.</p>
+                            <span class="badge {{ $user->hasVerifiedEmail() ? 'text-bg-success' : 'text-bg-warning' }} mt-2">
+                                Email: {{ $user->hasVerifiedEmail() ? 'Verified' : 'Verification pending' }}
+                            </span>
                         </div>
                         <a href="{{ route('profile.password.edit') }}" class="btn btn-outline-secondary align-self-start">
                             Change Password
@@ -84,7 +87,7 @@
                             @enderror
                         </div>
 
-                        <div class="mb-4">
+                        <div class="mb-3">
                             <label for="email" class="form-label">Email Address</label>
                             <input
                                 type="email"
@@ -96,6 +99,31 @@
                                 required
                             >
                             @error('email')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                            @if ($user->googleAccount)
+                                <div class="form-text">
+                                    Disconnect Google before changing this email address.
+                                </div>
+                            @elseif ($user->hasVerifiedEmail())
+                                <div class="form-text">
+                                    Changing this address requires your current password and a new verification.
+                                </div>
+                            @endif
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="current_password" class="form-label">
+                                Current Password <span class="text-secondary fw-normal">(required only to change email)</span>
+                            </label>
+                            <input
+                                type="password"
+                                class="form-control @error('current_password') is-invalid @enderror"
+                                id="current_password"
+                                name="current_password"
+                                autocomplete="current-password"
+                            >
+                            @error('current_password')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>

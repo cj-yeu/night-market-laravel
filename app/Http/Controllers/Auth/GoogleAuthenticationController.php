@@ -69,6 +69,12 @@ class GoogleAuthenticationController extends Controller
             $request->session()->forget(GoogleAuthenticationService::SESSION_INTENT);
             $request->session()->regenerate();
 
+            if (! $user->hasVerifiedEmail()) {
+                return redirect()
+                    ->route('verification.notice')
+                    ->with('status', 'Verify your email address to continue to trusted Client features.');
+            }
+
             return redirect()
                 ->intended(route('client.home'))
                 ->with('status', 'Welcome back, '.$user->name.'.');

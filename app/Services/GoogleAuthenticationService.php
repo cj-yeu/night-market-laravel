@@ -49,13 +49,15 @@ class GoogleAuthenticationService
         }
 
         $user = DB::transaction(function () use ($identity): User {
-            $user = User::create([
+            $user = new User([
                 'name' => $identity['name'],
                 'email' => $identity['email'],
                 'password' => null,
                 'role' => User::ROLE_CLIENT,
                 'is_active' => true,
             ]);
+            $user->email_verified_at = now();
+            $user->save();
 
             $user->socialAccounts()->create([
                 'provider' => SocialAccount::PROVIDER_GOOGLE,

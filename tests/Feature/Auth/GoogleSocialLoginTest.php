@@ -6,6 +6,7 @@ use App\Models\SocialAccount;
 use App\Models\User;
 use App\Services\GoogleAuthenticationService;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
@@ -40,6 +41,7 @@ class GoogleSocialLoginTest extends TestCase
 
     public function test_new_google_identity_creates_and_logs_in_one_active_client(): void
     {
+        Notification::fake();
         $this->fakeGoogle([
             'id' => 'google-new-client',
             'name' => 'Google New Client',
@@ -56,6 +58,7 @@ class GoogleSocialLoginTest extends TestCase
         $this->assertAuthenticatedAs($user);
         $this->assertSame(User::ROLE_CLIENT, $user->role);
         $this->assertTrue($user->is_active);
+        $this->assertTrue($user->hasVerifiedEmail());
         $this->assertNull($user->password);
         $this->assertNull($user->avatar_path);
         $this->assertDatabaseCount('social_accounts', 1);
@@ -67,6 +70,7 @@ class GoogleSocialLoginTest extends TestCase
         ]);
         $this->assertFalse(Schema::hasColumn('social_accounts', 'access_token'));
         $this->assertFalse(Schema::hasColumn('social_accounts', 'refresh_token'));
+        Notification::assertNotSentTo($user, VerifyEmail::class);
     }
 
     public function test_google_user_receives_safe_fallback_name_when_provider_name_is_missing(): void
@@ -133,6 +137,28 @@ class GoogleSocialLoginTest extends TestCase
         $this->assertAuthenticatedAs($user);
         $this->assertDatabaseCount('users', 1);
         $this->assertDatabaseCount('social_accounts', 1);
+    }
+
+    public function test_returning_linked_google_client_preserves_unverified_state(): void
+    {
+        $user = User::factory()->unverified()->create([
+            'role' => User::ROLE_CLIENT,
+            'is_active' => true,
+        ]);
+        $user->socialAccounts()->create([
+            'provider' => SocialAccount::PROVIDER_GOOGLE,
+            'provider_user_id' => 'google-preserve-verification',
+            'provider_email' => $user->email,
+        ]);
+        $this->fakeGoogle([
+            'id' => 'google-preserve-verification',
+            'email' => $user->email,
+        ]);
+
+        $this->googleLoginCallback()->assertRedirect(route('verification.notice'));
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertFalse($user->refresh()->hasVerifiedEmail());
     }
 
     public function test_repeated_callbacks_do_not_create_duplicate_users_or_social_accounts(): void

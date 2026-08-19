@@ -27,6 +27,11 @@ class UpdateProfileRequest extends FormRequest
                 'max:255',
                 Rule::unique('users', 'email')->ignore($this->user()->id),
             ],
+            'current_password' => [
+                Rule::requiredIf(fn (): bool => $this->emailChanged()),
+                'nullable',
+                'string',
+            ],
         ];
     }
 
@@ -46,6 +51,15 @@ class UpdateProfileRequest extends FormRequest
         return [
             'name' => 'full name',
             'email' => 'email address',
+            'current_password' => 'current password',
         ];
+    }
+
+    private function emailChanged(): bool
+    {
+        return ! hash_equals(
+            mb_strtolower((string) $this->user()->email),
+            mb_strtolower(trim((string) $this->email)),
+        );
     }
 }
