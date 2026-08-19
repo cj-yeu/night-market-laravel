@@ -8,7 +8,10 @@
             <h1 class="h3 fw-bold text-market mb-1">My Visit Plans</h1>
             <p class="text-secondary mb-0">Organize upcoming visits and revisit past itineraries.</p>
         </div>
-        <a href="{{ route('client.visit-plans.create') }}" class="btn btn-market align-self-start">Create Visit Plan</a>
+        <div class="d-flex flex-wrap gap-2 align-self-start">
+            <a href="{{ route('client.visit-plans.smart-planner.index') }}" class="btn btn-outline-secondary">Smart Planner</a>
+            <a href="{{ route('client.visit-plans.create') }}" class="btn btn-market">Create Visit Plan</a>
+        </div>
     </div>
 
     @if ($planningTarget)

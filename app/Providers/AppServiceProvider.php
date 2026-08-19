@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\RecommendationExplanationProvider;
+use App\Services\DeterministicRecommendationExplanationProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +17,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(
+            RecommendationExplanationProvider::class,
+            DeterministicRecommendationExplanationProvider::class,
+        );
     }
 
     /**

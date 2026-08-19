@@ -16,6 +16,7 @@ use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Client\ClientHomeController;
 use App\Http\Controllers\Client\NightMarketDiscoveryController;
 use App\Http\Controllers\Client\ReviewController;
+use App\Http\Controllers\Client\SmartVisitPlannerController;
 use App\Http\Controllers\Client\SocialMediaHighlightController;
 use App\Http\Controllers\Client\StallFoodDiscoveryController;
 use App\Http\Controllers\Client\VisitPlanController;
@@ -107,6 +108,12 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('food')->whereNumber('review')->name('foods.reviews.update');
 
         Route::get('/visit-plans', [VisitPlanController::class, 'index'])->name('visit-plans.index');
+        Route::get('/visit-plans/smart-planner', [SmartVisitPlannerController::class, 'index'])
+            ->name('visit-plans.smart-planner.index');
+        Route::post('/visit-plans/smart-planner', [SmartVisitPlannerController::class, 'recommend'])
+            ->name('visit-plans.smart-planner.recommend');
+        Route::post('/visit-plans/smart-planner/create-plan', [SmartVisitPlannerController::class, 'store'])
+            ->name('visit-plans.smart-planner.store');
         Route::get('/visit-plans/create', [VisitPlanController::class, 'create'])->name('visit-plans.create');
         Route::post('/visit-plans', [VisitPlanController::class, 'store'])->name('visit-plans.store');
         Route::get('/visit-plans/{visitPlan}', [VisitPlanController::class, 'show'])
