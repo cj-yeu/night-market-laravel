@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Collection;
 class StallFoodService
 {
     /**
-     * @param  array{search?: string|null, night_market_id?: int|null, status?: string|null}  $filters
+     * @param  array{search?: string|null, night_market_id?: int|null, category?: string|null, halal_status?: string|null, status?: string|null}  $filters
      * @return LengthAwarePaginator<Stall>
      */
     public function adminStalls(array $filters): LengthAwarePaginator
@@ -27,8 +27,12 @@ class StallFoodService
             }))
             ->when($filters['night_market_id'] ?? null, fn ($query, int $marketId) => $query
                 ->where('night_market_id', $marketId))
+            ->when($filters['category'] ?? null, fn ($query, string $category) => $query->where('category', $category))
+            ->when($filters['halal_status'] ?? null, fn ($query, string $halalStatus) => $query
+                ->where('halal_status', $halalStatus))
             ->when($filters['status'] ?? null, fn ($query, string $status) => $query->where('status', $status))
             ->orderBy('name')
+            ->orderBy('id')
             ->paginate(15)
             ->withQueryString();
     }
@@ -55,6 +59,7 @@ class StallFoodService
                 fn ($query) => $query->where('is_must_try', $filters['is_must_try'] === '1'))
             ->when($filters['status'] ?? null, fn ($query, string $status) => $query->where('status', $status))
             ->orderBy('name')
+            ->orderBy('id')
             ->paginate(15)
             ->withQueryString();
     }
@@ -97,6 +102,20 @@ class StallFoodService
     public function adminCategories(): Collection
     {
         return Food::query()
+            ->whereNotNull('category')
+            ->where('category', '!=', '')
+            ->select('category')
+            ->distinct()
+            ->orderBy('category')
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, Stall>
+     */
+    public function adminStallCategories(): Collection
+    {
+        return Stall::query()
             ->whereNotNull('category')
             ->where('category', '!=', '')
             ->select('category')
@@ -228,7 +247,7 @@ class StallFoodService
      */
     public function createStall(array $data): Stall
     {
-        return Stall::create($data);
+        return Stall::create($this->stallAttributes($data, includeStatus: true));
     }
 
     /**
@@ -236,7 +255,7 @@ class StallFoodService
      */
     public function createFood(array $data): Food
     {
-        return Food::create($data);
+        return Food::create($this->foodAttributes($data, includeStatus: true));
     }
 
     /**
@@ -244,7 +263,7 @@ class StallFoodService
      */
     public function updateStall(Stall $stall, array $data): Stall
     {
-        $stall->update($data);
+        $stall->update($this->stallAttributes($data));
 
         return $stall->refresh();
     }
@@ -254,7 +273,7 @@ class StallFoodService
      */
     public function updateFood(Food $food, array $data): Food
     {
-        $food->update($data);
+        $food->update($this->foodAttributes($data));
 
         return $food->refresh();
     }
@@ -284,5 +303,58 @@ class StallFoodService
         }
 
         return '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value).'%';
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function stallAttributes(array $data, bool $includeStatus = false): array
+    {
+        $attributes = collect($data)->only([
+            'night_market_id',
+            'name',
+            'description',
+            'category',
+            'halal_status',
+            'halal_evidence_url',
+            'halal_notes',
+            'source_url',
+            'verified_at',
+        ])->all();
+
+        if ($includeStatus) {
+            $attributes['status'] = $data['status'];
+        }
+
+        return $attributes;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function foodAttributes(array $data, bool $includeStatus = false): array
+    {
+        $attributes = collect($data)->only([
+            'stall_id',
+            'name',
+            'description',
+            'category',
+            'price_min',
+            'price_max',
+            'price_display',
+            'is_must_try',
+            'recommendation_reason',
+            'source_url',
+            'price_checked_at',
+            'verified_at',
+        ])->all();
+
+        if ($includeStatus) {
+            $attributes['status'] = $data['status'];
+        }
+
+        return $attributes;
     }
 }

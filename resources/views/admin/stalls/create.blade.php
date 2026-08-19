@@ -53,6 +53,8 @@
                                 @enderror
                             </div>
 
+                            @include('admin.stalls._metadata-fields')
+
                             <div class="mb-4">
                                 <label for="status" class="form-label">Status</label>
                                 <select class="form-select @error('status') is-invalid @enderror"

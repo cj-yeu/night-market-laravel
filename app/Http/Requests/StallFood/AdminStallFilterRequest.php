@@ -23,6 +23,8 @@ class AdminStallFilterRequest extends FormRequest
         return [
             'search' => ['nullable', 'string', 'max:100'],
             'night_market_id' => ['nullable', 'integer', Rule::exists('night_markets', 'id')],
+            'category' => ['nullable', 'string', 'max:100'],
+            'halal_status' => ['nullable', Rule::in(Stall::HALAL_STATUSES)],
             'status' => ['nullable', Rule::in([Stall::STATUS_ACTIVE, Stall::STATUS_INACTIVE])],
         ];
     }
@@ -31,6 +33,7 @@ class AdminStallFilterRequest extends FormRequest
     {
         $this->merge([
             'search' => $this->filled('search') ? str($this->search)->squish()->value() : null,
+            'category' => $this->filled('category') ? str($this->category)->squish()->value() : null,
         ]);
     }
 }

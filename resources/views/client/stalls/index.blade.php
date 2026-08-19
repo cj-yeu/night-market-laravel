@@ -82,7 +82,26 @@
                             <p class="small text-market fw-semibold mb-2">
                                 Night Market: {{ $nightMarket->name }}
                             </p>
+                            <div class="d-flex flex-wrap gap-2 mb-3">
+                                @if ($stall->category)
+                                    <span class="badge text-bg-light border">{{ $stall->category }}</span>
+                                @endif
+                                <x-halal-status :stall="$stall" />
+                            </div>
                             <p class="text-secondary">{{ $stall->description ?: 'No stall description available.' }}</p>
+                            @if ($stall->hasCurrentHalalEvidence() || $stall->sourceUrl() || $stall->verified_at)
+                                <div class="small text-secondary mb-3">
+                                    @if ($stall->verified_at)
+                                        <span class="d-block">Verified {{ $stall->verified_at->format('M j, Y') }}</span>
+                                    @endif
+                                    @if ($stall->hasCurrentHalalEvidence())
+                                        <a href="{{ $stall->halalEvidenceUrl() }}" target="_blank" rel="noopener noreferrer">View Halal evidence</a>
+                                    @endif
+                                    @if ($stall->sourceUrl())
+                                        <a href="{{ $stall->sourceUrl() }}" target="_blank" rel="noopener noreferrer" class="ms-2">View source</a>
+                                    @endif
+                                </div>
+                            @endif
 
                             <h3 class="h6 text-market fw-bold mt-4">Food Items &amp; Must-Try Foods</h3>
                             @if ($stall->foods->isEmpty())
@@ -96,6 +115,10 @@
                                                     <span class="fw-semibold">{{ $food->name }}</span>
                                                     @if ($food->category)
                                                         <span class="text-secondary d-block small">{{ $food->category }}</span>
+                                                    @endif
+                                                    <x-food-price :food="$food" class="small text-market fw-semibold d-block mt-1" />
+                                                    @if ($food->is_must_try && $food->recommendation_reason)
+                                                        <span class="small text-secondary d-block mt-1">{{ $food->recommendation_reason }}</span>
                                                     @endif
                                                 </div>
                                                 @if ($food->is_must_try)

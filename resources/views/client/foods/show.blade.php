@@ -43,6 +43,38 @@
                         <dt class="col-sm-3">Category</dt>
                         <dd class="col-sm-9">{{ $food->category ?: 'Not specified' }}</dd>
 
+                        <dt class="col-sm-3">Price</dt>
+                        <dd class="col-sm-9"><x-food-price :food="$food" /></dd>
+
+                        @if ($food->price_checked_at)
+                            <dt class="col-sm-3">Price checked</dt>
+                            <dd class="col-sm-9">{{ $food->price_checked_at->format('M j, Y') }}</dd>
+                        @endif
+
+                        @if ($food->is_must_try && $food->recommendation_reason)
+                            <dt class="col-sm-3">Why it is recommended</dt>
+                            <dd class="col-sm-9">{{ $food->recommendation_reason }}</dd>
+                        @endif
+
+                        <dt class="col-sm-3">Stall Halal status</dt>
+                        <dd class="col-sm-9">
+                            <x-halal-status :stall="$food->stall" />
+                            <span class="small text-secondary d-block mt-1">This classification belongs to the parent stall; it is not a separate Food certification.</span>
+                            @if ($food->stall->hasCurrentHalalEvidence())
+                                <a href="{{ $food->stall->halalEvidenceUrl() }}" target="_blank" rel="noopener noreferrer">View Stall Halal evidence</a>
+                            @endif
+                        </dd>
+
+                        @if ($food->verified_at)
+                            <dt class="col-sm-3">Verified</dt>
+                            <dd class="col-sm-9">{{ $food->verified_at->format('M j, Y') }}</dd>
+                        @endif
+
+                        @if ($food->sourceUrl())
+                            <dt class="col-sm-3">Source</dt>
+                            <dd class="col-sm-9"><a href="{{ $food->sourceUrl() }}" target="_blank" rel="noopener noreferrer">View source</a></dd>
+                        @endif
+
                         <dt class="col-sm-3">Description</dt>
                         <dd class="col-sm-9 mb-0">{{ $food->description ?: 'No description available.' }}</dd>
                     </dl>

@@ -27,6 +27,8 @@ class StallController extends Controller
         return view('admin.stalls.index', [
             'stalls' => $this->stallFoodService->adminStalls($filters),
             'nightMarkets' => $this->nightMarketService->adminMarketOptions(),
+            'categories' => $this->stallFoodService->adminStallCategories(),
+            'halalStatuses' => Stall::halalStatusOptions(),
             'filters' => $filters,
         ]);
     }
@@ -35,6 +37,7 @@ class StallController extends Controller
     {
         return view('admin.stalls.create', [
             'nightMarkets' => $this->stallFoodService->activeNightMarkets(),
+            'halalStatuses' => Stall::halalStatusOptions(),
         ]);
     }
 
@@ -59,6 +62,7 @@ class StallController extends Controller
         return view('admin.stalls.edit', [
             'stall' => $this->stallFoodService->adminStallDetails($stall),
             'nightMarkets' => $this->nightMarketService->adminMarketOptions(),
+            'halalStatuses' => Stall::halalStatusOptions(),
         ]);
     }
 

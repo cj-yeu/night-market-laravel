@@ -9,6 +9,7 @@
             <div class="mb-3"><label for="name" class="form-label">Food Name</label><input id="name" name="name" value="{{ old('name', $food->name) }}" class="form-control @error('name') is-invalid @enderror" required>@error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
             <div class="mb-3"><label for="category" class="form-label">Category</label><input id="category" name="category" value="{{ old('category', $food->category) }}" class="form-control @error('category') is-invalid @enderror">@error('category')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
             <div class="mb-3"><label for="description" class="form-label">Description</label><textarea id="description" name="description" rows="5" class="form-control @error('description') is-invalid @enderror">{{ old('description', $food->description) }}</textarea>@error('description')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+            @include('admin.foods._metadata-fields')
             <div class="form-check mb-4"><input type="hidden" name="is_must_try" value="0"><input class="form-check-input @error('is_must_try') is-invalid @enderror" type="checkbox" id="is_must_try" name="is_must_try" value="1" @checked((bool) old('is_must_try', $food->is_must_try))><label class="form-check-label" for="is_must_try">Mark as must-try</label>@error('is_must_try')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
             <button type="submit" class="btn btn-market">Save Changes</button>
         </form>
