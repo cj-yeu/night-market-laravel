@@ -77,6 +77,27 @@
                 color: var(--market-orange-dark);
             }
 
+            .night-market-image-frame {
+                position: relative;
+                width: 100%;
+                overflow: hidden;
+                background: #ede9fe;
+                aspect-ratio: 16 / 9;
+            }
+
+            .night-market-image {
+                display: block;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            .night-market-thumbnail {
+                width: 7rem;
+                min-width: 7rem;
+                border-radius: 0.5rem;
+            }
+
             .user-avatar {
                 display: inline-flex;
                 flex: 0 0 auto;

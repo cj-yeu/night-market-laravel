@@ -63,15 +63,16 @@
         <div class="card market-card">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <thead><tr><th>Market</th><th>Location</th><th>Schedule</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+                    <thead><tr><th>Cover</th><th>Market</th><th>Location</th><th>Schedule</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
                     <tbody>
                         @foreach ($nightMarkets as $nightMarket)
                             <tr>
+                                <td><x-night-market-image :night-market="$nightMarket" class="night-market-thumbnail" /></td>
                                 <td><strong>{{ $nightMarket->name }}</strong></td>
                                 <td>{{ $nightMarket->city }}, {{ $nightMarket->state }}<div class="small text-secondary">{{ $nightMarket->address }}</div></td>
                                 <td>
                                     @foreach ($nightMarket->operatingDays as $day)
-                                        <div class="small">{{ $day->day_of_week }} {{ $day->opening_time->format('H:i') }}–{{ $day->closing_time->format('H:i') }}</div>
+                                        <div class="small">{{ $day->day_of_week }} {{ $day->opening_time?->format('g:i A') ?? 'Time unavailable' }}–{{ $day->closing_time?->format('g:i A') ?? 'Time unavailable' }}</div>
                                     @endforeach
                                 </td>
                                 <td><span class="badge {{ $nightMarket->status === 'active' ? 'text-bg-success' : 'text-bg-secondary' }}">{{ ucfirst($nightMarket->status) }}</span></td>

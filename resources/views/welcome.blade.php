@@ -45,4 +45,36 @@
             </div>
         </div>
     </section>
+
+    <section class="py-4" aria-labelledby="featured-markets-heading">
+        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-end gap-2 mb-4">
+            <div>
+                <h2 id="featured-markets-heading" class="h3 fw-bold text-market mb-1">Featured Night Markets</h2>
+                <p class="text-secondary mb-0">A starting point for exploring active markets in Selangor.</p>
+            </div>
+            <a href="{{ route('night-markets.index') }}" class="btn btn-outline-secondary align-self-start">View all markets</a>
+        </div>
+
+        @if ($featuredNightMarkets->isEmpty())
+            <div class="alert alert-info mb-0">No featured night markets are available right now.</div>
+        @else
+            <div class="row g-4">
+                @foreach ($featuredNightMarkets as $nightMarket)
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <article class="card market-card h-100 overflow-hidden">
+                            <x-night-market-image :night-market="$nightMarket" />
+                            <div class="card-body p-4 d-flex flex-column">
+                                <span class="badge text-bg-warning align-self-start mb-2">{{ $nightMarket->city }}</span>
+                                <h3 class="h5 fw-bold">{{ $nightMarket->name }}</h3>
+                                <p class="text-secondary text-break">{{ $nightMarket->address }}</p>
+                                <a href="{{ route('night-markets.show', $nightMarket) }}" class="btn btn-market mt-auto align-self-start">
+                                    View market details
+                                </a>
+                            </div>
+                        </article>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+    </section>
 @endsection

@@ -6,6 +6,12 @@
     @php($existingDays = $nightMarket->operatingDays->keyBy('day_of_week'))
     <div class="mx-auto" style="max-width: 960px;">
         <div class="d-flex justify-content-between gap-3 mb-4"><div><h1 class="h2 fw-bold mb-1">Edit Night Market</h1><p class="text-secondary mb-0">Status is managed separately from catalog details.</p></div><a href="{{ route('admin.night-markets.show', $nightMarket) }}" class="btn btn-outline-secondary align-self-start">Cancel</a></div>
+        <div class="card market-card overflow-hidden mb-4">
+            <x-night-market-image :night-market="$nightMarket" loading="eager" />
+            <div class="card-body p-3">
+                <a href="{{ route('admin.night-markets.show', $nightMarket) }}" class="btn btn-outline-secondary">Manage cover image</a>
+            </div>
+        </div>
         <div class="card market-card"><div class="card-body p-4 p-md-5">
             <form method="POST" action="{{ route('admin.night-markets.update', $nightMarket) }}" novalidate>
                 @csrf @method('PATCH')

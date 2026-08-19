@@ -5,17 +5,23 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\OperationalStatusRequest;
 use App\Http\Requests\NightMarket\AdminNightMarketFilterRequest;
+use App\Http\Requests\NightMarket\DeleteNightMarketImageRequest;
 use App\Http\Requests\NightMarket\StoreNightMarketRequest;
+use App\Http\Requests\NightMarket\UpdateNightMarketImageRequest;
 use App\Http\Requests\NightMarket\UpdateNightMarketRequest;
 use App\Models\MarketOperatingDay;
 use App\Models\NightMarket;
+use App\Services\NightMarketImageService;
 use App\Services\NightMarketService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 class NightMarketController extends Controller
 {
-    public function __construct(private readonly NightMarketService $nightMarketService) {}
+    public function __construct(
+        private readonly NightMarketService $nightMarketService,
+        private readonly NightMarketImageService $nightMarketImageService,
+    ) {}
 
     public function index(AdminNightMarketFilterRequest $request): View
     {
@@ -77,6 +83,24 @@ class NightMarketController extends Controller
     public function deactivate(OperationalStatusRequest $request, NightMarket $nightMarket): RedirectResponse
     {
         return $this->updateStatus($nightMarket, NightMarket::STATUS_INACTIVE);
+    }
+
+    public function updateImage(UpdateNightMarketImageRequest $request, NightMarket $nightMarket): RedirectResponse
+    {
+        $this->nightMarketImageService->replace($nightMarket, $request->file('image'));
+
+        return redirect()
+            ->route('admin.night-markets.show', $nightMarket)
+            ->with('status', 'The Night Market cover image was updated successfully.');
+    }
+
+    public function deleteImage(DeleteNightMarketImageRequest $request, NightMarket $nightMarket): RedirectResponse
+    {
+        $this->nightMarketImageService->remove($nightMarket);
+
+        return redirect()
+            ->route('admin.night-markets.show', $nightMarket)
+            ->with('status', 'The Night Market cover image was removed.');
     }
 
     private function updateStatus(NightMarket $nightMarket, string $status): RedirectResponse

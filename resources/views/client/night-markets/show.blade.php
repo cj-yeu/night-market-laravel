@@ -8,7 +8,8 @@
             <a href="{{ route('night-markets.index') }}"
                 class="btn btn-outline-secondary mb-4">Back to Night Markets</a>
 
-            <div class="card market-card mb-4">
+            <div class="card market-card overflow-hidden mb-4">
+                <x-night-market-image :night-market="$nightMarket" loading="eager" />
                 <div class="card-body p-4 p-md-5">
                     <span class="badge text-bg-warning mb-3">{{ $nightMarket->city }}</span>
                     <h1 class="display-6 fw-bold text-market">{{ $nightMarket->name }}</h1>
@@ -25,6 +26,10 @@
                         @if (Route::has('client.visit-plans.create'))
                             <a href="{{ route('client.visit-plans.create') }}"
                                 class="btn btn-outline-secondary">Create Visit Plan</a>
+                        @endif
+                        @if ($nightMarket->googleMapsUrl())
+                            <a href="{{ $nightMarket->googleMapsUrl() }}" class="btn btn-outline-secondary"
+                                target="_blank" rel="noopener noreferrer">View on Google Maps</a>
                         @endif
                     </div>
 
@@ -45,30 +50,7 @@
                 <div class="card-body p-4 p-md-5">
                     <h2 class="h4 fw-bold text-market mb-4">Operating Hours</h2>
 
-                    @if ($nightMarket->operatingDays->isEmpty())
-                        <div class="alert alert-secondary mb-0">Operating hours are not available yet.</div>
-                    @else
-                        <div class="table-responsive">
-                            <table class="table table-striped align-middle mb-0">
-                                <thead>
-                                    <tr>
-                                        <th scope="col">Operating Day</th>
-                                        <th scope="col">Opening Time</th>
-                                        <th scope="col">Closing Time</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach ($nightMarket->operatingDays as $operatingDay)
-                                        <tr>
-                                            <td>{{ $operatingDay->day_of_week }}</td>
-                                            <td>{{ $operatingDay->opening_time->format('g:i A') }}</td>
-                                            <td>{{ $operatingDay->closing_time->format('g:i A') }}</td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    @endif
+                    <x-night-market-schedule :operating-days="$nightMarket->operatingDays" />
                 </div>
             </div>
 

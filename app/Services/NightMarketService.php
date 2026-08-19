@@ -74,32 +74,42 @@ class NightMarketService
     }
 
     /**
-     * @param  array{search?: string|null, district?: string|null, operating_day?: string|null}  $filters
-     * @return Collection<int, NightMarket>
+     * @param  array{search?: string|null, city?: string|null, district?: string|null, operating_day?: string|null, sort?: string|null}  $filters
+     * @return LengthAwarePaginator<NightMarket>
      */
-    public function discoverPublicMarkets(array $filters): Collection
+    public function discoverPublicMarkets(array $filters): LengthAwarePaginator
     {
-        return NightMarket::query()
+        $search = $this->literalLikePattern($filters['search'] ?? null);
+        $city = $filters['city'] ?? $filters['district'] ?? null;
+        $sort = $filters['sort'] ?? 'name_asc';
+
+        $query = NightMarket::query()
             ->publiclyVisible()
             ->with(['operatingDays' => fn ($query) => $this->orderOperatingDays($query)])
-            ->when($filters['search'] ?? null, function ($query, string $search) {
-                $query->where(function ($query) use ($search) {
-                    $query->where('name', 'like', '%'.$search.'%')
-                        ->orWhere('address', 'like', '%'.$search.'%')
-                        ->orWhere('city', 'like', '%'.$search.'%');
+            ->when($search, function ($query, string $pattern) {
+                $query->where(function ($query) use ($pattern) {
+                    $query->where('name', 'like', $pattern)
+                        ->orWhere('address', 'like', $pattern)
+                        ->orWhere('city', 'like', $pattern);
                 });
             })
-            ->when($filters['district'] ?? null, fn ($query, string $district) => $query->where('city', $district))
+            ->when($city, fn ($query, string $city) => $query->where('city', $city))
             ->when($filters['operating_day'] ?? null, fn ($query, string $operatingDay) => $query
-                ->whereHas('operatingDays', fn ($query) => $query->where('day_of_week', $operatingDay)))
-            ->orderBy('name')
-            ->get();
+                ->whereHas('operatingDays', fn ($query) => $query->where('day_of_week', $operatingDay)));
+
+        match ($sort) {
+            'name_desc' => $query->orderByDesc('name')->orderByDesc('id'),
+            'city_asc' => $query->orderBy('city')->orderBy('name')->orderBy('id'),
+            default => $query->orderBy('name')->orderBy('id'),
+        };
+
+        return $query->paginate(12)->withQueryString();
     }
 
     /**
      * @return Collection<int, NightMarket>
      */
-    public function publicDistricts(): Collection
+    public function publicCities(): Collection
     {
         return NightMarket::query()
             ->publiclyVisible()
@@ -108,6 +118,28 @@ class NightMarketService
             ->select('city')
             ->distinct()
             ->orderBy('city')
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, NightMarket>
+     */
+    public function publicDistricts(): Collection
+    {
+        return $this->publicCities();
+    }
+
+    /**
+     * @return Collection<int, NightMarket>
+     */
+    public function featuredPublicMarkets(int $limit = 3): Collection
+    {
+        return NightMarket::query()
+            ->publiclyVisible()
+            ->with(['operatingDays' => fn ($query) => $this->orderOperatingDays($query)])
+            ->orderBy('name')
+            ->orderBy('id')
+            ->limit($limit)
             ->get();
     }
 

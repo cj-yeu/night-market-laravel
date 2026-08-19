@@ -15,13 +15,20 @@ class NightMarketDiscoveryController extends Controller
         private readonly ReviewService $reviewService,
     ) {}
 
+    public function home(): View
+    {
+        return view('welcome', [
+            'featuredNightMarkets' => $this->nightMarketService->featuredPublicMarkets(),
+        ]);
+    }
+
     public function index(MarketDiscoveryRequest $request): View
     {
         $filters = $request->validated();
 
         return view('client.night-markets.index', [
             'nightMarkets' => $this->nightMarketService->discoverPublicMarkets($filters),
-            'districts' => $this->nightMarketService->publicDistricts(),
+            'cities' => $this->nightMarketService->publicCities(),
             'operatingDays' => $this->nightMarketService->operatingDayOptions(),
             'filters' => $filters,
         ]);

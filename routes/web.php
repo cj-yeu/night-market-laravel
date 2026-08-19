@@ -24,7 +24,7 @@ use App\Http\Controllers\UserAccount\ProfileController;
 use App\Http\Controllers\UserAccount\ProfileImageController;
 use Illuminate\Support\Facades\Route;
 
-Route::view('/', 'welcome')->name('home');
+Route::get('/', [NightMarketDiscoveryController::class, 'home'])->name('home');
 
 Route::get('/night-markets', [NightMarketDiscoveryController::class, 'index'])
     ->name('night-markets.index');
@@ -139,6 +139,10 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('nightMarket')->name('night-markets.activate');
         Route::patch('/night-markets/{nightMarket}/deactivate', [NightMarketController::class, 'deactivate'])
             ->whereNumber('nightMarket')->name('night-markets.deactivate');
+        Route::patch('/night-markets/{nightMarket}/image', [NightMarketController::class, 'updateImage'])
+            ->whereNumber('nightMarket')->name('night-markets.image.update');
+        Route::delete('/night-markets/{nightMarket}/image', [NightMarketController::class, 'deleteImage'])
+            ->whereNumber('nightMarket')->name('night-markets.image.destroy');
 
         Route::get('/stalls', [StallController::class, 'index'])->name('stalls.index');
         Route::get('/stalls/create', [StallController::class, 'create'])->name('stalls.create');
