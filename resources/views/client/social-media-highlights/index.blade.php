@@ -14,7 +14,7 @@
 
     <div class="card market-card mb-4">
         <div class="card-body p-4">
-            <form method="GET" action="{{ route('client.social-media-highlights.index') }}">
+            <form method="GET" action="{{ route('social-media-highlights.index') }}">
                 <div class="row g-3 align-items-end">
                     <div class="col-12 col-lg-8">
                         <label for="search" class="form-label">Keyword Search</label>
@@ -27,7 +27,7 @@
                     <div class="col-12 col-lg-4 d-flex flex-wrap gap-2">
                         <button type="submit" class="btn btn-market">Search Highlights</button>
                         @if ($filters['search'] ?? null)
-                            <a href="{{ route('client.social-media-highlights.index') }}"
+                            <a href="{{ route('social-media-highlights.index') }}"
                                 class="btn btn-outline-secondary">Reset Search</a>
                         @endif
                     </div>
@@ -124,7 +124,7 @@
             @if ($filters['search'] ?? null)
                 <h2 class="h5">No approved highlights found</h2>
                 <p>No approved social-media highlights match your search.</p>
-                <a href="{{ route('client.social-media-highlights.index') }}"
+                <a href="{{ route('social-media-highlights.index') }}"
                     class="btn btn-outline-secondary">Reset Search</a>
             @else
                 <h2 class="h5">No approved social-media highlights yet</h2>
@@ -168,12 +168,12 @@
                             <div class="d-flex flex-wrap gap-2 mt-auto">
                                 <a href="{{ $record->original_post_url }}" target="_blank" rel="noopener noreferrer"
                                     class="btn btn-market">Open Original Post</a>
-                                @if (Route::has('client.night-markets.show'))
-                                    <a href="{{ route('client.night-markets.show', $record->nightMarket) }}"
+                                @if (Route::has('night-markets.show'))
+                                    <a href="{{ route('night-markets.show', $record->nightMarket) }}"
                                         class="btn btn-outline-secondary">View Market</a>
                                 @endif
-                                @if ($record->food && Route::has('client.foods.show'))
-                                    <a href="{{ route('client.foods.show', $record->food) }}"
+                                @if ($record->food && Route::has('foods.show'))
+                                    <a href="{{ route('foods.show', $record->food) }}"
                                         class="btn btn-outline-secondary">View Food</a>
                                 @endif
                             </div>

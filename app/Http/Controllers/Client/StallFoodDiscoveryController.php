@@ -13,7 +13,7 @@ class StallFoodDiscoveryController extends Controller
 
     public function index(StallFoodFilterRequest $request, int $nightMarket): View
     {
-        $nightMarket = $this->stallFoodService->findActiveMarketForClient($nightMarket);
+        $nightMarket = $this->stallFoodService->findPubliclyVisibleMarket($nightMarket);
         $filters = $request->validated();
 
         return view('client.stalls.index', [
@@ -27,7 +27,7 @@ class StallFoodDiscoveryController extends Controller
     public function show(int $food): View
     {
         return view('client.foods.show', [
-            'food' => $this->stallFoodService->findActiveFoodForClient($food),
+            'food' => $this->stallFoodService->findPubliclyVisibleFood($food),
         ]);
     }
 }

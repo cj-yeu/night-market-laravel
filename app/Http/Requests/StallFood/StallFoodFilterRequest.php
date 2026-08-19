@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\StallFood;
 
-use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -10,7 +9,7 @@ class StallFoodFilterRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_CLIENT;
+        return true;
     }
 
     /**

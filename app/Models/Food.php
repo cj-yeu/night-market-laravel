@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +26,13 @@ class Food extends Model
         'is_must_try',
         'status',
     ];
+
+    public function scopePubliclyVisible(Builder $query): Builder
+    {
+        return $query
+            ->where('status', self::STATUS_ACTIVE)
+            ->whereHas('stall', fn (Builder $query) => $query->publiclyVisible());
+    }
 
     protected function casts(): array
     {

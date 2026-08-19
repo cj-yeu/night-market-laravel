@@ -20,8 +20,8 @@ class NightMarketDiscoveryController extends Controller
         $filters = $request->validated();
 
         return view('client.night-markets.index', [
-            'nightMarkets' => $this->nightMarketService->discoverActiveMarkets($filters),
-            'districts' => $this->nightMarketService->activeDistricts(),
+            'nightMarkets' => $this->nightMarketService->discoverPublicMarkets($filters),
+            'districts' => $this->nightMarketService->publicDistricts(),
             'operatingDays' => $this->nightMarketService->operatingDayOptions(),
             'filters' => $filters,
         ]);
@@ -29,7 +29,7 @@ class NightMarketDiscoveryController extends Controller
 
     public function show(int $nightMarket): View
     {
-        $nightMarket = $this->nightMarketService->findActiveForClient($nightMarket);
+        $nightMarket = $this->nightMarketService->findPubliclyVisible($nightMarket);
 
         return view('client.night-markets.show', [
             'nightMarket' => $nightMarket,

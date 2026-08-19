@@ -26,7 +26,7 @@ class ReviewController extends Controller
         $this->reviewService->createForClient($request->user(), $nightMarket, $request->validated());
 
         return redirect()
-            ->route('client.night-markets.show', $nightMarket)
+            ->route('night-markets.show', $nightMarket)
             ->with('status', 'Your review was submitted and is awaiting approval.');
     }
 }

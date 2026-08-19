@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\NightMarket;
-use App\Models\MarketOperatingDay;
 use App\Models\Food;
+use App\Models\MarketOperatingDay;
+use App\Models\NightMarket;
 use App\Models\Stall;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as SupportCollection;
@@ -16,11 +16,10 @@ class NightMarketService
      * @param  array{search?: string|null, district?: string|null, operating_day?: string|null}  $filters
      * @return Collection<int, NightMarket>
      */
-    public function discoverActiveMarkets(array $filters): Collection
+    public function discoverPublicMarkets(array $filters): Collection
     {
         return NightMarket::query()
-            ->where('status', NightMarket::STATUS_ACTIVE)
-            ->where('state', 'Selangor')
+            ->publiclyVisible()
             ->with(['operatingDays' => fn ($query) => $this->orderOperatingDays($query)])
             ->when($filters['search'] ?? null, function ($query, string $search) {
                 $query->where(function ($query) use ($search) {
@@ -39,11 +38,10 @@ class NightMarketService
     /**
      * @return Collection<int, NightMarket>
      */
-    public function activeDistricts(): Collection
+    public function publicDistricts(): Collection
     {
         return NightMarket::query()
-            ->where('status', NightMarket::STATUS_ACTIVE)
-            ->where('state', 'Selangor')
+            ->publiclyVisible()
             ->whereNotNull('city')
             ->where('city', '!=', '')
             ->select('city')
@@ -52,18 +50,17 @@ class NightMarketService
             ->get();
     }
 
-    public function findActiveForClient(int $nightMarketId): NightMarket
+    public function findPubliclyVisible(int $nightMarketId): NightMarket
     {
         return NightMarket::query()
-            ->where('status', NightMarket::STATUS_ACTIVE)
-            ->where('state', 'Selangor')
+            ->publiclyVisible()
             ->with([
                 'operatingDays' => fn ($query) => $this->orderOperatingDays($query),
                 'stalls' => fn ($query) => $query
-                    ->where('status', Stall::STATUS_ACTIVE)
+                    ->publiclyVisible()
                     ->orderBy('name'),
                 'stalls.foods' => fn ($query) => $query
-                    ->where('status', Food::STATUS_ACTIVE)
+                    ->publiclyVisible()
                     ->where('is_must_try', true)
                     ->orderBy('name'),
             ])

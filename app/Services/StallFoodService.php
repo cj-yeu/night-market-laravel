@@ -9,11 +9,10 @@ use Illuminate\Database\Eloquent\Collection;
 
 class StallFoodService
 {
-    public function findActiveMarketForClient(int $nightMarketId): NightMarket
+    public function findPubliclyVisibleMarket(int $nightMarketId): NightMarket
     {
         return NightMarket::query()
-            ->where('status', NightMarket::STATUS_ACTIVE)
-            ->where('state', 'Selangor')
+            ->publiclyVisible()
             ->findOrFail($nightMarketId);
     }
 
@@ -28,9 +27,9 @@ class StallFoodService
 
         return Stall::query()
             ->where('night_market_id', $nightMarket->id)
-            ->where('status', Stall::STATUS_ACTIVE)
+            ->publiclyVisible()
             ->with(['foods' => fn ($query) => $query
-                ->where('status', Food::STATUS_ACTIVE)
+                ->publiclyVisible()
                 ->orderByDesc('is_must_try')
                 ->orderBy('name')])
             ->when($search && $category, fn ($query) => $this
@@ -99,14 +98,10 @@ class StallFoodService
             ->get();
     }
 
-    public function findActiveFoodForClient(int $foodId): Food
+    public function findPubliclyVisibleFood(int $foodId): Food
     {
         return Food::query()
-            ->where('status', Food::STATUS_ACTIVE)
-            ->whereHas('stall', fn ($query) => $query->where('status', Stall::STATUS_ACTIVE))
-            ->whereHas('stall.nightMarket', fn ($query) => $query
-                ->where('status', NightMarket::STATUS_ACTIVE)
-                ->where('state', 'Selangor'))
+            ->publiclyVisible()
             ->with('stall.nightMarket')
             ->findOrFail($foodId);
     }

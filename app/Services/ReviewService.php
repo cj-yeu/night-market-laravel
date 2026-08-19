@@ -15,8 +15,7 @@ class ReviewService
     public function findActiveMarketForClient(int $nightMarketId): NightMarket
     {
         return NightMarket::query()
-            ->where('status', NightMarket::STATUS_ACTIVE)
-            ->where('state', 'Selangor')
+            ->publiclyVisible()
             ->findOrFail($nightMarketId);
     }
 
@@ -40,7 +39,7 @@ class ReviewService
     {
         $reviews = Review::query()
             ->where('night_market_id', $nightMarket->id)
-            ->where('status', Review::STATUS_APPROVED)
+            ->publiclyVisible()
             ->with('user:id,name')
             ->latest()
             ->get();

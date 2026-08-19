@@ -18,9 +18,21 @@ use App\Http\Controllers\Client\VisitPlanController;
 use App\Http\Controllers\UserAccount\ProfileController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::view('/', 'welcome')->name('home');
+
+Route::get('/night-markets', [NightMarketDiscoveryController::class, 'index'])
+    ->name('night-markets.index');
+Route::get('/night-markets/{nightMarket}', [NightMarketDiscoveryController::class, 'show'])
+    ->whereNumber('nightMarket')
+    ->name('night-markets.show');
+Route::get('/night-markets/{nightMarket}/stalls', [StallFoodDiscoveryController::class, 'index'])
+    ->whereNumber('nightMarket')
+    ->name('night-markets.stalls.index');
+Route::get('/foods/{food}', [StallFoodDiscoveryController::class, 'show'])
+    ->whereNumber('food')
+    ->name('foods.show');
+Route::get('/social-media-highlights', [SocialMediaHighlightController::class, 'index'])
+    ->name('social-media-highlights.index');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
@@ -43,19 +55,6 @@ Route::middleware('auth')->group(function () {
         ->name('client.home');
 
     Route::middleware('role:client')->prefix('client')->name('client.')->group(function () {
-        Route::get('/night-markets', [NightMarketDiscoveryController::class, 'index'])
-            ->name('night-markets.index');
-        Route::get('/night-markets/{nightMarket}', [NightMarketDiscoveryController::class, 'show'])
-            ->whereNumber('nightMarket')
-            ->name('night-markets.show');
-
-        Route::get('/night-markets/{nightMarket}/stalls', [StallFoodDiscoveryController::class, 'index'])
-            ->whereNumber('nightMarket')
-            ->name('night-markets.stalls.index');
-        Route::get('/foods/{food}', [StallFoodDiscoveryController::class, 'show'])
-            ->whereNumber('food')
-            ->name('foods.show');
-
         Route::get('/night-markets/{nightMarket}/reviews/create', [ReviewController::class, 'create'])
             ->whereNumber('nightMarket')
             ->name('night-markets.reviews.create');
@@ -82,8 +81,6 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('visitPlanItem')
             ->name('visit-plans.items.destroy');
 
-        Route::get('/social-media-highlights', [SocialMediaHighlightController::class, 'index'])
-            ->name('social-media-highlights.index');
     });
 
     Route::get('/admin/dashboard', AdminDashboardController::class)

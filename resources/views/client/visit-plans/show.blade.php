@@ -11,12 +11,12 @@
             <p class="text-secondary mb-0">{{ $visitPlan->nightMarket->name }}</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            @if (Route::has('client.night-markets.show'))
-                <a href="{{ route('client.night-markets.show', $visitPlan->night_market_id) }}"
+            @if (Route::has('night-markets.show'))
+                <a href="{{ route('night-markets.show', $visitPlan->night_market_id) }}"
                     class="btn btn-outline-secondary">View Market</a>
             @endif
-            @if (Route::has('client.night-markets.stalls.index'))
-                <a href="{{ route('client.night-markets.stalls.index', $visitPlan->night_market_id) }}"
+            @if (Route::has('night-markets.stalls.index'))
+                <a href="{{ route('night-markets.stalls.index', $visitPlan->night_market_id) }}"
                     class="btn btn-outline-secondary">Browse Market Stalls</a>
             @endif
             <a href="{{ route('client.visit-plans.edit', $visitPlan) }}" class="btn btn-market">Edit Plan</a>

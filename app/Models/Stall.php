@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,6 +22,13 @@ class Stall extends Model
         'description',
         'status',
     ];
+
+    public function scopePubliclyVisible(Builder $query): Builder
+    {
+        return $query
+            ->where('status', self::STATUS_ACTIVE)
+            ->whereHas('nightMarket', fn (Builder $query) => $query->publiclyVisible());
+    }
 
     public function nightMarket(): BelongsTo
     {

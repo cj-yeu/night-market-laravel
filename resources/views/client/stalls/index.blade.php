@@ -9,7 +9,7 @@
             <p class="text-secondary mb-0">Browse active stalls and their food items.</p>
         </div>
         <div class="d-flex flex-wrap gap-2 align-self-start">
-            <a href="{{ route('client.night-markets.show', $nightMarket->id) }}"
+            <a href="{{ route('night-markets.show', $nightMarket->id) }}"
                 class="btn btn-outline-secondary">Back to Market Details</a>
             @if (Route::has('client.night-markets.reviews.create'))
                 <a href="{{ route('client.night-markets.reviews.create', $nightMarket) }}"
@@ -17,14 +17,14 @@
             @endif
             @if (Route::has('client.visit-plans.create'))
                 <a href="{{ route('client.visit-plans.create') }}"
-                    class="btn btn-market">Plan a Visit</a>
+                    class="btn btn-market">Create Visit Plan</a>
             @endif
         </div>
     </div>
 
     <div class="card market-card mb-4">
         <div class="card-body p-4">
-            <form method="GET" action="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}">
+            <form method="GET" action="{{ route('night-markets.stalls.index', $nightMarket->id) }}">
                 <div class="row g-3 align-items-end">
                     <div class="col-12 col-lg-6">
                         <label for="search" class="form-label">Search</label>
@@ -56,7 +56,7 @@
                     <div class="col-12 col-md-6 col-lg-3 d-flex flex-wrap gap-2">
                         <button type="submit" class="btn btn-market">Apply Filters</button>
                         @if (($filters['search'] ?? null) || ($filters['category'] ?? null))
-                            <a href="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}"
+                            <a href="{{ route('night-markets.stalls.index', $nightMarket->id) }}"
                                 class="btn btn-outline-secondary" aria-label="Clear Filters">Reset Search/Filters</a>
                         @endif
                     </div>
@@ -69,7 +69,7 @@
         <div class="alert alert-warning text-center py-4" role="status">
             <h2 class="h5 mb-2">No stalls or foods found</h2>
             <p class="mb-3">Try changing your keyword search or food category filter.</p>
-            <a href="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}"
+            <a href="{{ route('night-markets.stalls.index', $nightMarket->id) }}"
                 class="btn btn-outline-secondary" aria-label="Clear Filters">Reset Search/Filters</a>
         </div>
     @else
@@ -102,7 +102,7 @@
                                                     <span class="badge text-bg-warning">Must-Try</span>
                                                 @endif
                                             </div>
-                                            <a href="{{ route('client.foods.show', $food->id) }}"
+                                            <a href="{{ route('foods.show', $food->id) }}"
                                                 class="btn btn-sm btn-outline-secondary mt-3">
                                                 View Food Details
                                             </a>

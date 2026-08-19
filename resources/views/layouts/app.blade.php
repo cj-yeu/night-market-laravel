@@ -383,6 +383,10 @@
 
                 <div class="d-flex align-items-center gap-2">
                     @guest
+                        <a class="nav-link fw-semibold me-2" href="{{ route('home') }}">Home</a>
+                        <a class="nav-link fw-semibold me-2" href="{{ route('night-markets.index') }}">
+                            Discover Markets
+                        </a>
                         <a
                             class="btn btn-sm {{ request()->routeIs('login') ? 'btn-market' : 'btn-outline-secondary' }}"
                             href="{{ route('login') }}"
@@ -398,16 +402,13 @@
                     @else
                         @if (auth()->user()->role !== \App\Models\User::ROLE_ADMIN)
                             <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">
-                                Client Home
+                                Home
                             </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('client.night-markets.index') }}">
+                            <a class="nav-link fw-semibold me-2" href="{{ route('night-markets.index') }}">
                                 Discover Markets
                             </a>
                             <a class="nav-link fw-semibold me-2" href="{{ route('client.visit-plans.index') }}">
                                 My Visit Plans
-                            </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('client.social-media-highlights.index') }}">
-                                Social Media Highlights
                             </a>
                         @endif
 

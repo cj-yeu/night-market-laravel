@@ -5,7 +5,7 @@
 @section('content')
     <div class="row justify-content-center">
         <div class="col-12 col-xl-9">
-            <a href="{{ route('client.night-markets.index') }}"
+            <a href="{{ route('night-markets.index') }}"
                 class="btn btn-outline-secondary mb-4">Back to Night Markets</a>
 
             <div class="card market-card mb-4">
@@ -14,8 +14,8 @@
                     <h1 class="display-6 fw-bold text-market">{{ $nightMarket->name }}</h1>
 
                     <div class="d-flex flex-wrap gap-2 mt-3">
-                        @if (Route::has('client.night-markets.stalls.index'))
-                            <a href="{{ route('client.night-markets.stalls.index', $nightMarket->id) }}"
+                        @if (Route::has('night-markets.stalls.index'))
+                            <a href="{{ route('night-markets.stalls.index', $nightMarket->id) }}"
                                 class="btn btn-market">Browse Stalls</a>
                         @endif
                         @if (Route::has('client.night-markets.reviews.create'))
@@ -24,7 +24,7 @@
                         @endif
                         @if (Route::has('client.visit-plans.create'))
                             <a href="{{ route('client.visit-plans.create') }}"
-                                class="btn btn-outline-secondary">Plan a Visit</a>
+                                class="btn btn-outline-secondary">Create Visit Plan</a>
                         @endif
                     </div>
 

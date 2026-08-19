@@ -3,7 +3,6 @@
 namespace App\Http\Requests\NightMarket;
 
 use App\Models\MarketOperatingDay;
-use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -12,7 +11,7 @@ class MarketDiscoveryRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_CLIENT;
+        return true;
     }
 
     /**

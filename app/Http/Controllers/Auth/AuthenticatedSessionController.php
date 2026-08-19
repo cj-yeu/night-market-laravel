@@ -31,7 +31,7 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerate();
 
         return redirect()
-            ->route($this->authService->homeRouteFor($user))
+            ->intended(route($this->authService->homeRouteFor($user)))
             ->with('status', 'Welcome back, '.$user->name.'.');
     }
 

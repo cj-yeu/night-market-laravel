@@ -33,7 +33,7 @@ class ReviewRatingsTest extends TestCase
                 'rating' => 5,
                 'comment' => 'A wonderful market with plenty of delicious food.',
             ])
-            ->assertRedirect(route('client.night-markets.show', $market))
+            ->assertRedirect(route('night-markets.show', $market))
             ->assertSessionHas('status', 'Your review was submitted and is awaiting approval.');
 
         $this->assertDatabaseHas('reviews', [
@@ -87,7 +87,7 @@ class ReviewRatingsTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.show', $market))
+            ->get(route('night-markets.show', $market))
             ->assertOk()
             ->assertSee('Approved review shown to clients.')
             ->assertSee('Another approved review shown to clients.')
@@ -146,7 +146,7 @@ class ReviewRatingsTest extends TestCase
         $this->assertSame(Review::STATUS_APPROVED, $review->refresh()->status);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.show', $review->night_market_id))
+            ->get(route('night-markets.show', $review->night_market_id))
             ->assertOk()
             ->assertSee('Pending review ready for approval.');
     }
@@ -277,7 +277,7 @@ class ReviewRatingsTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.show', $market))
+            ->get(route('night-markets.show', $market))
             ->assertOk()
             ->assertSee('No approved reviews yet.')
             ->assertDontSee('Pending content remains hidden from the empty state.');

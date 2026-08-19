@@ -38,7 +38,7 @@ class StallFoodDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', $market->id))
+            ->get(route('night-markets.stalls.index', $market->id))
             ->assertOk()
             ->assertSee($market->name)
             ->assertSee($stall->name)
@@ -56,7 +56,7 @@ class StallFoodDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', $market->id))
+            ->get(route('night-markets.stalls.index', $market->id))
             ->assertOk()
             ->assertDontSee($inactiveStall->name);
     }
@@ -68,11 +68,11 @@ class StallFoodDiscoveryTest extends TestCase
         $food = Food::factory()->create(['stall_id' => $stall->id]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', $inactiveMarket->id))
+            ->get(route('night-markets.stalls.index', $inactiveMarket->id))
             ->assertNotFound();
 
         $this->actingAs($this->client)
-            ->get(route('client.foods.show', $food->id))
+            ->get(route('foods.show', $food->id))
             ->assertNotFound();
     }
 
@@ -89,7 +89,7 @@ class StallFoodDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', [
+            ->get(route('night-markets.stalls.index', [
                 'nightMarket' => $market->id,
                 'search' => 'Pak Ali',
             ]))
@@ -113,7 +113,7 @@ class StallFoodDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', [
+            ->get(route('night-markets.stalls.index', [
                 'nightMarket' => $market->id,
                 'search' => 'charcoal cooking',
             ]))
@@ -137,7 +137,7 @@ class StallFoodDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', [
+            ->get(route('night-markets.stalls.index', [
                 'nightMarket' => $market->id,
                 'search' => 'Banana Fritters',
             ]))
@@ -161,7 +161,7 @@ class StallFoodDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', [
+            ->get(route('night-markets.stalls.index', [
                 'nightMarket' => $market->id,
                 'search' => 'pandan filling',
             ]))
@@ -179,7 +179,7 @@ class StallFoodDiscoveryTest extends TestCase
         Food::factory()->create(['stall_id' => $otherStall->id, 'category' => 'Drinks']);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', [
+            ->get(route('night-markets.stalls.index', [
                 'nightMarket' => $market->id,
                 'category' => 'Dessert',
             ]))
@@ -208,7 +208,7 @@ class StallFoodDiscoveryTest extends TestCase
         Food::factory()->create(['stall_id' => $wrongSearch->id, 'category' => 'Grilled']);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', [
+            ->get(route('night-markets.stalls.index', [
                 'nightMarket' => $market->id,
                 'search' => 'Grill',
                 'category' => 'Grilled',
@@ -243,7 +243,7 @@ class StallFoodDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', [
+            ->get(route('night-markets.stalls.index', [
                 'nightMarket' => $market->id,
                 'search' => 'Pandan',
                 'category' => 'Dessert',
@@ -267,7 +267,7 @@ class StallFoodDiscoveryTest extends TestCase
         ]);
 
         $response = $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', [
+            ->get(route('night-markets.stalls.index', [
                 'nightMarket' => $market->id,
                 'search' => 'Persistent',
                 'category' => 'Dessert',
@@ -296,17 +296,17 @@ class StallFoodDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', [
+            ->get(route('night-markets.stalls.index', [
                 'nightMarket' => $market->id,
                 'search' => 'Satay',
             ]))
             ->assertOk()
             ->assertSee($matchingStall->name)
             ->assertDontSee($otherStall->name)
-            ->assertSee('href="'.route('client.night-markets.stalls.index', $market->id).'"', false);
+            ->assertSee('href="'.route('night-markets.stalls.index', $market->id).'"', false);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', $market->id))
+            ->get(route('night-markets.stalls.index', $market->id))
             ->assertOk()
             ->assertSee($matchingStall->name)
             ->assertSee($otherStall->name);
@@ -318,7 +318,7 @@ class StallFoodDiscoveryTest extends TestCase
         Stall::factory()->create(['night_market_id' => $market->id]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', [
+            ->get(route('night-markets.stalls.index', [
                 'nightMarket' => $market->id,
                 'search' => 'Nothing Matches This',
             ]))
@@ -332,7 +332,7 @@ class StallFoodDiscoveryTest extends TestCase
         $market = NightMarket::factory()->create();
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.stalls.index', $market->id))
+            ->get(route('night-markets.stalls.index', $market->id))
             ->assertOk()
             ->assertSee('No stalls or foods found')
             ->assertSee('Reset Search/Filters');
@@ -353,7 +353,7 @@ class StallFoodDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.foods.show', $food->id))
+            ->get(route('foods.show', $food->id))
             ->assertOk()
             ->assertSee($food->name)
             ->assertSee($stall->name)
@@ -375,11 +375,11 @@ class StallFoodDiscoveryTest extends TestCase
         $inactiveFood = Food::factory()->inactive()->create(['stall_id' => $activeStall->id]);
 
         $this->actingAs($this->client)
-            ->get(route('client.foods.show', $foodAtInactiveStall->id))
+            ->get(route('foods.show', $foodAtInactiveStall->id))
             ->assertNotFound();
 
         $this->actingAs($this->client)
-            ->get(route('client.foods.show', $inactiveFood->id))
+            ->get(route('foods.show', $inactiveFood->id))
             ->assertNotFound();
     }
 
@@ -390,7 +390,7 @@ class StallFoodDiscoveryTest extends TestCase
         $food = Food::factory()->create(['stall_id' => $stall->id]);
 
         $this->actingAs($this->client)
-            ->get(route('client.foods.show', $food->id))
+            ->get(route('foods.show', $food->id))
             ->assertNotFound();
     }
 }

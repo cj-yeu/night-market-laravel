@@ -120,9 +120,9 @@ class SocialMediaDataService
     /**
      * @param  array{search?: string|null}  $filters
      */
-    public function clientHighlights(array $filters): LengthAwarePaginator
+    public function publicHighlights(array $filters): LengthAwarePaginator
     {
-        $records = $this->clientVisibleQuery()
+        $records = $this->publiclyVisibleQuery()
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
                 ->applyKeywordSearch($query, $search))
             ->latest('posted_date')
@@ -144,9 +144,9 @@ class SocialMediaDataService
      *   topEngagementPosts: Collection<int, SocialMediaRecord>
      * }
      */
-    public function clientInsights(array $filters): array
+    public function publicInsights(array $filters): array
     {
-        $records = $this->clientVisibleQuery()
+        $records = $this->publiclyVisibleQuery()
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
                 ->applyKeywordSearch($query, $search))
             ->get();
@@ -351,14 +351,10 @@ class SocialMediaDataService
             ->all();
     }
 
-    private function clientVisibleQuery(): Builder
+    private function publiclyVisibleQuery(): Builder
     {
         return SocialMediaRecord::query()
-            ->where('status', SocialMediaRecord::STATUS_APPROVED)
-            ->whereNotNull('night_market_id')
-            ->whereHas('nightMarket', fn (Builder $query) => $query
-                ->where('status', NightMarket::STATUS_ACTIVE)
-                ->where('state', 'Selangor'))
+            ->publiclyVisible()
             ->with([
                 'nightMarket:id,name,city,state,status',
                 'food' => fn ($query) => $query

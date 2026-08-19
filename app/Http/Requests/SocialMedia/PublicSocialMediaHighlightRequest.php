@@ -2,15 +2,14 @@
 
 namespace App\Http\Requests\SocialMedia;
 
-use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-class ClientSocialMediaHighlightRequest extends FormRequest
+class PublicSocialMediaHighlightRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_CLIENT;
+        return true;
     }
 
     /**

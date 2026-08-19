@@ -409,7 +409,7 @@ class SocialMediaRecordTest extends TestCase
         ]);
 
         $this->actingAs($client)
-            ->get(route('client.social-media-highlights.index'))
+            ->get(route('social-media-highlights.index'))
             ->assertOk()
             ->assertSee($approved->content_summary)
             ->assertSee($this->market->name)
@@ -432,7 +432,7 @@ class SocialMediaRecordTest extends TestCase
         ]);
 
         $this->actingAs($client)
-            ->get(route('client.social-media-highlights.index', ['search' => '#lanterns']))
+            ->get(route('social-media-highlights.index', ['search' => '#lanterns']))
             ->assertOk()
             ->assertSee($matching->content_summary)
             ->assertDontSee($other->content_summary)
@@ -440,7 +440,7 @@ class SocialMediaRecordTest extends TestCase
             ->assertSee('Reset Search');
 
         $this->actingAs($client)
-            ->get(route('client.social-media-highlights.index'))
+            ->get(route('social-media-highlights.index'))
             ->assertOk()
             ->assertSee($matching->content_summary)
             ->assertSee($other->content_summary);
@@ -466,7 +466,7 @@ class SocialMediaRecordTest extends TestCase
         $removedMarket->delete();
 
         $response = $this->actingAs($client)
-            ->get(route('client.social-media-highlights.index'))
+            ->get(route('social-media-highlights.index'))
             ->assertOk();
 
         $response
@@ -506,7 +506,7 @@ class SocialMediaRecordTest extends TestCase
             'engagement_count' => 99999,
         ]);
 
-        $insights = app(SocialMediaDataService::class)->clientInsights([]);
+        $insights = app(SocialMediaDataService::class)->publicInsights([]);
 
         $this->assertSame(['Instagram' => 2, 'YouTube' => 1], $insights['recordsByPlatform']);
         $this->assertSame(['Instagram' => 300, 'YouTube' => 50], $insights['engagementByPlatform']);
@@ -516,11 +516,13 @@ class SocialMediaRecordTest extends TestCase
         $this->assertSame(200, $insights['topEngagementPosts']->first()->engagement_count);
     }
 
-    public function test_admin_cannot_access_client_highlights(): void
+    public function test_admin_can_access_public_highlights_without_losing_admin_navigation(): void
     {
         $this->actingAs($this->admin)
-            ->get(route('client.social-media-highlights.index'))
-            ->assertForbidden();
+            ->get(route('social-media-highlights.index'))
+            ->assertOk()
+            ->assertSee('Social Media Highlights')
+            ->assertSee(route('admin.dashboard'));
     }
 
     /**

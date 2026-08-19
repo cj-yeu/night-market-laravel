@@ -10,7 +10,7 @@
 
     <div class="card market-card mb-4">
         <div class="card-body p-4">
-            <form method="GET" action="{{ route('client.night-markets.index') }}">
+            <form method="GET" action="{{ route('night-markets.index') }}">
                 <div class="row g-3 align-items-end">
                     <div class="col-12 col-xl-5">
                         <label for="search" class="form-label">Search</label>
@@ -59,7 +59,7 @@
                     <div class="col-12 col-xl-3 d-flex flex-wrap gap-2">
                         <button type="submit" class="btn btn-market">Apply Filters</button>
                         @if (($filters['search'] ?? null) || ($filters['district'] ?? null) || ($filters['operating_day'] ?? null))
-                            <a href="{{ route('client.night-markets.index') }}"
+                            <a href="{{ route('night-markets.index') }}"
                                 class="btn btn-outline-secondary" aria-label="Clear Filters">Reset Filters</a>
                         @endif
                     </div>
@@ -72,7 +72,7 @@
         <div class="alert alert-warning text-center py-4" role="status">
             <h2 class="h5 mb-2">No night markets found</h2>
             <p class="mb-3">Try changing your search, district, or operating day filter.</p>
-            <a href="{{ route('client.night-markets.index') }}"
+            <a href="{{ route('night-markets.index') }}"
                 class="btn btn-outline-secondary" aria-label="Clear Filters">Reset Filters</a>
         </div>
     @else
@@ -104,7 +104,7 @@
                             <p class="mb-4">
                                 {{ \Illuminate\Support\Str::limit($nightMarket->description ?: 'No description available.', 140) }}
                             </p>
-                            <a href="{{ route('client.night-markets.show', $nightMarket->id) }}"
+                            <a href="{{ route('night-markets.show', $nightMarket->id) }}"
                                 class="btn btn-market mt-auto align-self-start">View Details</a>
                         </div>
                     </article>

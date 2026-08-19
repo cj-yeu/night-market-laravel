@@ -30,7 +30,7 @@ class RegisteredUserController extends Controller
         $request->session()->regenerate();
 
         return redirect()
-            ->route($this->authService->homeRouteFor($user))
+            ->intended(route($this->authService->homeRouteFor($user)))
             ->with('status', 'Your client account has been created successfully.');
     }
 }

@@ -31,7 +31,7 @@ class NightMarketDiscoveryTest extends TestCase
         $market = NightMarket::factory()->create(['name' => 'SS2 Monday Market']);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index'))
+            ->get(route('night-markets.index'))
             ->assertOk()
             ->assertSee($market->name)
             ->assertSee($market->address)
@@ -45,7 +45,7 @@ class NightMarketDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index'))
+            ->get(route('night-markets.index'))
             ->assertOk()
             ->assertDontSee($inactiveMarket->name);
     }
@@ -58,7 +58,7 @@ class NightMarketDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index'))
+            ->get(route('night-markets.index'))
             ->assertOk()
             ->assertDontSee($outsideSelangor->name);
     }
@@ -69,7 +69,7 @@ class NightMarketDiscoveryTest extends TestCase
         $otherMarket = NightMarket::factory()->create(['name' => 'Klang Riverside Market']);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index', ['search' => 'Connaught']))
+            ->get(route('night-markets.index', ['search' => 'Connaught']))
             ->assertOk()
             ->assertSee($matchingMarket->name)
             ->assertDontSee($otherMarket->name);
@@ -87,7 +87,7 @@ class NightMarketDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index', ['search' => 'Setia Prima']))
+            ->get(route('night-markets.index', ['search' => 'Setia Prima']))
             ->assertOk()
             ->assertSee($matchingMarket->name)
             ->assertDontSee($otherMarket->name);
@@ -105,7 +105,7 @@ class NightMarketDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index', ['district' => 'Petaling']))
+            ->get(route('night-markets.index', ['district' => 'Petaling']))
             ->assertOk()
             ->assertSee($matchingMarket->name)
             ->assertDontSee($otherMarket->name);
@@ -127,7 +127,7 @@ class NightMarketDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index', [
+            ->get(route('night-markets.index', [
                 'search' => 'Sri Muda',
                 'district' => 'Petaling',
             ]))
@@ -151,7 +151,7 @@ class NightMarketDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index', ['operating_day' => 'Monday']))
+            ->get(route('night-markets.index', ['operating_day' => 'Monday']))
             ->assertOk()
             ->assertSee($mondayMarket->name)
             ->assertDontSee($fridayMarket->name);
@@ -184,7 +184,7 @@ class NightMarketDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index', [
+            ->get(route('night-markets.index', [
                 'district' => 'Petaling',
                 'operating_day' => 'Friday',
             ]))
@@ -225,7 +225,7 @@ class NightMarketDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index', [
+            ->get(route('night-markets.index', [
                 'search' => 'Setia',
                 'district' => 'Petaling',
                 'operating_day' => 'Friday',
@@ -249,7 +249,7 @@ class NightMarketDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index', [
+            ->get(route('night-markets.index', [
                 'search' => 'Persistent',
                 'district' => 'Petaling',
                 'operating_day' => 'Friday',
@@ -267,16 +267,16 @@ class NightMarketDiscoveryTest extends TestCase
         $secondMarket = NightMarket::factory()->create(['name' => 'Full List Second Market']);
 
         $filteredResponse = $this->actingAs($this->client)
-            ->get(route('client.night-markets.index', ['search' => 'First']));
+            ->get(route('night-markets.index', ['search' => 'First']));
 
         $filteredResponse
             ->assertOk()
             ->assertSee($firstMarket->name)
             ->assertDontSee($secondMarket->name)
-            ->assertSee('href="'.route('client.night-markets.index').'"', false);
+            ->assertSee('href="'.route('night-markets.index').'"', false);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index'))
+            ->get(route('night-markets.index'))
             ->assertOk()
             ->assertSee($firstMarket->name)
             ->assertSee($secondMarket->name);
@@ -287,7 +287,7 @@ class NightMarketDiscoveryTest extends TestCase
         NightMarket::factory()->create();
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.index', ['search' => 'No Such Market Anywhere']))
+            ->get(route('night-markets.index', ['search' => 'No Such Market Anywhere']))
             ->assertOk()
             ->assertSee('No night markets found')
             ->assertSee('Clear Filters');
@@ -323,7 +323,7 @@ class NightMarketDiscoveryTest extends TestCase
         ]);
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.show', $market->id))
+            ->get(route('night-markets.show', $market->id))
             ->assertOk()
             ->assertSee($market->name)
             ->assertSee($market->address)
@@ -342,7 +342,7 @@ class NightMarketDiscoveryTest extends TestCase
         $inactiveMarket = NightMarket::factory()->inactive()->create();
 
         $this->actingAs($this->client)
-            ->get(route('client.night-markets.show', $inactiveMarket->id))
+            ->get(route('night-markets.show', $inactiveMarket->id))
             ->assertNotFound();
     }
 }

@@ -17,7 +17,14 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => EnsureUserHasRole::class,
         ]);
 
-        $middleware->redirectGuestsTo(fn (Request $request) => route('login'));
+        $middleware->redirectGuestsTo(function (Request $request) {
+            $request->session()->flash(
+                'error',
+                'Please log in or register to continue. You will return to your requested page after login.',
+            );
+
+            return route('login');
+        });
         $middleware->redirectUsersTo(fn (Request $request) => $request->user()?->role === 'admin'
             ? route('admin.dashboard')
             : route('client.home'));
