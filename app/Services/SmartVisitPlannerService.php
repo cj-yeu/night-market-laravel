@@ -16,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 
 class SmartVisitPlannerService
 {
+    private const FALLBACK_DAYS = 14;
+
     public function __construct(
         private readonly RecommendationExplanationProvider $explanationProvider,
         private readonly VisitPlanService $visitPlanService,
@@ -57,13 +59,171 @@ class SmartVisitPlannerService
         ];
     }
 
+    public function defaultVisitDate(): string
+    {
+        $operatingDays = NightMarket::query()
+            ->publiclyVisible()
+            ->whereHas('operatingDays')
+            ->with('operatingDays:id,night_market_id,day_of_week')
+            ->get(['id'])
+            ->flatMap->operatingDays
+            ->pluck('day_of_week')
+            ->unique();
+
+        $today = Carbon::today();
+
+        for ($offset = 0; $offset <= self::FALLBACK_DAYS; $offset++) {
+            $candidate = $today->copy()->addDays($offset);
+
+            if ($operatingDays->contains($candidate->englishDayOfWeek)) {
+                return $candidate->toDateString();
+            }
+        }
+
+        return $today->toDateString();
+    }
+
     /**
+     * Retained as the exact-date recommendation API used by existing callers and query regression coverage.
+     *
      * @param  array<string, mixed>  $preferences
      * @return list<array<string, mixed>>
      */
     public function recommend(array $preferences): array
     {
-        $visitDate = Carbon::parse($preferences['visit_date']);
+        return $this->evaluateDate($preferences, Carbon::parse($preferences['visit_date']))['recommendations'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $preferences
+     * @return array<string, mixed>
+     */
+    public function recommendDateAware(array $preferences): array
+    {
+        $requestedDate = Carbon::parse($preferences['visit_date'])->startOfDay();
+        $requestedResult = $this->evaluateDate($preferences, $requestedDate);
+
+        if ($requestedResult['recommendations'] !== []) {
+            return $this->dateAwareResult(
+                $requestedDate,
+                $requestedDate,
+                $requestedResult['recommendations'],
+                null,
+                null,
+                false,
+            );
+        }
+
+        /** @var array<string, array{recommendations: list<array<string, mixed>>, reason_code: string|null, reason_message: string|null}> $weekdayResults */
+        $weekdayResults = [];
+
+        for ($offset = 1; $offset <= self::FALLBACK_DAYS; $offset++) {
+            $candidateDate = $requestedDate->copy()->addDays($offset);
+            $weekday = $candidateDate->englishDayOfWeek;
+            $candidateResult = $weekdayResults[$weekday] ??= $this->evaluateDate($preferences, $candidateDate);
+
+            if ($candidateResult['recommendations'] !== []) {
+                return $this->dateAwareResult(
+                    $requestedDate,
+                    $candidateDate,
+                    $candidateResult['recommendations'],
+                    $requestedResult['reason_code'],
+                    $requestedResult['reason_message'],
+                    true,
+                );
+            }
+        }
+
+        return $this->dateAwareResult(
+            $requestedDate,
+            null,
+            [],
+            $requestedResult['reason_code'],
+            $requestedResult['reason_message'],
+            false,
+            true,
+        );
+    }
+
+    /** @param array<string, mixed> $data */
+    public function createPlanForClient(User $user, array $data): VisitPlan
+    {
+        $requestedPreferences = $data;
+        $requestedPreferences['visit_date'] = $data['requested_date'];
+        $result = $this->recommendDateAware($requestedPreferences);
+        $confirmedDate = $result['recommendation_date'];
+
+        if ($confirmedDate === null) {
+            throw ValidationException::withMessages([
+                'night_market_id' => 'This recommendation is no longer available. Generate recommendations again.',
+            ]);
+        }
+
+        if ($result['uses_fallback'] && ! ($data['confirmed_fallback_date'] ?? false)) {
+            throw ValidationException::withMessages([
+                'confirmed_fallback_date' => 'Select Use recommended date before creating a plan for the fallback date.',
+            ]);
+        }
+
+        if ($data['visit_date'] !== $confirmedDate) {
+            throw ValidationException::withMessages([
+                'visit_date' => 'This recommendation date is no longer available. Generate recommendations again.',
+            ]);
+        }
+
+        $recommendation = collect($result['recommendations'])
+            ->first(fn (array $recommendation) => $recommendation['market']->id === (int) $data['night_market_id']);
+
+        if (! $recommendation) {
+            throw ValidationException::withMessages([
+                'night_market_id' => 'This recommendation is no longer available. Generate recommendations again.',
+            ]);
+        }
+
+        $allowedStallIds = collect($recommendation['stalls'])->pluck('stall.id')->map(fn ($id) => (int) $id);
+        $allowedFoodIds = collect($recommendation['foods'])->pluck('food.id')->map(fn ($id) => (int) $id);
+        $submittedStallIds = collect($data['stall_ids'])->map(fn ($id) => (int) $id);
+        $submittedFoodIds = collect($data['food_ids'])->map(fn ($id) => (int) $id);
+
+        if ($submittedStallIds->diff($allowedStallIds)->isNotEmpty()
+            || $submittedFoodIds->diff($allowedFoodIds)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'food_ids' => 'One or more recommended targets are no longer available. Generate recommendations again.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($user, $data, $confirmedDate, $submittedStallIds, $submittedFoodIds): VisitPlan {
+            $visitPlan = $this->visitPlanService->createForClient($user, [
+                'title' => $data['title'],
+                'night_market_id' => (int) $data['night_market_id'],
+                'visit_date' => $confirmedDate,
+                'notes' => $data['preference_notes'] ?? null,
+            ]);
+
+            foreach ($submittedStallIds as $stallId) {
+                $this->visitPlanService->addItemForClient($user, $visitPlan->id, [
+                    'item_type' => 'stall',
+                    'item_id' => $stallId,
+                ]);
+            }
+
+            foreach ($submittedFoodIds as $foodId) {
+                $this->visitPlanService->addItemForClient($user, $visitPlan->id, [
+                    'item_type' => 'food',
+                    'item_id' => $foodId,
+                ]);
+            }
+
+            return $visitPlan;
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $preferences
+     * @return array{recommendations: list<array<string, mixed>>, reason_code: string|null, reason_message: string|null}
+     */
+    private function evaluateDate(array $preferences, Carbon $visitDate): array
+    {
         $dayOfWeek = $visitDate->englishDayOfWeek;
         $categories = array_values($preferences['categories'] ?? []);
         $halalPreference = $preferences['halal_preference'];
@@ -72,12 +232,10 @@ class SmartVisitPlannerService
         $budgetMin = $hasBudget ? (float) $preferences['budget_min'] : null;
         $budgetMax = $hasBudget ? (float) $preferences['budget_max'] : null;
 
-        $markets = NightMarket::query()
+        $operatingMarkets = NightMarket::query()
             ->publiclyVisible()
             ->select(['id', 'name', 'city', 'state'])
             ->whereHas('operatingDays', fn (Builder $query) => $query->where('day_of_week', $dayOfWeek))
-            ->when($preferences['city'] ?? null, fn (Builder $query, string $city) => $query->where('city', $city))
-            ->when($preferences['night_market_id'] ?? null, fn (Builder $query, int $marketId) => $query->whereKey($marketId))
             ->with([
                 'operatingDays' => fn ($query) => $query
                     ->select(['id', 'night_market_id', 'day_of_week', 'opening_time', 'closing_time'])
@@ -86,7 +244,6 @@ class SmartVisitPlannerService
                 'stalls' => fn ($query) => $query
                     ->select(['id', 'night_market_id', 'name', 'halal_status'])
                     ->where('status', Stall::STATUS_ACTIVE)
-                    ->when($halalPreference !== 'any', fn ($query) => $query->where('halal_status', $halalPreference))
                     ->orderBy('name')
                     ->orderBy('id'),
                 'stalls.foods' => fn ($query) => $query
@@ -94,9 +251,6 @@ class SmartVisitPlannerService
                         'id', 'stall_id', 'name', 'category', 'price_min', 'price_max', 'is_must_try', 'image_path',
                     ])
                     ->where('status', Food::STATUS_ACTIVE)
-                    ->when($categories !== [], fn ($query) => $query->whereIn('category', $categories))
-                    ->when($mustTry, fn ($query) => $query->where('is_must_try', true))
-                    ->when($hasBudget, fn ($query) => $this->applyPossibleBudgetFilter($query, $budgetMin, $budgetMax))
                     ->orderBy('name')
                     ->orderBy('id'),
             ])
@@ -104,13 +258,53 @@ class SmartVisitPlannerService
             ->orderBy('id')
             ->get();
 
+        if ($operatingMarkets->isEmpty()) {
+            return $this->emptyDateResult(
+                'no_operating_market',
+                'No public Night Market operates on '.$this->displayDate($visitDate).'.',
+            );
+        }
+
+        $matchingMarkets = $operatingMarkets
+            ->when($preferences['city'] ?? null, fn ($markets, string $city) => $markets
+                ->filter(fn (NightMarket $market) => $market->city === $city))
+            ->when($preferences['night_market_id'] ?? null, fn ($markets, int $marketId) => $markets
+                ->filter(fn (NightMarket $market) => $market->id === $marketId));
+
+        if ($matchingMarkets->isEmpty()) {
+            return $this->emptyDateResult(
+                'market_preferences',
+                'Public Night Markets operate on '.$this->displayDate($visitDate)
+                    .', but none matches your selected city or Night Market.',
+            );
+        }
+
+        $hasFoodPreferenceMatch = false;
         $recommendations = [];
 
-        foreach ($markets as $market) {
+        foreach ($matchingMarkets as $market) {
             $foodRecommendations = [];
 
             foreach ($market->stalls as $stall) {
+                if ($halalPreference !== 'any' && $stall->halal_status !== $halalPreference) {
+                    continue;
+                }
+
                 foreach ($stall->foods as $food) {
+                    if ($categories !== [] && ! in_array($food->category, $categories, true)) {
+                        continue;
+                    }
+
+                    if ($mustTry && ! $food->is_must_try) {
+                        continue;
+                    }
+
+                    $hasFoodPreferenceMatch = true;
+
+                    if ($hasBudget && ! $this->canAppearForBudget($food, $budgetMin, $budgetMax)) {
+                        continue;
+                    }
+
                     $foodRecommendations[] = $this->composeFoodRecommendation(
                         $food,
                         $stall,
@@ -142,77 +336,87 @@ class SmartVisitPlannerService
             );
         }
 
+        if (! $hasFoodPreferenceMatch) {
+            return $this->emptyDateResult(
+                'food_preferences',
+                'Matching Night Markets operate on '.$this->displayDate($visitDate)
+                    .', but no public Food matches your category, Halal, or Must-Try preferences.',
+            );
+        }
+
+        if ($recommendations === [] && $hasBudget) {
+            return $this->emptyDateResult(
+                'budget',
+                'Matching Foods are available on '.$this->displayDate($visitDate)
+                    .', but none with a complete known price range fits your selected budget.',
+            );
+        }
+
         usort($recommendations, fn (array $left, array $right) => ($right['score'] <=> $left['score'])
             ?: strcasecmp($left['market']->name, $right['market']->name)
             ?: ($left['market']->id <=> $right['market']->id));
 
-        return array_slice($recommendations, 0, (int) $preferences['max_markets']);
+        return [
+            'recommendations' => array_slice($recommendations, 0, (int) $preferences['max_markets']),
+            'reason_code' => null,
+            'reason_message' => null,
+        ];
     }
 
-    /** @param array<string, mixed> $data */
-    public function createPlanForClient(User $user, array $data): VisitPlan
+    private function canAppearForBudget(Food $food, float $minimum, float $maximum): bool
     {
-        $recommendation = collect($this->recommend($data))
-            ->first(fn (array $result) => $result['market']->id === (int) $data['night_market_id']);
-
-        if (! $recommendation) {
-            throw ValidationException::withMessages([
-                'night_market_id' => 'This recommendation is no longer available. Generate recommendations again.',
-            ]);
+        if ($food->price_min === null && $food->price_max === null) {
+            return true;
         }
 
-        $allowedStallIds = collect($recommendation['stalls'])->pluck('stall.id')->map(fn ($id) => (int) $id);
-        $allowedFoodIds = collect($recommendation['foods'])->pluck('food.id')->map(fn ($id) => (int) $id);
-        $submittedStallIds = collect($data['stall_ids'])->map(fn ($id) => (int) $id);
-        $submittedFoodIds = collect($data['food_ids'])->map(fn ($id) => (int) $id);
-
-        if ($submittedStallIds->diff($allowedStallIds)->isNotEmpty()
-            || $submittedFoodIds->diff($allowedFoodIds)->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'food_ids' => 'One or more recommended targets are no longer available. Generate recommendations again.',
-            ]);
+        if ($food->price_min !== null && $food->price_max === null) {
+            return (float) $food->price_min <= $maximum;
         }
 
-        return DB::transaction(function () use ($user, $data, $submittedStallIds, $submittedFoodIds): VisitPlan {
-            $visitPlan = $this->visitPlanService->createForClient($user, [
-                'title' => $data['title'],
-                'night_market_id' => (int) $data['night_market_id'],
-                'visit_date' => $data['visit_date'],
-                'notes' => $data['preference_notes'] ?? null,
-            ]);
+        if ($food->price_min === null) {
+            return (float) $food->price_max >= $minimum;
+        }
 
-            foreach ($submittedStallIds as $stallId) {
-                $this->visitPlanService->addItemForClient($user, $visitPlan->id, [
-                    'item_type' => 'stall',
-                    'item_id' => $stallId,
-                ]);
-            }
-
-            foreach ($submittedFoodIds as $foodId) {
-                $this->visitPlanService->addItemForClient($user, $visitPlan->id, [
-                    'item_type' => 'food',
-                    'item_id' => $foodId,
-                ]);
-            }
-
-            return $visitPlan;
-        });
+        return (float) $food->price_min >= $minimum && (float) $food->price_max <= $maximum;
     }
 
-    private function applyPossibleBudgetFilter(Builder $query, float $minimum, float $maximum): void
+    /** @return array{recommendations: array{}, reason_code: string, reason_message: string} */
+    private function emptyDateResult(string $code, string $message): array
     {
-        $query->where(function (Builder $query) use ($minimum, $maximum) {
-            $query->where(fn (Builder $query) => $query->whereNull('price_min')->whereNull('price_max'))
-                ->orWhere(fn (Builder $query) => $query
-                    ->whereNotNull('price_min')->whereNotNull('price_max')
-                    ->where('price_min', '<=', $maximum)->where('price_max', '>=', $minimum))
-                ->orWhere(fn (Builder $query) => $query
-                    ->whereNotNull('price_min')->whereNull('price_max')
-                    ->where('price_min', '<=', $maximum))
-                ->orWhere(fn (Builder $query) => $query
-                    ->whereNull('price_min')->whereNotNull('price_max')
-                    ->where('price_max', '>=', $minimum));
-        });
+        return [
+            'recommendations' => [],
+            'reason_code' => $code,
+            'reason_message' => $message,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function dateAwareResult(
+        Carbon $requestedDate,
+        ?Carbon $recommendationDate,
+        array $recommendations,
+        ?string $requestedReasonCode,
+        ?string $requestedReasonMessage,
+        bool $usesFallback,
+        bool $fallbackExhausted = false,
+    ): array {
+        return [
+            'requested_date' => $requestedDate->toDateString(),
+            'requested_date_label' => $this->displayDate($requestedDate),
+            'recommendation_date' => $recommendationDate?->toDateString(),
+            'recommendation_date_label' => $recommendationDate ? $this->displayDate($recommendationDate) : null,
+            'uses_fallback' => $usesFallback,
+            'requested_reason_code' => $requestedReasonCode,
+            'requested_reason_message' => $requestedReasonMessage,
+            'fallback_exhausted' => $fallbackExhausted,
+            'fallback_limit_days' => self::FALLBACK_DAYS,
+            'recommendations' => $recommendations,
+        ];
+    }
+
+    private function displayDate(Carbon $date): string
+    {
+        return $date->format('l, j M Y');
     }
 
     /** @param list<string> $categories @return array<string, mixed> */

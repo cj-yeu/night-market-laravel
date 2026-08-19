@@ -12,6 +12,8 @@ class SmartPlannerCreatePlanRequest extends SmartPlannerRecommendationRequest
 
         return [
             ...$rules,
+            'requested_date' => ['required', 'date', 'after_or_equal:today'],
+            'confirmed_fallback_date' => ['nullable', 'boolean'],
             'title' => ['required', 'string', 'max:255'],
             'stall_ids' => ['required', 'array', 'min:1', 'max:20'],
             'stall_ids.*' => ['required', 'integer', 'distinct'],

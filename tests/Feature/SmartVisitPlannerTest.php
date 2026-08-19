@@ -53,7 +53,14 @@ class SmartVisitPlannerTest extends TestCase
         $this->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences())->assertRedirect(route('login'));
         $this->post(route('client.visit-plans.smart-planner.store'), [])->assertRedirect(route('login'));
         $this->actingAs($unverified)->get($url)->assertRedirect(route('verification.notice'));
+        $this->actingAs($unverified)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences())
+            ->assertRedirect(route('verification.notice'));
         $this->actingAs($inactive)->get($url)->assertRedirect(route('login'));
+        $this->assertGuest();
+        $this->actingAs($inactive)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences())
+            ->assertRedirect(route('login'));
         $this->assertGuest();
 
         $this->actingAs($admin)->get($url)->assertForbidden();
@@ -62,6 +69,101 @@ class SmartVisitPlannerTest extends TestCase
 
         $this->actingAs($this->client)->get($url)
             ->assertOk()->assertSee('Smart Visit Planner')->assertSee('No external AI or live data is used.');
+    }
+
+    public function test_first_load_defaults_to_the_nearest_active_public_market_date(): void
+    {
+        $this->marketWithFood('Monday Default Market', day: 'Monday');
+        $this->marketWithFood('Saturday Default Market', day: 'Saturday');
+        [$hiddenMarket] = $this->marketWithFood('Friday Hidden Market', day: 'Friday');
+        $hiddenMarket->update(['status' => NightMarket::STATUS_INACTIVE]);
+
+        $this->actingAs($this->client)
+            ->get(route('client.visit-plans.smart-planner.index'))
+            ->assertOk()
+            ->assertViewHas('preferences.visit_date', now()->next('Saturday')->toDateString());
+    }
+
+    public function test_matching_requested_date_is_preserved_without_a_fallback_section(): void
+    {
+        [$market] = $this->marketWithFood('Requested Date Market');
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences())
+            ->assertOk()
+            ->assertSee('Your Requested Date')
+            ->assertSee('Sunday, 23 Aug 2026')
+            ->assertSee($market->name)
+            ->assertDontSee('Recommended Visit Date')
+            ->assertViewHas('plannerResult', fn (array $result): bool => ! $result['uses_fallback']
+                && $result['requested_date'] === $this->visitDate->toDateString()
+                && $result['recommendation_date'] === $this->visitDate->toDateString());
+    }
+
+    public function test_no_operating_market_uses_the_nearest_genuine_fallback_within_fourteen_days(): void
+    {
+        [$market] = $this->marketWithFood('Nearest Sunday Market');
+        $requestedDate = now()->next('Saturday');
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'visit_date' => $requestedDate->toDateString(),
+            ]))
+            ->assertOk()
+            ->assertSee('Your Requested Date')
+            ->assertSee('Saturday, 22 Aug 2026')
+            ->assertSee('Recommended Visit Date')
+            ->assertSee('No public Night Market operates on Saturday, 22 Aug 2026.')
+            ->assertSee('The nearest suitable option is')
+            ->assertSee($market->name)
+            ->assertSee('Sunday, 23 Aug 2026')
+            ->assertSee('Use Recommended Date and Create Plan')
+            ->assertViewHas('plannerResult', fn (array $result): bool => $result['uses_fallback']
+                && $result['requested_date'] === $requestedDate->toDateString()
+                && $result['recommendation_date'] === $this->visitDate->toDateString());
+    }
+
+    public function test_fallback_continues_to_apply_every_selected_preference(): void
+    {
+        [$market, , $food] = $this->marketWithFood('Exact Fallback Market', [
+            'city' => 'Petaling Jaya',
+        ], [
+            'halal_status' => Stall::HALAL_CERTIFIED,
+        ], [
+            'name' => 'Exact Fallback Snack',
+            'category' => 'Snacks',
+            'is_must_try' => true,
+            'price_min' => 10,
+            'price_max' => 15,
+        ]);
+        $this->marketWithFood('Wrong Fallback Market', ['city' => 'Shah Alam'], [
+            'halal_status' => Stall::HALAL_UNKNOWN,
+        ], [
+            'category' => 'Drinks',
+            'is_must_try' => false,
+            'price_min' => 40,
+            'price_max' => 50,
+        ]);
+
+        $response = $this->actingAs($this->client)->post(
+            route('client.visit-plans.smart-planner.recommend'),
+            $this->preferences([
+                'visit_date' => now()->next('Saturday')->toDateString(),
+                'city' => 'Petaling Jaya',
+                'night_market_id' => $market->id,
+                'categories' => ['Snacks'],
+                'halal_preference' => Stall::HALAL_CERTIFIED,
+                'must_try' => true,
+                'budget_min' => 5,
+                'budget_max' => 20,
+            ]),
+        );
+
+        $response->assertOk()
+            ->assertSee($market->name)
+            ->assertSee($food->name)
+            ->assertViewHas('recommendations', fn (array $recommendations): bool => collect($recommendations)
+                ->pluck('market.id')->all() === [$market->id]);
     }
 
     public function test_preference_validation_rejects_invalid_dates_budgets_categories_preferences_and_limits(): void
@@ -249,13 +351,98 @@ class SmartVisitPlannerTest extends TestCase
             ->assertSeeInOrder(['Alpha Food', 'Zulu Food']);
     }
 
-    public function test_no_matching_results_have_a_helpful_empty_state(): void
+    public function test_no_fallback_within_fourteen_days_has_a_truthful_empty_state(): void
     {
-        $this->marketWithFood('Monday Only Market', day: 'Monday');
-
         $this->actingAs($this->client)
             ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences())
-            ->assertOk()->assertSee('No matching recommendation')->assertSee('broaden categories');
+            ->assertOk()
+            ->assertSee('No public Night Market operates on Sunday, 23 Aug 2026.')
+            ->assertSee('No matching option exists within the next 14 days.')
+            ->assertViewHas('plannerResult', fn (array $result): bool => $result['fallback_exhausted']
+                && $result['recommendation_date'] === null
+                && $result['recommendations'] === []);
+    }
+
+    public function test_empty_results_explain_market_food_and_budget_root_causes(): void
+    {
+        [$selectedMarket] = $this->marketWithFood('Monday Selected Market', day: 'Monday');
+        $this->marketWithFood('Sunday Operating Market');
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'night_market_id' => $selectedMarket->id,
+            ]))
+            ->assertOk()
+            ->assertSee('none matches your selected city or Night Market.');
+
+        [$foodMarket] = $this->marketWithFood('Food Reason Market', food: ['category' => 'Drinks']);
+        $this->marketWithFood('Category Source Market', food: ['category' => 'Snacks'], day: 'Monday');
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'night_market_id' => $foodMarket->id,
+                'categories' => ['Snacks'],
+            ]))
+            ->assertOk()
+            ->assertSee('no public Food matches your category, Halal, or Must-Try preferences.');
+
+        [$budgetMarket] = $this->marketWithFood('Budget Reason Market', food: [
+            'price_min' => 40,
+            'price_max' => 50,
+        ]);
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'night_market_id' => $budgetMarket->id,
+                'budget_min' => 5,
+                'budget_max' => 20,
+            ]))
+            ->assertOk()
+            ->assertSee('none with a complete known price range fits your selected budget.');
+    }
+
+    public function test_fallback_date_requires_explicit_confirmation_and_creates_only_on_confirmed_date(): void
+    {
+        [$market, $stall, $food] = $this->marketWithFood('Confirmed Fallback Market');
+        $requestedDate = now()->next('Saturday');
+        $data = $this->createPlanData($market, $stall, $food, [
+            'requested_date' => $requestedDate->toDateString(),
+            'visit_date' => $this->visitDate->toDateString(),
+        ]);
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.store'), $data)
+            ->assertSessionHasErrors('confirmed_fallback_date');
+        $this->assertDatabaseCount('visit_plans', 0);
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.store'), [
+                ...$data,
+                'confirmed_fallback_date' => true,
+            ])
+            ->assertRedirect();
+
+        $plan = VisitPlan::query()->sole();
+        $this->assertSame($this->visitDate->toDateString(), $plan->visit_date->toDateString());
+        $this->assertNotSame($requestedDate->toDateString(), $plan->visit_date->toDateString());
+    }
+
+    public function test_confirmed_fallback_date_and_targets_are_recomputed_and_cannot_be_forged(): void
+    {
+        [$market, $stall, $food] = $this->marketWithFood('Recomputed Fallback Market');
+        [, $otherStall, $otherFood] = $this->marketWithFood('Other Secure Market');
+        $data = $this->createPlanData($market, $stall, $food, [
+            'requested_date' => now()->next('Saturday')->toDateString(),
+            'visit_date' => now()->next('Monday')->toDateString(),
+            'confirmed_fallback_date' => true,
+            'score' => 999999,
+            'stall_ids' => [$stall->id, $otherStall->id],
+            'food_ids' => [$food->id, $otherFood->id],
+        ]);
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.store'), $data)
+            ->assertSessionHasErrors('visit_date');
+
+        $this->assertDatabaseCount('visit_plans', 0);
     }
 
     public function test_create_from_recommendation_is_owned_revalidated_and_ignores_tampered_authority_fields(): void
@@ -322,6 +509,7 @@ class SmartVisitPlannerTest extends TestCase
     {
         $this->marketWithFood('Single Query Market');
         $singleResultQueries = $this->recommendationQueryCount();
+        $singleFallbackQueries = $this->dateAwareRecommendationQueryCount();
 
         for ($index = 1; $index <= 4; $index++) {
             [, $stall] = $this->marketWithFood("Extra Market {$index}");
@@ -329,7 +517,9 @@ class SmartVisitPlannerTest extends TestCase
         }
 
         $manyResultQueries = $this->recommendationQueryCount();
+        $manyFallbackQueries = $this->dateAwareRecommendationQueryCount();
         $this->assertSame($singleResultQueries, $manyResultQueries);
+        $this->assertSame($singleFallbackQueries, $manyFallbackQueries);
     }
 
     /** @return array{NightMarket, Stall, Food} */
@@ -387,6 +577,7 @@ class SmartVisitPlannerTest extends TestCase
     {
         return array_replace([
             ...$this->preferences(['night_market_id' => $market->id, 'max_markets' => 1]),
+            'requested_date' => $this->visitDate->toDateString(),
             'title' => 'Recommended secure plan',
             'stall_ids' => [$stall->id],
             'food_ids' => [$food->id],
@@ -398,6 +589,19 @@ class SmartVisitPlannerTest extends TestCase
         DB::flushQueryLog();
         DB::enableQueryLog();
         app(SmartVisitPlannerService::class)->recommend($this->preferences());
+        $count = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $count;
+    }
+
+    private function dateAwareRecommendationQueryCount(): int
+    {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        app(SmartVisitPlannerService::class)->recommendDateAware($this->preferences([
+            'visit_date' => now()->next('Saturday')->toDateString(),
+        ]));
         $count = count(DB::getQueryLog());
         DB::disableQueryLog();
 

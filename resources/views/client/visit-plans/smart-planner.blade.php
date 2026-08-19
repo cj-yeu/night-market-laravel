@@ -123,20 +123,65 @@
         </div>
     </section>
 
-    @if ($recommendations !== null)
-        <section aria-labelledby="planner-results-heading">
-            <h2 id="planner-results-heading" class="h3 fw-bold text-market">Recommendations</h2>
-            @if ($preferences['preference_notes'] ?? null)
-                <p class="text-secondary">Your planning note: {{ $preferences['preference_notes'] }}</p>
+    @if ($plannerResult !== null)
+        <section aria-labelledby="planner-results-heading" class="vstack gap-4">
+            <h2 id="planner-results-heading" class="visually-hidden">Smart Planner Results</h2>
+
+            <section class="card market-card" aria-labelledby="requested-date-heading">
+                <div class="card-body p-4">
+                    <h3 id="requested-date-heading" class="h4 fw-bold text-market">Your Requested Date</h3>
+                    <p class="fs-5 fw-semibold mb-3">{{ $plannerResult['requested_date_label'] }}</p>
+                    <div class="d-flex flex-wrap gap-2" aria-label="Selected preferences">
+                        <span class="badge text-bg-light border">City: {{ $preferences['city'] ?? 'Any public Selangor city' }}</span>
+                        <span class="badge text-bg-light border">
+                            Market:
+                            {{ isset($preferences['night_market_id']) ? ($markets->firstWhere('id', (int) $preferences['night_market_id'])?->name ?? 'Selected public Market') : 'Any operating public Market' }}
+                        </span>
+                        <span class="badge text-bg-light border">Categories: {{ ($preferences['categories'] ?? []) === [] ? 'Any' : implode(', ', $preferences['categories']) }}</span>
+                        <span class="badge text-bg-light border">Halal: {{ $halalOptions[$preferences['halal_preference']] }}</span>
+                        <span class="badge text-bg-light border">Must-Try only: {{ $preferences['must_try'] ? 'Yes' : 'No' }}</span>
+                        <span class="badge text-bg-light border">
+                            Budget:
+                            {{ isset($preferences['budget_min'], $preferences['budget_max']) ? 'RM'.number_format((float) $preferences['budget_min'], 2).'–RM'.number_format((float) $preferences['budget_max'], 2) : 'Not set' }}
+                        </span>
+                    </div>
+                    @if ($preferences['preference_notes'] ?? null)
+                        <p class="text-secondary mt-3 mb-0">Your planning note: {{ $preferences['preference_notes'] }}</p>
+                    @endif
+                </div>
+            </section>
+
+            @if ($plannerResult['uses_fallback'])
+                <section class="card border-warning" aria-labelledby="recommended-date-heading">
+                    <div class="card-body p-4">
+                        <h3 id="recommended-date-heading" class="h4 fw-bold text-market">Recommended Visit Date</h3>
+                        <p>{{ $plannerResult['requested_reason_message'] }}</p>
+                        <p class="fs-5 mb-2">
+                            The nearest suitable option is
+                            <strong>{{ $recommendations[0]['market']->name }}</strong>
+                            on <strong>{{ $plannerResult['recommendation_date_label'] }}</strong>.
+                        </p>
+                        <p class="small text-secondary mb-0">Use recommended date in an itinerary below to explicitly confirm this fallback date before creating your plan.</p>
+                    </div>
+                </section>
             @endif
 
             @if ($recommendations === [])
                 <div class="alert alert-info py-4">
-                    <h3 class="h5">No matching recommendation</h3>
-                    <p class="mb-0">Try another operating date, remove the specific Market or city, broaden categories or Halal classification, disable Must-Try only, or widen the budget.</p>
+                    <h3 class="h5">No matching option</h3>
+                    <p>{{ $plannerResult['requested_reason_message'] }}</p>
+                    @if ($plannerResult['fallback_exhausted'])
+                        <p class="mb-0">No matching option exists within the next {{ $plannerResult['fallback_limit_days'] }} days.</p>
+                    @endif
                 </div>
             @else
-                <div class="vstack gap-4">
+                <section aria-labelledby="recommended-itinerary-heading">
+                    <h3 id="recommended-itinerary-heading" class="h3 fw-bold text-market">Recommended Itinerary</h3>
+                    <p class="text-secondary">
+                        Recommendation date: {{ $plannerResult['recommendation_date_label'] }}.
+                        A plan is created only for the date confirmed below.
+                    </p>
+                    <div class="vstack gap-4">
                     @foreach ($recommendations as $recommendation)
                         <article class="card market-card">
                             <div class="card-body p-4 p-lg-5">
@@ -208,7 +253,8 @@
                                 <form method="POST" action="{{ route('client.visit-plans.smart-planner.store') }}" class="mt-4">
                                     @csrf
                                     <input type="hidden" name="title" value="Smart visit to {{ $recommendation['market']->name }}">
-                                    <input type="hidden" name="visit_date" value="{{ $preferences['visit_date'] }}">
+                                    <input type="hidden" name="requested_date" value="{{ $plannerResult['requested_date'] }}">
+                                    <input type="hidden" name="visit_date" value="{{ $plannerResult['recommendation_date'] }}">
                                     <input type="hidden" name="night_market_id" value="{{ $recommendation['market']->id }}">
                                     <input type="hidden" name="halal_preference" value="{{ $preferences['halal_preference'] }}">
                                     <input type="hidden" name="must_try" value="{{ $preferences['must_try'] ? 1 : 0 }}">
@@ -228,12 +274,25 @@
                                     @foreach ($recommendation['foods'] as $foodRecommendation)
                                         <input type="hidden" name="food_ids[]" value="{{ $foodRecommendation['food']->id }}">
                                     @endforeach
-                                    <button type="submit" class="btn btn-market">Create Plan from This Recommendation</button>
+                                    @if ($plannerResult['uses_fallback'])
+                                        <div class="form-check mb-3">
+                                            <input class="form-check-input" type="checkbox" name="confirmed_fallback_date" value="1"
+                                                id="confirmed-fallback-date-{{ $recommendation['market']->id }}" required>
+                                            <label class="form-check-label fw-semibold" for="confirmed-fallback-date-{{ $recommendation['market']->id }}">
+                                                Use recommended date: {{ $plannerResult['recommendation_date_label'] }}
+                                            </label>
+                                        </div>
+                                    @endif
+                                    <p class="small text-secondary">Confirmed plan date: {{ $plannerResult['recommendation_date_label'] }}</p>
+                                    <button type="submit" class="btn btn-market">
+                                        {{ $plannerResult['uses_fallback'] ? 'Use Recommended Date and Create Plan' : 'Create Plan from This Recommendation' }}
+                                    </button>
                                 </form>
                             </div>
                         </article>
                     @endforeach
-                </div>
+                    </div>
+                </section>
             @endif
         </section>
     @endif
