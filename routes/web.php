@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\StallController;
 use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
+use App\Http\Controllers\Auth\GoogleAuthenticationController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Client\ClientHomeController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Client\ReviewController;
 use App\Http\Controllers\Client\SocialMediaHighlightController;
 use App\Http\Controllers\Client\StallFoodDiscoveryController;
 use App\Http\Controllers\Client\VisitPlanController;
+use App\Http\Controllers\UserAccount\GoogleAccountController;
 use App\Http\Controllers\UserAccount\ProfileController;
 use App\Http\Controllers\UserAccount\ProfileImageController;
 use Illuminate\Support\Facades\Route;
@@ -52,7 +54,13 @@ Route::middleware('guest')->group(function () {
         ->name('password.reset');
     Route::post('/reset-password', [ResetPasswordController::class, 'store'])
         ->name('password.update');
+
+    Route::get('/auth/google', [GoogleAuthenticationController::class, 'redirect'])
+        ->name('auth.google.redirect');
 });
+
+Route::get('/auth/google/callback', [GoogleAuthenticationController::class, 'callback'])
+    ->name('auth.google.callback');
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
@@ -61,6 +69,12 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::patch('/profile/avatar', [ProfileImageController::class, 'update'])->name('profile.avatar.update');
     Route::delete('/profile/avatar', [ProfileImageController::class, 'destroy'])->name('profile.avatar.destroy');
+    Route::post('/profile/connected-accounts/google', [GoogleAccountController::class, 'store'])
+        ->middleware('role:client')
+        ->name('profile.google.connect');
+    Route::delete('/profile/connected-accounts/google', [GoogleAccountController::class, 'destroy'])
+        ->middleware('role:client')
+        ->name('profile.google.disconnect');
     Route::get('/profile/password', [ProfileController::class, 'editPassword'])->name('profile.password.edit');
     Route::patch('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 

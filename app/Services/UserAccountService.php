@@ -28,6 +28,12 @@ class UserAccountService
      */
     public function changePassword(User $user, array $data): void
     {
+        if ($user->password === null) {
+            throw ValidationException::withMessages([
+                'current_password' => 'Use Forgot Password to establish a local password first.',
+            ]);
+        }
+
         if (! Hash::check($data['current_password'], $user->password)) {
             throw ValidationException::withMessages([
                 'current_password' => 'The current password is incorrect.',

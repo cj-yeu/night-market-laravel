@@ -57,7 +57,10 @@ class AuthService
 
         $user = User::where('email', $credentials['email'])->first();
 
-        if (! $user || ! Hash::check($credentials['password'], $user->password) || ! $user->is_active) {
+        if (! $user
+            || $user->password === null
+            || ! Hash::check($credentials['password'], $user->password)
+            || ! $user->is_active) {
             $this->limiter->hit($limiterKey, self::LOGIN_DECAY_SECONDS);
 
             if ($this->limiter->attempts($limiterKey) >= self::LOGIN_MAX_ATTEMPTS) {

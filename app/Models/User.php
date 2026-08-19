@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
@@ -70,6 +71,17 @@ class User extends Authenticatable
     public function approvedSocialMediaRecords(): HasMany
     {
         return $this->hasMany(SocialMediaRecord::class, 'approved_by');
+    }
+
+    public function socialAccounts(): HasMany
+    {
+        return $this->hasMany(SocialAccount::class);
+    }
+
+    public function googleAccount(): HasOne
+    {
+        return $this->hasOne(SocialAccount::class)
+            ->where('provider', SocialAccount::PROVIDER_GOOGLE);
     }
 
     public function avatarUrl(): ?string

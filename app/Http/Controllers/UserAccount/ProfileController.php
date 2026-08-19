@@ -7,15 +7,18 @@ use App\Http\Requests\UserAccount\ChangePasswordRequest;
 use App\Http\Requests\UserAccount\UpdateProfileRequest;
 use App\Services\UserAccountService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class ProfileController extends Controller
 {
     public function __construct(private readonly UserAccountService $userAccountService) {}
 
-    public function edit(): View
+    public function edit(Request $request): View
     {
-        return view('profile.edit');
+        return view('profile.edit', [
+            'user' => $request->user()->load('googleAccount'),
+        ]);
     }
 
     public function update(UpdateProfileRequest $request): RedirectResponse
