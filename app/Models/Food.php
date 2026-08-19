@@ -37,6 +37,10 @@ class Food extends Model
         'status',
     ];
 
+    protected $hidden = [
+        'catalog_code',
+    ];
+
     public function scopePubliclyVisible(Builder $query): Builder
     {
         return $query

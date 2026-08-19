@@ -47,6 +47,10 @@ class Stall extends Model
         'status',
     ];
 
+    protected $hidden = [
+        'catalog_code',
+    ];
+
     protected function casts(): array
     {
         return [
