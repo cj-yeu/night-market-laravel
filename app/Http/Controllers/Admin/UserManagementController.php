@@ -8,6 +8,7 @@ use App\Http\Requests\Admin\UserManagementFilterRequest;
 use App\Models\User;
 use App\Services\UserManagementService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Arr;
 use Illuminate\View\View;
 
 class UserManagementController extends Controller
@@ -24,18 +25,41 @@ class UserManagementController extends Controller
         ]);
     }
 
+    public function show(User $user): View
+    {
+        return view('admin.users.show', [
+            'user' => $this->userManagementService->details($user),
+        ]);
+    }
+
     public function updateStatus(UpdateUserStatusRequest $request, User $user): RedirectResponse
     {
+        $validated = $request->validated();
         $updatedUser = $this->userManagementService->updateStatus(
             $request->user(),
             $user,
-            $request->boolean('is_active'),
+            (bool) $validated['is_active'],
         );
 
+        $message = $updatedUser->is_active
+            ? 'The Client account was activated successfully.'
+            : 'The Client account was deactivated successfully.';
+
+        if (($validated['redirect_to'] ?? null) === 'show') {
+            return redirect()
+                ->route('admin.users.show', $updatedUser)
+                ->with('status', $message);
+        }
+
         return redirect()
-            ->route('admin.users.index', $request->only(['search', 'role', 'status', 'page']))
-            ->with('status', $updatedUser->is_active
-                ? 'The user account was activated successfully.'
-                : 'The user account was deactivated successfully.');
+            ->route('admin.users.index', Arr::only($validated, [
+                'search',
+                'role',
+                'status',
+                'verification',
+                'auth_method',
+                'page',
+            ]))
+            ->with('status', $message);
     }
 }

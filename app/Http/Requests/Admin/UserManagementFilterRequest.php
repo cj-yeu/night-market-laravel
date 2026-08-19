@@ -20,16 +20,22 @@ class UserManagementFilterRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'search' => ['nullable', 'string', 'max:255'],
+            'search' => ['nullable', 'string', 'max:100'],
             'role' => ['nullable', Rule::in([User::ROLE_ADMIN, User::ROLE_CLIENT])],
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
+            'verification' => ['nullable', Rule::in(['verified', 'pending'])],
+            'auth_method' => ['nullable', Rule::in([
+                User::AUTH_PASSWORD,
+                User::AUTH_GOOGLE,
+                User::AUTH_PASSWORD_AND_GOOGLE,
+            ])],
         ];
     }
 
     protected function prepareForValidation(): void
     {
         $this->merge([
-            'search' => $this->filled('search') ? trim((string) $this->search) : null,
+            'search' => $this->filled('search') ? str($this->search)->squish()->value() : null,
         ]);
     }
 }

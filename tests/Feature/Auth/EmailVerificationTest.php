@@ -225,8 +225,13 @@ class EmailVerificationTest extends TestCase
             'is_active' => false,
         ]);
 
-        $this->actingAs($user)->get($this->verificationUrl($user))->assertForbidden();
-        $this->actingAs($user)->post(route('verification.send'))->assertForbidden();
+        $this->actingAs($user)
+            ->get($this->verificationUrl($user))
+            ->assertRedirect(route('login'))
+            ->assertSessionHas('error', 'Your account is inactive. Please contact an administrator.');
+        $this->assertGuest();
+
+        $this->post(route('verification.send'))->assertRedirect(route('login'));
 
         $this->assertFalse($user->refresh()->hasVerifiedEmail());
         Notification::assertNothingSent();

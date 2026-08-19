@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail as MustVerifyEmailContract;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -20,6 +21,14 @@ class User extends Authenticatable implements MustVerifyEmailContract
     public const ROLE_ADMIN = 'admin';
 
     public const ROLE_CLIENT = 'client';
+
+    public const AUTH_PASSWORD = 'password';
+
+    public const AUTH_GOOGLE = 'google';
+
+    public const AUTH_PASSWORD_AND_GOOGLE = 'password_and_google';
+
+    public const AUTH_UNAVAILABLE = 'unavailable';
 
     /**
      * The attributes that are mass assignable.
@@ -55,7 +64,55 @@ class User extends Authenticatable implements MustVerifyEmailContract
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'has_local_password' => 'boolean',
         ];
+    }
+
+    public function scopeSearch(Builder $query, ?string $search): Builder
+    {
+        if ($search === null || $search === '') {
+            return $query;
+        }
+
+        $escapedSearch = addcslashes($search, '\\%_');
+
+        return $query->where(function (Builder $query) use ($escapedSearch): void {
+            $query->where('name', 'like', '%'.$escapedSearch.'%')
+                ->orWhere('email', 'like', '%'.$escapedSearch.'%');
+        });
+    }
+
+    public function scopeWithRole(Builder $query, ?string $role): Builder
+    {
+        return $role === null ? $query : $query->where('role', $role);
+    }
+
+    public function scopeWithActiveStatus(Builder $query, ?string $status): Builder
+    {
+        return $status === null ? $query : $query->where('is_active', $status === 'active');
+    }
+
+    public function scopeWithVerificationStatus(Builder $query, ?string $verification): Builder
+    {
+        if ($verification === 'verified') {
+            return $query->whereNotNull('email_verified_at');
+        }
+
+        if ($verification === 'pending') {
+            return $query->whereNull('email_verified_at');
+        }
+
+        return $query;
+    }
+
+    public function scopeWithAuthenticationMethod(Builder $query, ?string $method): Builder
+    {
+        return match ($method) {
+            self::AUTH_PASSWORD => $query->whereNotNull('password')->whereDoesntHave('googleAccount'),
+            self::AUTH_GOOGLE => $query->whereNull('password')->whereHas('googleAccount'),
+            self::AUTH_PASSWORD_AND_GOOGLE => $query->whereNotNull('password')->whereHas('googleAccount'),
+            default => $query,
+        };
     }
 
     public function visitPlans(): HasMany
@@ -82,6 +139,33 @@ class User extends Authenticatable implements MustVerifyEmailContract
     {
         return $this->hasOne(SocialAccount::class)
             ->where('provider', SocialAccount::PROVIDER_GOOGLE);
+    }
+
+    public function authenticationMethod(): string
+    {
+        $hasPassword = array_key_exists('has_local_password', $this->attributes)
+            ? (bool) $this->has_local_password
+            : $this->password !== null;
+        $hasGoogle = $this->relationLoaded('googleAccount')
+            ? $this->googleAccount !== null
+            : $this->googleAccount()->exists();
+
+        return match (true) {
+            $hasPassword && $hasGoogle => self::AUTH_PASSWORD_AND_GOOGLE,
+            $hasPassword => self::AUTH_PASSWORD,
+            $hasGoogle => self::AUTH_GOOGLE,
+            default => self::AUTH_UNAVAILABLE,
+        };
+    }
+
+    public function authenticationMethodLabel(): string
+    {
+        return match ($this->authenticationMethod()) {
+            self::AUTH_PASSWORD => 'Password',
+            self::AUTH_GOOGLE => 'Google',
+            self::AUTH_PASSWORD_AND_GOOGLE => 'Password + Google',
+            default => 'Unavailable',
+        };
     }
 
     public function avatarUrl(): ?string

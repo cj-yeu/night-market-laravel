@@ -156,6 +156,9 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/users', [UserManagementController::class, 'index'])
             ->name('users.index');
+        Route::get('/users/{user}', [UserManagementController::class, 'show'])
+            ->whereNumber('user')
+            ->name('users.show');
         Route::patch('/users/{user}/status', [UserManagementController::class, 'updateStatus'])
             ->whereNumber('user')
             ->name('users.status.update');
