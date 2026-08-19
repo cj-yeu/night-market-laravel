@@ -28,17 +28,17 @@
             </a>
 
             <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.night-markets.*') ? 'active' : '' }}"
-                href="{{ route('admin.night-markets.create') }}">
+                href="{{ route('admin.night-markets.index') }}">
                 <i class="bi bi-shop" aria-hidden="true"></i>Night Markets
             </a>
 
             <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.stalls.*') ? 'active' : '' }}"
-                href="{{ route('admin.stalls.create') }}">
+                href="{{ route('admin.stalls.index') }}">
                 <i class="bi bi-basket-fill" aria-hidden="true"></i>Stalls
             </a>
 
             <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.foods.*') ? 'active' : '' }}"
-                href="{{ route('admin.foods.create') }}">
+                href="{{ route('admin.foods.index') }}">
                 <i class="bi bi-cup-hot-fill" aria-hidden="true"></i>Foods
             </a>
 

@@ -126,14 +126,47 @@ Route::middleware('auth')->group(function () {
         ->name('admin.dashboard');
 
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
+        Route::get('/night-markets', [NightMarketController::class, 'index'])->name('night-markets.index');
         Route::get('/night-markets/create', [NightMarketController::class, 'create'])->name('night-markets.create');
         Route::post('/night-markets', [NightMarketController::class, 'store'])->name('night-markets.store');
+        Route::get('/night-markets/{nightMarket}', [NightMarketController::class, 'show'])
+            ->whereNumber('nightMarket')->name('night-markets.show');
+        Route::get('/night-markets/{nightMarket}/edit', [NightMarketController::class, 'edit'])
+            ->whereNumber('nightMarket')->name('night-markets.edit');
+        Route::patch('/night-markets/{nightMarket}', [NightMarketController::class, 'update'])
+            ->whereNumber('nightMarket')->name('night-markets.update');
+        Route::patch('/night-markets/{nightMarket}/activate', [NightMarketController::class, 'activate'])
+            ->whereNumber('nightMarket')->name('night-markets.activate');
+        Route::patch('/night-markets/{nightMarket}/deactivate', [NightMarketController::class, 'deactivate'])
+            ->whereNumber('nightMarket')->name('night-markets.deactivate');
 
+        Route::get('/stalls', [StallController::class, 'index'])->name('stalls.index');
         Route::get('/stalls/create', [StallController::class, 'create'])->name('stalls.create');
         Route::post('/stalls', [StallController::class, 'store'])->name('stalls.store');
+        Route::get('/stalls/{stall}', [StallController::class, 'show'])
+            ->whereNumber('stall')->name('stalls.show');
+        Route::get('/stalls/{stall}/edit', [StallController::class, 'edit'])
+            ->whereNumber('stall')->name('stalls.edit');
+        Route::patch('/stalls/{stall}', [StallController::class, 'update'])
+            ->whereNumber('stall')->name('stalls.update');
+        Route::patch('/stalls/{stall}/activate', [StallController::class, 'activate'])
+            ->whereNumber('stall')->name('stalls.activate');
+        Route::patch('/stalls/{stall}/deactivate', [StallController::class, 'deactivate'])
+            ->whereNumber('stall')->name('stalls.deactivate');
 
+        Route::get('/foods', [FoodController::class, 'index'])->name('foods.index');
         Route::get('/foods/create', [FoodController::class, 'create'])->name('foods.create');
         Route::post('/foods', [FoodController::class, 'store'])->name('foods.store');
+        Route::get('/foods/{food}', [FoodController::class, 'show'])
+            ->whereNumber('food')->name('foods.show');
+        Route::get('/foods/{food}/edit', [FoodController::class, 'edit'])
+            ->whereNumber('food')->name('foods.edit');
+        Route::patch('/foods/{food}', [FoodController::class, 'update'])
+            ->whereNumber('food')->name('foods.update');
+        Route::patch('/foods/{food}/activate', [FoodController::class, 'activate'])
+            ->whereNumber('food')->name('foods.activate');
+        Route::patch('/foods/{food}/deactivate', [FoodController::class, 'deactivate'])
+            ->whereNumber('food')->name('foods.deactivate');
 
         Route::get('/reviews', [AdminReviewController::class, 'index'])->name('reviews.index');
         Route::patch('/reviews/{review}', [AdminReviewController::class, 'update'])
