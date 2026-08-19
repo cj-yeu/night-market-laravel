@@ -135,18 +135,31 @@
         <div class="row g-4">
             @foreach ($records as $record)
                 <div class="col-12 col-lg-6">
-                    <article class="card market-card h-100">
+                    <article class="card market-card h-100 overflow-hidden">
+                        <div class="catalog-image-frame food-image-frame">
+                            <img src="{{ $record->safe_image_url ?? asset('images/night-market-placeholder.svg') }}"
+                                alt="{{ $record->extracted_title ?: $record->nightMarket->name }} public post preview"
+                                class="catalog-image" loading="lazy" referrerpolicy="no-referrer">
+                        </div>
                         <div class="card-body p-4 d-flex flex-column">
                             <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
                                 <span class="badge text-bg-warning">{{ $record->platform }}</span>
-                                <span class="text-secondary small">{{ $record->posted_date->format('d M Y') }}</span>
+                                <span class="text-secondary small">
+                                    Published {{ $record->posted_date->format('d M Y') }}
+                                    @if ($record->approved_at)
+                                        · Verified {{ $record->approved_at->format('d M Y') }}
+                                    @endif
+                                </span>
                             </div>
 
-                            <h2 class="h5 fw-bold text-market">{{ $record->nightMarket->name }}</h2>
+                            <h2 class="h5 fw-bold text-market">
+                                {{ $record->extracted_title ?: $record->nightMarket->name }}
+                            </h2>
+                            <p class="small text-secondary mb-2">Related market: {{ $record->nightMarket->name }}</p>
                             @if ($record->food)
                                 <p class="fw-semibold mb-2">Featured food: {{ $record->food->name }}</p>
                             @endif
-                            <p class="text-secondary">{{ $record->content_summary }}</p>
+                            <p class="text-secondary">{{ \Illuminate\Support\Str::limit($record->content_summary, 500) }}</p>
 
                             @if (! empty($record->extracted_hashtags))
                                 <div class="d-flex flex-wrap gap-1 mb-3">
@@ -166,8 +179,10 @@
                             </div>
 
                             <div class="d-flex flex-wrap gap-2 mt-auto">
-                                <a href="{{ $record->original_post_url }}" target="_blank" rel="noopener noreferrer"
-                                    class="btn btn-market">Open Original Post</a>
+                                @if ($record->safe_source_url)
+                                    <a href="{{ $record->safe_source_url }}" target="_blank" rel="noopener noreferrer"
+                                        class="btn btn-market">Open Original Post</a>
+                                @endif
                                 @if (Route::has('night-markets.show'))
                                     <a href="{{ route('night-markets.show', $record->nightMarket) }}"
                                         class="btn btn-outline-secondary">View Market</a>

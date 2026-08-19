@@ -8,9 +8,14 @@
             <h1 class="display-6 fw-bold text-market mb-1">Social Media Records</h1>
             <p class="text-secondary mb-0">Manage manually collected public social media information.</p>
         </div>
-        <a href="{{ route('admin.social-media-records.create') }}" class="btn btn-market">
-            Add Social Media Record
-        </a>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ route('admin.social-media.extract.create') }}" class="btn btn-market">
+                Extract Public Post
+            </a>
+            <a href="{{ route('admin.social-media-records.create') }}" class="btn btn-outline-secondary">
+                Add Social Media Record
+            </a>
+        </div>
     </div>
 
     @if ($errors->any())
@@ -23,13 +28,13 @@
         <div class="card-body p-4">
             <form method="GET" action="{{ route('admin.social-media-records.index') }}">
                 <div class="row g-3 align-items-end">
-                    <div class="col-12 col-xl-4">
+                    <div class="col-12 col-xl-3">
                         <label for="search" class="form-label">Keyword Search</label>
                         <input type="search" id="search" name="search" maxlength="255"
                             value="{{ $filters['search'] ?? '' }}" class="form-control"
                             placeholder="Market, food, summary, or post URL">
                     </div>
-                    <div class="col-md-6 col-xl-3">
+                    <div class="col-md-6 col-xl-2">
                         <label for="night_market_id" class="form-label">Night Market</label>
                         <select id="night_market_id" name="night_market_id" class="form-select">
                             <option value="">All night markets</option>
@@ -63,6 +68,16 @@
                             @endforeach
                         </select>
                     </div>
+                    <div class="col-md-6 col-xl-2">
+                        <label for="posted_from" class="form-label">Posted From</label>
+                        <input type="date" id="posted_from" name="posted_from"
+                            value="{{ $filters['posted_from'] ?? '' }}" class="form-control">
+                    </div>
+                    <div class="col-md-6 col-xl-2">
+                        <label for="posted_to" class="form-label">Posted To</label>
+                        <input type="date" id="posted_to" name="posted_to"
+                            value="{{ $filters['posted_to'] ?? '' }}" class="form-control">
+                    </div>
                     <div class="col-md-6 col-xl-2 d-flex gap-2">
                         <button type="submit" class="btn btn-market">Filter</button>
                         @if (array_filter($filters))
@@ -88,16 +103,17 @@
                             <th>Night Market</th>
                             <th>Related Food</th>
                             <th>Platform</th>
+                            <th>Extraction</th>
                             <th>Status</th>
                             <th>Original Post</th>
-                            <th>Caption / Content Summary</th>
+                            <th>Title / Excerpt</th>
                             <th>Posted Date</th>
                             <th>Likes</th>
                             <th>Comments</th>
                             <th>Shares</th>
                             <th>Total Engagement</th>
                             <th>Extracted Information</th>
-                            <th>Last Updated</th>
+                            <th>Created</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -107,17 +123,25 @@
                                 <td>{{ $record->nightMarket?->name ?? 'Unavailable market' }}</td>
                                 <td>{{ $record->food?->name ?? 'None' }}</td>
                                 <td><span class="badge text-bg-warning">{{ $record->platform }}</span></td>
+                                <td>{{ ucfirst($record->extraction_status) }}</td>
                                 <td>
                                     <span class="badge {{ $record->status === \App\Models\SocialMediaRecord::STATUS_APPROVED ? 'text-bg-success' : ($record->status === \App\Models\SocialMediaRecord::STATUS_REJECTED ? 'text-bg-danger' : 'text-bg-secondary') }}">
                                         {{ ucfirst($record->status) }}
                                     </span>
                                 </td>
                                 <td>
-                                    <a href="{{ $record->original_post_url }}" target="_blank" rel="noopener noreferrer">
-                                        Open post
-                                    </a>
+                                    @if ($record->safe_source_url)
+                                        <a href="{{ $record->safe_source_url }}" target="_blank" rel="noopener noreferrer">
+                                            Open post
+                                        </a>
+                                    @else
+                                        <span class="text-secondary">URL unavailable</span>
+                                    @endif
                                 </td>
-                                <td style="min-width: 16rem;">{{ $record->content_summary }}</td>
+                                <td style="min-width: 16rem;">
+                                    @if ($record->extracted_title)<strong class="d-block">{{ $record->extracted_title }}</strong>@endif
+                                    {{ \Illuminate\Support\Str::limit($record->content_summary, 220) }}
+                                </td>
                                 <td>{{ $record->posted_date->format('d M Y') }}</td>
                                 <td>{{ number_format($record->likes) }}</td>
                                 <td>{{ number_format($record->comments) }}</td>
@@ -147,7 +171,7 @@
                                         </div>
                                     @endif
                                 </td>
-                                <td>{{ $record->updated_at->format('d M Y') }}</td>
+                                <td>{{ $record->created_at->format('d M Y') }}</td>
                                 <td>
                                     <div class="d-flex gap-2">
                                         <a href="{{ route('admin.social-media-records.edit', $record) }}"

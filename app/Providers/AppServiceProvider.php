@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Contracts\HostnameResolver;
 use App\Contracts\RecommendationExplanationProvider;
 use App\Services\DeterministicRecommendationExplanationProvider;
+use App\Services\NativeHostnameResolver;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,6 +19,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bind(HostnameResolver::class, NativeHostnameResolver::class);
         $this->app->bind(
             RecommendationExplanationProvider::class,
             DeterministicRecommendationExplanationProvider::class,

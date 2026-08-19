@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
 use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
+use App\Http\Controllers\Admin\SocialMediaExtractionController;
 use App\Http\Controllers\Admin\SocialMediaRecordController;
 use App\Http\Controllers\Admin\StallController;
 use App\Http\Controllers\Admin\UserManagementController;
@@ -199,6 +200,14 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/social-media-records', [SocialMediaRecordController::class, 'index'])
             ->name('social-media-records.index');
+        Route::get('/social-media/extract', [SocialMediaExtractionController::class, 'create'])
+            ->name('social-media.extract.create');
+        Route::post('/social-media/extract', [SocialMediaExtractionController::class, 'extract'])
+            ->name('social-media.extract.extract');
+        Route::get('/social-media/extract/review', [SocialMediaExtractionController::class, 'review'])
+            ->name('social-media.extract.review');
+        Route::post('/social-media/extract/store', [SocialMediaExtractionController::class, 'store'])
+            ->name('social-media.extract.store');
         Route::get('/social-media-records/create', [SocialMediaRecordController::class, 'create'])
             ->name('social-media-records.create');
         Route::post('/social-media-records', [SocialMediaRecordController::class, 'store'])

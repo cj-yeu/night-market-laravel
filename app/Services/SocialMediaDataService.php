@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\SocialMediaExtractionException;
 use App\Models\Food;
 use App\Models\NightMarket;
 use App\Models\SocialMediaRecord;
@@ -15,12 +16,14 @@ use Illuminate\Validation\ValidationException;
 
 class SocialMediaDataService
 {
+    public function __construct(private readonly SocialMediaUrlPolicy $urlPolicy) {}
+
     /**
-     * @param  array{search?: string|null, night_market_id?: int|null, platform?: string|null, status?: string|null}  $filters
+     * @param  array{search?: string|null, night_market_id?: int|null, platform?: string|null, status?: string|null, posted_from?: string|null, posted_to?: string|null}  $filters
      */
     public function records(array $filters): LengthAwarePaginator
     {
-        return SocialMediaRecord::query()
+        $records = SocialMediaRecord::query()
             ->with(['nightMarket:id,name', 'food:id,name', 'approvedBy:id,name'])
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
                 ->applyKeywordSearch($query, $search))
@@ -30,9 +33,17 @@ class SocialMediaDataService
                 ->where('platform', $platform))
             ->when($filters['status'] ?? null, fn (Builder $query, string $status) => $query
                 ->where('status', $status))
+            ->when($filters['posted_from'] ?? null, fn (Builder $query, string $date) => $query
+                ->whereDate('posted_date', '>=', $date))
+            ->when($filters['posted_to'] ?? null, fn (Builder $query, string $date) => $query
+                ->whereDate('posted_date', '<=', $date))
             ->latest('updated_at')
             ->paginate(15)
             ->withQueryString();
+
+        $this->decorateSafeUrls($records->getCollection());
+
+        return $records;
     }
 
     /**
@@ -56,7 +67,7 @@ class SocialMediaDataService
             ->where('status', NightMarket::STATUS_ACTIVE)
             ->where('state', 'Selangor')
             ->orderBy('name')
-            ->get();
+            ->get(['id', 'name', 'city', 'address']);
     }
 
     /**
@@ -65,10 +76,12 @@ class SocialMediaDataService
     public function create(array $data): SocialMediaRecord
     {
         $this->validateEligibility($data);
+        $this->validatePresentationUrls($data);
 
         return SocialMediaRecord::create([
             ...$this->recordData($data),
             'status' => SocialMediaRecord::STATUS_PENDING,
+            'extraction_status' => $data['extraction_status'] ?? SocialMediaRecord::EXTRACTION_MANUAL,
         ]);
     }
 
@@ -78,6 +91,7 @@ class SocialMediaDataService
     public function update(SocialMediaRecord $socialMediaRecord, array $data): SocialMediaRecord
     {
         $this->validateEligibility($data);
+        $this->validatePresentationUrls($data);
         $socialMediaRecord->update([
             ...$this->recordData($data),
             'status' => SocialMediaRecord::STATUS_PENDING,
@@ -129,7 +143,7 @@ class SocialMediaDataService
             ->paginate(12)
             ->withQueryString();
 
-        $this->hideIneligibleFoodRelations($records->getCollection());
+        $this->decorateSafeUrls($records->getCollection());
 
         return $records;
     }
@@ -151,7 +165,7 @@ class SocialMediaDataService
                 ->applyKeywordSearch($query, $search))
             ->get();
 
-        $this->hideIneligibleFoodRelations($records);
+        $this->decorateSafeUrls($records);
 
         $recordsByPlatform = $records->countBy('platform')->sortKeys()->all();
         $engagementByPlatform = $records
@@ -236,7 +250,7 @@ class SocialMediaDataService
                 ->where('state', 'Selangor'))
             ->with('stall:id,night_market_id,name')
             ->orderBy('name')
-            ->get();
+            ->get(['id', 'stall_id', 'name']);
     }
 
     /**
@@ -318,7 +332,9 @@ class SocialMediaDataService
             'food_id' => $data['food_id'] ?? null,
             'platform' => $data['platform'],
             'original_post_url' => $data['original_post_url'],
+            'extracted_title' => $data['extracted_title'] ?? null,
             'content_summary' => $data['content_summary'],
+            'external_image_url' => $data['external_image_url'] ?? null,
             'posted_date' => $data['posted_date'],
             'likes' => $likes,
             'comments' => $comments,
@@ -367,28 +383,62 @@ class SocialMediaDataService
 
     private function applyKeywordSearch(Builder $query, string $search): void
     {
-        $query->where(function (Builder $query) use ($search) {
-            $query->where('content_summary', 'like', '%'.$search.'%')
-                ->orWhere('original_post_url', 'like', '%'.$search.'%')
-                ->orWhere('extracted_hashtags', 'like', '%'.$search.'%')
+        $pattern = $this->literalLikePattern($search);
+
+        $query->where(function (Builder $query) use ($pattern) {
+            $query->where('extracted_title', 'like', $pattern)
+                ->orWhere('content_summary', 'like', $pattern)
+                ->orWhere('original_post_url', 'like', $pattern)
+                ->orWhere('extracted_hashtags', 'like', $pattern)
                 ->orWhereHas('nightMarket', fn (Builder $query) => $query
-                    ->where('name', 'like', '%'.$search.'%'))
+                    ->where('name', 'like', $pattern))
                 ->orWhereHas('food', fn (Builder $query) => $query
-                    ->where('name', 'like', '%'.$search.'%'));
+                    ->where('name', 'like', $pattern));
         });
     }
 
     /**
      * @param  Collection<int, SocialMediaRecord>  $records
      */
-    private function hideIneligibleFoodRelations(Collection $records): void
+    private function decorateSafeUrls(Collection $records): void
     {
-        $records->each(function (SocialMediaRecord $record) {
-            if ($record->food
-                && $record->food->stall?->night_market_id !== $record->night_market_id) {
-                $record->setRelation('food', null);
-            }
+        $records->each(function (SocialMediaRecord $record): void {
+            $record->setAttribute(
+                'safe_source_url',
+                $this->urlPolicy->safeStoredSourceUrl($record->original_post_url),
+            );
+            $record->setAttribute(
+                'safe_image_url',
+                $this->urlPolicy->safeStoredImageUrl($record->external_image_url),
+            );
         });
+    }
+
+    /** @param array<string, mixed> $data */
+    private function validatePresentationUrls(array $data): void
+    {
+        try {
+            $source = $this->urlPolicy->inspectSourceUrl($data['original_post_url']);
+        } catch (SocialMediaExtractionException $exception) {
+            throw ValidationException::withMessages([
+                'original_post_url' => $exception->getMessage(),
+            ]);
+        }
+
+        if ($source['platform'] !== $data['platform']) {
+            throw ValidationException::withMessages([
+                'platform' => 'The selected platform must match the original post URL.',
+            ]);
+        }
+    }
+
+    private function literalLikePattern(string $value): string
+    {
+        return '%'.str_replace(
+            ['\\', '%', '_'],
+            ['\\\\', '\\%', '\\_'],
+            $value,
+        ).'%';
     }
 
     /**

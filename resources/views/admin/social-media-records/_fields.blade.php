@@ -59,12 +59,30 @@
     </div>
 
     <div class="col-12">
+        <label for="extracted_title" class="form-label">Public Post Title <span class="text-secondary">(optional)</span></label>
+        <input type="text" id="extracted_title" name="extracted_title" maxlength="500"
+            value="{{ old('extracted_title', $socialMediaRecord?->extracted_title) }}"
+            class="form-control @error('extracted_title') is-invalid @enderror">
+        @error('extracted_title')<div class="invalid-feedback">{{ $message }}</div>@enderror
+    </div>
+
+    <div class="col-12">
         <label for="content_summary" class="form-label">Public Caption, Description, or Transcript</label>
         <textarea id="content_summary" name="content_summary" rows="9" maxlength="50000"
             class="form-control @error('content_summary') is-invalid @enderror"
             required>{{ old('content_summary', $socialMediaRecord?->content_summary) }}</textarea>
-        <div class="form-text">Paste the public text itself. A URL alone cannot be extracted.</div>
+        <div class="form-text">Review and edit extracted text, or enter a concise public excerpt manually.</div>
         @error('content_summary')<div class="invalid-feedback">{{ $message }}</div>@enderror
+    </div>
+
+    <div class="col-12">
+        <label for="external_image_url" class="form-label">Approved External Image URL <span class="text-secondary">(optional HTTPS)</span></label>
+        <input type="url" id="external_image_url" name="external_image_url" maxlength="2048"
+            value="{{ old('external_image_url', $socialMediaRecord?->external_image_url) }}"
+            class="form-control @error('external_image_url') is-invalid @enderror"
+            placeholder="https://">
+        <div class="form-text">Images are not downloaded. Unsupported or unsafe image hosts are rejected.</div>
+        @error('external_image_url')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
 
     @foreach ([

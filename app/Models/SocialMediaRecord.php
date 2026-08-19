@@ -31,12 +31,27 @@ class SocialMediaRecord extends Model
         'X / Twitter',
     ];
 
+    public const EXTRACTION_MANUAL = 'manual';
+
+    public const EXTRACTION_SUCCEEDED = 'succeeded';
+
+    public const EXTRACTION_FAILED = 'failed';
+
+    public const EXTRACTION_STATUSES = [
+        self::EXTRACTION_MANUAL,
+        self::EXTRACTION_SUCCEEDED,
+        self::EXTRACTION_FAILED,
+    ];
+
     protected $fillable = [
         'night_market_id',
         'food_id',
         'platform',
         'original_post_url',
+        'extracted_title',
         'content_summary',
+        'external_image_url',
+        'extraction_status',
         'posted_date',
         'likes',
         'comments',
@@ -56,7 +71,14 @@ class SocialMediaRecord extends Model
         return $query
             ->where('status', self::STATUS_APPROVED)
             ->whereNotNull('night_market_id')
-            ->whereHas('nightMarket', fn (Builder $query) => $query->publiclyVisible());
+            ->whereHas('nightMarket', fn (Builder $query) => $query->publiclyVisible())
+            ->where(function (Builder $query) {
+                $query->whereNull('food_id')
+                    ->orWhereHas('food', fn (Builder $query) => $query
+                        ->publiclyVisible()
+                        ->whereHas('stall', fn (Builder $query) => $query
+                            ->whereColumn('stalls.night_market_id', 'social_media_records.night_market_id')));
+            });
     }
 
     protected function casts(): array

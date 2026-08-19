@@ -226,6 +226,7 @@ class SocialMediaRecordTest extends TestCase
         $this->actingAs($this->admin)
             ->patch(route('admin.social-media-records.update', $record), $this->validPayload([
                 'platform' => 'TikTok',
+                'original_post_url' => 'https://www.tiktok.com/@vendor/video/example',
                 'content_summary' => 'Updated public post summary.',
                 'likes' => 999,
             ]))
