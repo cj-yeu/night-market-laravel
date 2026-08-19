@@ -148,7 +148,7 @@ class UserManagementTest extends TestCase
             'password' => 'password',
         ])
             ->assertSessionHasErrors([
-                'email' => 'Your account is inactive. Please contact the administrator.',
+                'email' => 'The provided credentials are incorrect. You have 2 attempts remaining.',
             ]);
 
         $this->assertGuest();

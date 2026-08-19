@@ -26,7 +26,7 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
-        $user = $this->authService->login($request->validated());
+        $user = $this->authService->login($request->validated(), $request->throttleKey());
 
         $request->session()->regenerate();
 

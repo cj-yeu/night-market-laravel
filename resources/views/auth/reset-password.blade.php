@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Login | Night Market Selangor')
+@section('title', 'Reset Password | Night Market Selangor')
 
 @section('content')
     <div class="row justify-content-center">
@@ -8,12 +8,14 @@
             <div class="card market-card">
                 <div class="card-body p-4 p-md-5">
                     <div class="text-center mb-4">
-                        <h1 class="h3 fw-bold text-market">Welcome Back</h1>
-                        <p class="text-secondary mb-0">Log in to plan your next night market visit.</p>
+                        <h1 class="h3 fw-bold text-market">Reset Your Password</h1>
+                        <p class="text-secondary mb-0">Choose a new password with at least 8 characters.</p>
                     </div>
 
-                    <form method="POST" action="{{ route('login.store') }}" novalidate>
+                    <form method="POST" action="{{ route('password.update') }}" novalidate>
                         @csrf
+
+                        <input type="hidden" name="token" value="{{ $token }}">
 
                         <div class="mb-3">
                             <label for="email" class="form-label">Email Address</label>
@@ -22,9 +24,8 @@
                                 class="form-control @error('email') is-invalid @enderror"
                                 id="email"
                                 name="email"
-                                value="{{ old('email') }}"
+                                value="{{ old('email', $email) }}"
                                 autocomplete="email"
-                                autofocus
                                 required
                             >
                             @error('email')
@@ -32,19 +33,14 @@
                             @enderror
                         </div>
 
-                        <div class="mb-4">
-                            <div class="d-flex justify-content-between align-items-center gap-3">
-                                <label for="password" class="form-label">Password</label>
-                                <a href="{{ route('password.request') }}" class="small text-market fw-semibold">
-                                    Forgot your password?
-                                </a>
-                            </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">New Password</label>
                             <input
                                 type="password"
                                 class="form-control @error('password') is-invalid @enderror"
                                 id="password"
                                 name="password"
-                                autocomplete="current-password"
+                                autocomplete="new-password"
                                 required
                             >
                             @error('password')
@@ -52,13 +48,20 @@
                             @enderror
                         </div>
 
-                        <button type="submit" class="btn btn-market w-100">Login</button>
-                    </form>
+                        <div class="mb-4">
+                            <label for="password_confirmation" class="form-label">Confirm New Password</label>
+                            <input
+                                type="password"
+                                class="form-control"
+                                id="password_confirmation"
+                                name="password_confirmation"
+                                autocomplete="new-password"
+                                required
+                            >
+                        </div>
 
-                    <p class="text-center text-secondary mt-4 mb-0">
-                        New here?
-                        <a href="{{ route('register') }}" class="text-market fw-semibold">Create a client account</a>
-                    </p>
+                        <button type="submit" class="btn btn-market w-100">Reset Password</button>
+                    </form>
                 </div>
             </div>
         </div>
