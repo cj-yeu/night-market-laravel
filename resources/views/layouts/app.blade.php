@@ -98,6 +98,34 @@
                 border-radius: 0.5rem;
             }
 
+            .catalog-image-frame {
+                position: relative;
+                width: 100%;
+                overflow: hidden;
+                background: #fff3df;
+            }
+
+            .stall-image-frame {
+                aspect-ratio: 16 / 9;
+            }
+
+            .food-image-frame {
+                aspect-ratio: 4 / 3;
+            }
+
+            .catalog-image {
+                display: block;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            .catalog-thumbnail {
+                width: 7rem;
+                min-width: 7rem;
+                border-radius: 0.5rem;
+            }
+
             .user-avatar {
                 display: inline-flex;
                 flex: 0 0 auto;

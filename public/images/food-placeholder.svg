@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-labelledby="title description">
+  <title id="title">Food image placeholder</title>
+  <desc id="description">An illustrated plate with a warm night market meal.</desc>
+  <rect width="800" height="600" fill="#fff7ed"/>
+  <circle cx="400" cy="285" r="205" fill="#fff" stroke="#d85b1f" stroke-width="24"/>
+  <circle cx="400" cy="285" r="132" fill="#fed7aa"/>
+  <path d="M325 250c45-62 105-62 150 0-45 68-105 68-150 0z" fill="#f97316"/>
+  <circle cx="350" cy="330" r="34" fill="#fbbf24"/>
+  <circle cx="445" cy="330" r="34" fill="#65a30d"/>
+  <path d="M166 110v350M140 110v118M192 110v118M634 110v350c55-55 55-140 0-190" fill="none" stroke="#7c2d12" stroke-width="18" stroke-linecap="round"/>
+  <text x="400" y="555" text-anchor="middle" fill="#7c2d12" font-family="Arial, sans-serif" font-size="34" font-weight="700">FOOD PHOTO COMING SOON</text>
+</svg>

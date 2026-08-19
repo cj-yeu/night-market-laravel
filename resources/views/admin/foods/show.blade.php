@@ -11,6 +11,8 @@
         </div>
     </div>
 
+    @include('admin.foods._image-management')
+
     <div class="card market-card"><div class="card-body p-4">
         <dl class="row mb-0">
             <dt class="col-sm-3">Stall</dt><dd class="col-sm-9"><a href="{{ route('admin.stalls.show', $food->stall) }}">{{ $food->stall->name }}</a></dd>

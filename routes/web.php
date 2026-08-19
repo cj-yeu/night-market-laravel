@@ -157,6 +157,10 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('stall')->name('stalls.activate');
         Route::patch('/stalls/{stall}/deactivate', [StallController::class, 'deactivate'])
             ->whereNumber('stall')->name('stalls.deactivate');
+        Route::patch('/stalls/{stall}/image', [StallController::class, 'updateImage'])
+            ->whereNumber('stall')->name('stalls.image.update');
+        Route::delete('/stalls/{stall}/image', [StallController::class, 'deleteImage'])
+            ->whereNumber('stall')->name('stalls.image.destroy');
 
         Route::get('/foods', [FoodController::class, 'index'])->name('foods.index');
         Route::get('/foods/create', [FoodController::class, 'create'])->name('foods.create');
@@ -171,6 +175,10 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('food')->name('foods.activate');
         Route::patch('/foods/{food}/deactivate', [FoodController::class, 'deactivate'])
             ->whereNumber('food')->name('foods.deactivate');
+        Route::patch('/foods/{food}/image', [FoodController::class, 'updateImage'])
+            ->whereNumber('food')->name('foods.image.update');
+        Route::delete('/foods/{food}/image', [FoodController::class, 'deleteImage'])
+            ->whereNumber('food')->name('foods.image.destroy');
 
         Route::get('/reviews', [AdminReviewController::class, 'index'])->name('reviews.index');
         Route::patch('/reviews/{review}', [AdminReviewController::class, 'update'])

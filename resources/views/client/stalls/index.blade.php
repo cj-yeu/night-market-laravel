@@ -77,6 +77,7 @@
             @foreach ($stalls as $stall)
                 <div class="col-12 col-lg-6">
                     <article class="card h-100 market-card">
+                        <x-stall-image :stall="$stall" class="rounded-top-3" />
                         <div class="card-body p-4">
                             <h2 class="h4 fw-bold">{{ $stall->name }}</h2>
                             <p class="small text-market fw-semibold mb-2">
@@ -110,6 +111,7 @@
                                 <div class="vstack gap-2">
                                     @foreach ($stall->foods as $food)
                                         <div class="border rounded-3 p-3 bg-white">
+                                            <x-food-image :food="$food" class="rounded-3 mb-3" />
                                             <div class="d-flex justify-content-between align-items-start gap-3">
                                                 <div>
                                                     <span class="fw-semibold">{{ $food->name }}</span>

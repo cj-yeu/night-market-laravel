@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Stall extends Model
 {
@@ -15,6 +16,8 @@ class Stall extends Model
     public const STATUS_ACTIVE = 'active';
 
     public const STATUS_INACTIVE = 'inactive';
+
+    public const IMAGE_DIRECTORY = 'stalls';
 
     public const HALAL_CERTIFIED = 'halal_certified';
 
@@ -121,6 +124,21 @@ class Stall extends Model
         return $query
             ->where('status', self::STATUS_ACTIVE)
             ->whereHas('nightMarket', fn (Builder $query) => $query->publiclyVisible());
+    }
+
+    public static function isOwnedImagePath(?string $path): bool
+    {
+        return $path !== null && preg_match(
+            '/\Astalls\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpe?g|png|webp)\z/i',
+            str_replace('\\', '/', $path),
+        ) === 1;
+    }
+
+    public function imageUrl(): ?string
+    {
+        return self::isOwnedImagePath($this->image_path)
+            ? Storage::disk('public')->url($this->image_path)
+            : null;
     }
 
     public function nightMarket(): BelongsTo

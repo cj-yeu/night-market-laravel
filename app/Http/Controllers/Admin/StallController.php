@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\OperationalStatusRequest;
 use App\Http\Requests\StallFood\AdminStallFilterRequest;
+use App\Http\Requests\StallFood\DeleteStallImageRequest;
 use App\Http\Requests\StallFood\StoreStallRequest;
+use App\Http\Requests\StallFood\UpdateStallImageRequest;
 use App\Http\Requests\StallFood\UpdateStallRequest;
 use App\Models\Stall;
 use App\Services\NightMarketService;
+use App\Services\StallFoodImageService;
 use App\Services\StallFoodService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -18,6 +21,7 @@ class StallController extends Controller
     public function __construct(
         private readonly StallFoodService $stallFoodService,
         private readonly NightMarketService $nightMarketService,
+        private readonly StallFoodImageService $stallFoodImageService,
     ) {}
 
     public function index(AdminStallFilterRequest $request): View
@@ -83,6 +87,22 @@ class StallController extends Controller
     public function deactivate(OperationalStatusRequest $request, Stall $stall): RedirectResponse
     {
         return $this->updateStatus($stall, Stall::STATUS_INACTIVE);
+    }
+
+    public function updateImage(UpdateStallImageRequest $request, Stall $stall): RedirectResponse
+    {
+        $this->stallFoodImageService->updateStallImage($stall, $request->file('image'));
+
+        return redirect()->route('admin.stalls.show', $stall)
+            ->with('status', 'Stall image updated successfully.');
+    }
+
+    public function deleteImage(DeleteStallImageRequest $request, Stall $stall): RedirectResponse
+    {
+        $this->stallFoodImageService->removeStallImage($stall);
+
+        return redirect()->route('admin.stalls.show', $stall)
+            ->with('status', 'Stall image removed successfully.');
     }
 
     private function updateStatus(Stall $stall, string $status): RedirectResponse

@@ -23,10 +23,11 @@
         <div class="alert alert-info">No stalls match the current filters.</div>
     @else
         <div class="card market-card"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
-            <thead><tr><th>Stall</th><th>Night Market</th><th>Category</th><th>Halal classification</th><th>Foods</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+            <thead><tr><th>Image</th><th>Stall</th><th>Night Market</th><th>Category</th><th>Halal classification</th><th>Foods</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
             <tbody>
                 @foreach ($stalls as $stall)
                     <tr>
+                        <td><x-stall-image :stall="$stall" class="catalog-thumbnail" /></td>
                         <td><strong>{{ $stall->name }}</strong><div class="small text-secondary">{{ str($stall->description)->limit(70) }}</div></td>
                         <td>{{ $stall->nightMarket->name }}<div class="small text-secondary">{{ $stall->nightMarket->city }}</div></td>
                         <td>{{ $stall->category ?: '—' }}</td>

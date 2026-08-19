@@ -68,6 +68,7 @@
                                 <div class="vstack gap-3">
                                     @foreach ($activeStalls as $stall)
                                         <article class="border rounded-3 bg-white p-3">
+                                            <x-stall-image :stall="$stall" class="rounded-3 mb-3" />
                                             <h3 class="h6 fw-bold mb-1">{{ $stall->name }}</h3>
                                             <p class="text-secondary mb-0">
                                                 {{ $stall->description ?: 'No stall description available.' }}
@@ -93,6 +94,7 @@
                                 <div class="vstack gap-3">
                                     @foreach ($mustTryFoods as $food)
                                         <article class="border rounded-3 bg-white p-3">
+                                            <x-food-image :food="$food" class="rounded-3 mb-3" />
                                             <div class="d-flex justify-content-between gap-2 mb-1">
                                                 <h3 class="h6 fw-bold mb-0">{{ $food->name }}</h3>
                                                 <span class="badge text-bg-warning">Must-Try</span>

@@ -21,6 +21,7 @@
             </div>
 
             <div class="card market-card">
+                <x-food-image :food="$food" class="rounded-top-3" loading="eager" />
                 <div class="card-body p-4 p-md-5">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
                         @if ($food->category)
