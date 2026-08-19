@@ -13,10 +13,8 @@
                 class="btn btn-outline-secondary">Explore Stall Directory</a>
             <a href="{{ route('night-markets.show', $nightMarket->id) }}"
                 class="btn btn-outline-secondary">Back to Market Details</a>
-            @if (Route::has('client.visit-plans.create'))
-                <a href="{{ route('client.visit-plans.create') }}"
-                    class="btn btn-market">Create Visit Plan</a>
-            @endif
+            <a href="{{ route('client.visit-plans.create', ['night_market_id' => $nightMarket->id]) }}"
+                class="btn btn-market">Plan a Visit to This Market</a>
         </div>
     </div>
 
@@ -90,6 +88,8 @@
                             <p class="text-secondary">{{ $stall->description ?: 'No stall description available.' }}</p>
                             <a href="{{ route('foods.index', ['stall_id' => $stall->id, 'night_market_id' => $nightMarket->id]) }}"
                                 class="btn btn-sm btn-outline-secondary mb-3">Browse this Stall’s Foods</a>
+                            <a href="{{ route('client.visit-plans.index', ['item_type' => 'stall', 'item_id' => $stall->id]) }}"
+                                class="btn btn-sm btn-outline-secondary mb-3">Add Stall to Visit Plan</a>
                             @if ($stall->hasCurrentHalalEvidence() || $stall->sourceUrl() || $stall->verified_at)
                                 <div class="small text-secondary mb-3">
                                     @if ($stall->verified_at)
@@ -131,6 +131,8 @@
                                                 class="btn btn-sm btn-outline-secondary mt-3">
                                                 View Food Details
                                             </a>
+                                            <a href="{{ route('client.visit-plans.index', ['item_type' => 'food', 'item_id' => $food->id]) }}"
+                                                class="btn btn-sm btn-outline-secondary mt-3">Add Food to Visit Plan</a>
                                         </div>
                                     @endforeach
                                 </div>

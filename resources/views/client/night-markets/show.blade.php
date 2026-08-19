@@ -19,10 +19,8 @@
                             <a href="{{ route('night-markets.stalls.index', $nightMarket->id) }}"
                                 class="btn btn-market">Browse Stalls</a>
                         @endif
-                        @if (Route::has('client.visit-plans.create'))
-                            <a href="{{ route('client.visit-plans.create') }}"
-                                class="btn btn-outline-secondary">Create Visit Plan</a>
-                        @endif
+                        <a href="{{ route('client.visit-plans.create', ['night_market_id' => $nightMarket->id]) }}"
+                            class="btn btn-outline-secondary">Plan a Visit to This Market</a>
                         @if ($nightMarket->googleMapsUrl())
                             <a href="{{ $nightMarket->googleMapsUrl() }}" class="btn btn-outline-secondary"
                                 target="_blank" rel="noopener noreferrer">View on Google Maps</a>

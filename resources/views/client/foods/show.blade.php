@@ -28,10 +28,8 @@
                         @endif
                     @endif
                 @endguest
-                @if (Route::has('client.visit-plans.index'))
-                    <a href="{{ route('client.visit-plans.index') }}"
-                        class="btn btn-market">Add to Visit Plan</a>
-                @endif
+                <a href="{{ route('client.visit-plans.index', ['item_type' => 'food', 'item_id' => $food->id]) }}"
+                    class="btn btn-market">Add to Visit Plan</a>
             </div>
 
             <div class="card market-card">

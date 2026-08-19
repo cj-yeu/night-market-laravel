@@ -34,10 +34,7 @@
                                     <option value="">Select a night market</option>
                                     @foreach ($nightMarkets as $nightMarket)
                                         <option value="{{ $nightMarket->id }}"
-                                            @selected((string) old('night_market_id') === (string) $nightMarket->id)>
-                                            {{--
-                                            {{ $nightMarket->name }} — {{ $nightMarket->city }}
-                                            --}}
+                                            @selected((string) old('night_market_id', $selectedNightMarketId) === (string) $nightMarket->id)>
                                             {{ $nightMarket->name }} &mdash; {{ $nightMarket->city }}
                                         </option>
                                     @endforeach

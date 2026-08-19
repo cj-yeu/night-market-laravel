@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\VisitPlan\CreateVisitPlanRequest;
 use App\Http\Requests\VisitPlan\StoreVisitPlanItemRequest;
 use App\Http\Requests\VisitPlan\StoreVisitPlanRequest;
 use App\Http\Requests\VisitPlan\UpdateVisitPlanRequest;
@@ -19,17 +20,28 @@ class VisitPlanController extends Controller
     public function index(VisitPlanIndexRequest $request): View
     {
         $filters = $request->validated();
+        $planningTarget = $this->visitPlanService->planningTargetFromFilters($filters);
 
         return view('client.visit-plans.index', [
             'visitPlans' => $this->visitPlanService->plansForClient($request->user(), $filters),
+            'planningTarget' => $planningTarget,
+            'compatiblePlans' => $planningTarget
+                ? $this->visitPlanService->compatiblePlansForTarget($request->user(), $planningTarget)
+                : collect(),
             'filters' => $filters,
+            'hasFilters' => filled($filters['search'] ?? null) || filled($filters['status'] ?? null),
+            'targetQuery' => $planningTarget ? [
+                'item_type' => $planningTarget['type'],
+                'item_id' => $planningTarget['id'],
+            ] : [],
         ]);
     }
 
-    public function create(): View
+    public function create(CreateVisitPlanRequest $request): View
     {
         return view('client.visit-plans.create', [
             'nightMarkets' => $this->visitPlanService->activeNightMarkets(),
+            'selectedNightMarketId' => $request->validated('night_market_id'),
         ]);
     }
 
@@ -48,8 +60,8 @@ class VisitPlanController extends Controller
 
         return view('client.visit-plans.show', [
             'visitPlan' => $visitPlan,
-            'selectedStalls' => $this->visitPlanService->selectedStallsForPlan($visitPlan),
-            'selectedFoods' => $this->visitPlanService->selectedFoodsForPlan($visitPlan),
+            'selectedStalls' => $visitPlan->items->where('item_type', 'stall')->values(),
+            'selectedFoods' => $visitPlan->items->where('item_type', 'food')->values(),
             'eligibleStalls' => $this->visitPlanService->eligibleStallsForPlan($visitPlan),
             'eligibleFoods' => $this->visitPlanService->eligibleFoodsForPlan($visitPlan),
         ]);

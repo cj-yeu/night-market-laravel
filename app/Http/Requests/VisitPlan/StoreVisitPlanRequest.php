@@ -38,9 +38,12 @@ class StoreVisitPlanRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $title = $this->input('title');
+        $notes = $this->input('notes');
+
         $this->merge([
-            'title' => trim((string) $this->title),
-            'notes' => $this->filled('notes') ? trim((string) $this->notes) : null,
+            'title' => is_string($title) ? trim($title) : $title,
+            'notes' => is_string($notes) ? (trim($notes) !== '' ? trim($notes) : null) : $notes,
         ]);
     }
 }

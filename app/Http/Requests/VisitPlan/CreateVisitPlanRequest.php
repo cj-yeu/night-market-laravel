@@ -2,12 +2,14 @@
 
 namespace App\Http\Requests\VisitPlan;
 
+use App\Models\NightMarket;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class StoreVisitPlanItemRequest extends FormRequest
+class CreateVisitPlanRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -20,18 +22,20 @@ class StoreVisitPlanItemRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'item_type' => ['required', Rule::in(['stall', 'food'])],
-            'item_id' => ['required', 'integer'],
-            'notes' => ['nullable', 'string', 'max:1000'],
+            'night_market_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('night_markets', 'id')->where(fn (Builder $query) => $query
+                    ->where('status', NightMarket::STATUS_ACTIVE)
+                    ->where('state', 'Selangor')),
+            ],
         ];
     }
 
     protected function prepareForValidation(): void
     {
-        $notes = $this->input('notes');
-
         $this->merge([
-            'notes' => is_string($notes) ? (trim($notes) !== '' ? trim($notes) : null) : $notes,
+            'night_market_id' => $this->filled('night_market_id') ? $this->input('night_market_id') : null,
         ]);
     }
 }

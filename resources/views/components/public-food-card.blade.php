@@ -33,6 +33,10 @@
                 <strong>Why try it:</strong> {{ $food->recommendation_reason }}
             </p>
         @endif
-        <a href="{{ route('foods.show', $food) }}" class="btn btn-market mt-auto align-self-start">View Details</a>
+        <div class="d-flex flex-wrap gap-2 mt-auto">
+            <a href="{{ route('foods.show', $food) }}" class="btn btn-market">View Details</a>
+            <a href="{{ route('client.visit-plans.index', ['item_type' => 'food', 'item_id' => $food->id]) }}"
+                class="btn btn-outline-secondary">Add to Visit Plan</a>
+        </div>
     </div>
 </article>
