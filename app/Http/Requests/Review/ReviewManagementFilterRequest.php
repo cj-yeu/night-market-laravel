@@ -2,11 +2,9 @@
 
 namespace App\Http\Requests\Review;
 
-use App\Models\Review;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class ReviewManagementFilterRequest extends FormRequest
 {
@@ -23,7 +21,11 @@ class ReviewManagementFilterRequest extends FormRequest
         return [
             'search' => ['nullable', 'string', 'max:255'],
             'market_id' => ['nullable', 'integer', 'exists:night_markets,id'],
-            'status' => ['nullable', Rule::in(Review::STATUSES)],
+            'stall_id' => ['nullable', 'integer', 'exists:stalls,id'],
+            'food_id' => ['nullable', 'integer', 'exists:foods,id'],
+            'rating' => ['nullable', 'integer', 'between:1,5'],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
         ];
     }
 
@@ -32,7 +34,11 @@ class ReviewManagementFilterRequest extends FormRequest
         $this->merge([
             'search' => $this->filled('search') ? trim((string) $this->search) : null,
             'market_id' => $this->filled('market_id') ? $this->market_id : null,
-            'status' => $this->filled('status') ? trim((string) $this->status) : null,
+            'stall_id' => $this->filled('stall_id') ? $this->stall_id : null,
+            'food_id' => $this->filled('food_id') ? $this->food_id : null,
+            'rating' => $this->filled('rating') ? $this->rating : null,
+            'date_from' => $this->filled('date_from') ? trim((string) $this->date_from) : null,
+            'date_to' => $this->filled('date_to') ? trim((string) $this->date_to) : null,
         ]);
     }
 }

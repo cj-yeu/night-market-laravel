@@ -27,6 +27,7 @@ class Review extends Model
     protected $fillable = [
         'user_id',
         'night_market_id',
+        'food_id',
         'rating',
         'comment',
         'status',
@@ -52,6 +53,11 @@ class Review extends Model
     public function nightMarket(): BelongsTo
     {
         return $this->belongsTo(NightMarket::class);
+    }
+
+    public function food(): BelongsTo
+    {
+        return $this->belongsTo(Food::class);
     }
 
     public function images(): HasMany

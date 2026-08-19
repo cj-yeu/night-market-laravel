@@ -122,4 +122,9 @@ class Food extends Model
     {
         return $this->hasMany(SocialMediaRecord::class);
     }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(Review::class);
+    }
 }

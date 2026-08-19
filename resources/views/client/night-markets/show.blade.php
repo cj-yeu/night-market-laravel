@@ -19,10 +19,6 @@
                             <a href="{{ route('night-markets.stalls.index', $nightMarket->id) }}"
                                 class="btn btn-market">Browse Stalls</a>
                         @endif
-                        @if (Route::has('client.night-markets.reviews.create'))
-                            <a href="{{ route('client.night-markets.reviews.create', $nightMarket) }}"
-                                class="btn btn-outline-secondary">Write a Review</a>
-                        @endif
                         @if (Route::has('client.visit-plans.create'))
                             <a href="{{ route('client.visit-plans.create') }}"
                                 class="btn btn-outline-secondary">Create Visit Plan</a>
@@ -122,47 +118,6 @@
                 </div>
             </div>
 
-            <div class="card market-card">
-                <div class="card-body p-4 p-md-5">
-                    <div class="d-flex flex-column flex-sm-row justify-content-between gap-3 mb-4">
-                        <div>
-                            <h2 class="h4 fw-bold text-market mb-1">Approved Reviews</h2>
-                            <p class="text-secondary mb-0">Feedback shared by verified client accounts.</p>
-                        </div>
-
-                        @if ($reviewCount > 0)
-                            <div class="text-sm-end">
-                                <div class="fs-4 fw-bold text-market">{{ number_format($averageRating, 1) }}/5</div>
-                                <div class="small text-secondary">
-                                    {{ $reviewCount }} {{ $reviewCount === 1 ? 'review' : 'reviews' }}
-                                </div>
-                            </div>
-                        @endif
-                    </div>
-
-                    @if ($reviews->isEmpty())
-                        <div class="alert alert-info mb-0" role="alert">
-                            No approved reviews yet. Be the first to submit a review for moderation.
-                        </div>
-                    @else
-                        <div class="vstack gap-3">
-                            @foreach ($reviews as $review)
-                                <article class="border rounded-3 p-3 bg-white">
-                                    <div class="d-flex justify-content-between gap-3 mb-2">
-                                        <div class="d-flex align-items-center gap-2">
-                                            <x-user-avatar :user="$review->user" size="sm" />
-                                            <strong>{{ $review->user->name }}</strong>
-                                        </div>
-                                        <span class="badge text-bg-warning">{{ $review->rating }}/5 stars</span>
-                                    </div>
-                                    <p class="mb-1">{{ $review->comment }}</p>
-                                    <small class="text-secondary">{{ $review->created_at->format('M j, Y') }}</small>
-                                </article>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-            </div>
         </div>
     </div>
 @endsection

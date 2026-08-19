@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\Food;
 use App\Models\NightMarket;
 use App\Models\SocialAccount;
 use App\Models\User;
@@ -172,6 +173,7 @@ class EmailVerificationTest extends TestCase
     {
         $user = User::factory()->unverified()->create(['role' => User::ROLE_CLIENT]);
         $market = NightMarket::factory()->create();
+        $food = Food::factory()->create();
         $plan = VisitPlan::factory()->create(['user_id' => $user->id, 'night_market_id' => $market->id]);
         $item = VisitPlanItem::factory()->create(['visit_plan_id' => $plan->id]);
 
@@ -182,8 +184,8 @@ class EmailVerificationTest extends TestCase
 
         $protectedRequests = [
             fn () => $this->get(route('client.home')),
-            fn () => $this->get(route('client.night-markets.reviews.create', $market)),
-            fn () => $this->post(route('client.night-markets.reviews.store', $market)),
+            fn () => $this->get(route('client.foods.reviews.create', $food)),
+            fn () => $this->post(route('client.foods.reviews.store', $food)),
             fn () => $this->get(route('client.visit-plans.index')),
             fn () => $this->post(route('client.visit-plans.store')),
             fn () => $this->patch(route('client.visit-plans.update', $plan)),

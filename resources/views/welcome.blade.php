@@ -10,7 +10,7 @@
                 Discover your next night market visit
             </h1>
             <p class="lead text-secondary">
-                Browse active night markets, stalls, must-try foods, approved reviews, and public social-media
+                Browse active night markets, stalls, must-try foods, directly published reviews, and public social-media
                 highlights before planning your visit.
             </p>
             <div class="d-flex flex-wrap gap-2 mt-4">

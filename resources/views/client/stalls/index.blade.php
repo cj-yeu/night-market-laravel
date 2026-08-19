@@ -13,10 +13,6 @@
                 class="btn btn-outline-secondary">Explore Stall Directory</a>
             <a href="{{ route('night-markets.show', $nightMarket->id) }}"
                 class="btn btn-outline-secondary">Back to Market Details</a>
-            @if (Route::has('client.night-markets.reviews.create'))
-                <a href="{{ route('client.night-markets.reviews.create', $nightMarket) }}"
-                    class="btn btn-outline-secondary">Write a Review</a>
-            @endif
             @if (Route::has('client.visit-plans.create'))
                 <a href="{{ route('client.visit-plans.create') }}"
                     class="btn btn-market">Create Visit Plan</a>

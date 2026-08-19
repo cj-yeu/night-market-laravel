@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\UserAccount;
 
-use App\Models\NightMarket;
+use App\Models\Food;
 use App\Models\Review;
 use App\Models\User;
 use App\Services\ReviewService;
@@ -265,7 +265,7 @@ class ProfileImageTest extends TestCase
     public function test_public_reviews_display_avatar_or_initials_without_private_user_fields(): void
     {
         Storage::fake('public');
-        $market = NightMarket::factory()->create();
+        $food = Food::factory()->create();
         $path = 'avatars/66666666-6666-4666-8666-666666666666.jpg';
         Storage::disk('public')->put($path, 'reviewer-image');
         $reviewerWithImage = User::factory()->create([
@@ -278,18 +278,16 @@ class ProfileImageTest extends TestCase
             'email' => 'private-initial-reviewer@example.test',
             'avatar_path' => null,
         ]);
-        Review::factory()->approved()->create([
-            'night_market_id' => $market->id,
+        Review::factory()->forFood($food)->approved()->create([
             'user_id' => $reviewerWithImage->id,
             'comment' => 'Review with profile image.',
         ]);
-        Review::factory()->approved()->create([
-            'night_market_id' => $market->id,
+        Review::factory()->forFood($food)->approved()->create([
             'user_id' => $reviewerWithInitials->id,
             'comment' => 'Review with initials.',
         ]);
 
-        $this->get(route('night-markets.show', $market))
+        $this->get(route('foods.show', $food))
             ->assertOk()
             ->assertSee(Storage::disk('public')->url($path))
             ->assertSee('IR')
@@ -299,10 +297,10 @@ class ProfileImageTest extends TestCase
 
     public function test_approved_review_query_eager_loads_avatar_author_data(): void
     {
-        $market = NightMarket::factory()->create();
-        Review::factory()->count(3)->approved()->create(['night_market_id' => $market->id]);
+        $food = Food::factory()->create();
+        Review::factory()->count(3)->forFood($food)->approved()->create();
 
-        $summary = app(ReviewService::class)->approvedSummaryForMarket($market);
+        $summary = app(ReviewService::class)->publicSummaryForFood($food, null);
 
         foreach ($summary['reviews'] as $review) {
             $this->assertTrue($review->relationLoaded('user'));

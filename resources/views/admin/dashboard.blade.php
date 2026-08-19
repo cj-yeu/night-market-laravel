@@ -33,7 +33,7 @@
                     ['label' => 'Night Markets', 'description' => 'Add markets and operating schedules.', 'icon' => 'shop', 'route' => 'admin.night-markets.create'],
                     ['label' => 'Stalls', 'description' => 'Add stalls to active night markets.', 'icon' => 'basket-fill', 'route' => 'admin.stalls.create'],
                     ['label' => 'Foods', 'description' => 'Organize must-try food information.', 'icon' => 'cup-hot-fill', 'route' => 'admin.foods.create'],
-                    ['label' => 'Reviews', 'description' => 'Review and moderate visitor feedback.', 'icon' => 'star-fill', 'route' => 'admin.reviews.index'],
+                    ['label' => 'Reviews', 'description' => 'View and manage published visitor feedback.', 'icon' => 'star-fill', 'route' => 'admin.reviews.index'],
                     ['label' => 'Social Media', 'description' => 'Manage extracted social media records.', 'icon' => 'megaphone-fill', 'route' => 'admin.social-media-records.index'],
                 ];
             @endphp

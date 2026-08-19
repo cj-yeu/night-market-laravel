@@ -95,25 +95,22 @@ class GuestPublicBrowsingTest extends TestCase
         $this->get(route('foods.show', $inactiveParentFood))->assertNotFound();
     }
 
-    public function test_guest_sees_approved_reviews_only(): void
+    public function test_guest_sees_directly_published_food_reviews_only(): void
     {
-        $market = NightMarket::factory()->create();
-        Review::factory()->approved()->create([
-            'night_market_id' => $market->id,
-            'comment' => 'Approved public review.',
+        $food = Food::factory()->create();
+        Review::factory()->forFood($food)->approved()->create([
+            'comment' => 'Published public review.',
         ]);
-        Review::factory()->create([
-            'night_market_id' => $market->id,
+        Review::factory()->forFood($food)->create([
             'comment' => 'Pending private review.',
         ]);
-        Review::factory()->rejected()->create([
-            'night_market_id' => $market->id,
+        Review::factory()->forFood($food)->rejected()->create([
             'comment' => 'Rejected private review.',
         ]);
 
-        $this->get(route('night-markets.show', $market))
+        $this->get(route('foods.show', $food))
             ->assertOk()
-            ->assertSee('Approved public review.')
+            ->assertSee('Published public review.')
             ->assertDontSee('Pending private review.')
             ->assertDontSee('Rejected private review.');
     }
@@ -150,6 +147,7 @@ class GuestPublicBrowsingTest extends TestCase
     public function test_guest_protected_pages_and_actions_redirect_with_a_central_message(): void
     {
         $market = NightMarket::factory()->create();
+        $food = Food::factory()->create();
         $owner = User::factory()->create(['role' => User::ROLE_CLIENT]);
         $visitPlan = VisitPlan::factory()->create([
             'user_id' => $owner->id,
@@ -159,7 +157,7 @@ class GuestPublicBrowsingTest extends TestCase
         $item = VisitPlanItem::factory()->create(['visit_plan_id' => $visitPlan->id]);
 
         $protectedGets = [
-            route('client.night-markets.reviews.create', $market),
+            route('client.foods.reviews.create', $food),
             route('client.visit-plans.index'),
             route('client.visit-plans.create'),
             route('client.visit-plans.show', $visitPlan),
@@ -176,7 +174,7 @@ class GuestPublicBrowsingTest extends TestCase
         $this->get(route('home'))->assertDontSee($visitPlan->title);
         $this->get(route('night-markets.show', $market))->assertDontSee($visitPlan->title);
 
-        $this->post(route('client.night-markets.reviews.store', $market))
+        $this->post(route('client.foods.reviews.store', $food))
             ->assertRedirect(route('login'))
             ->assertSessionHas('error', self::AUTH_MESSAGE);
         $this->post(route('client.visit-plans.store'))
@@ -231,15 +229,16 @@ class GuestPublicBrowsingTest extends TestCase
             'is_active' => true,
         ]);
         $market = NightMarket::factory()->create();
+        $food = Food::factory()->create();
 
         $this->actingAs($client)
             ->get(route('night-markets.index'))
             ->assertOk()
             ->assertSee($market->name);
         $this->actingAs($client)
-            ->get(route('client.night-markets.reviews.create', $market))
+            ->get(route('client.foods.reviews.create', $food))
             ->assertOk()
-            ->assertSee('Submit Review');
+            ->assertSee('Publish Review');
         $this->actingAs($client)
             ->get(route('client.visit-plans.create'))
             ->assertOk()

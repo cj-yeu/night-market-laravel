@@ -2,110 +2,162 @@
 
 namespace App\Services;
 
+use App\Models\Food;
 use App\Models\NightMarket;
 use App\Models\Review;
+use App\Models\Stall;
 use App\Models\User;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Validation\ValidationException;
 
 class ReviewService
 {
-    /**
-     * @return Collection<int, NightMarket>
-     */
-    public function findActiveMarketForClient(int $nightMarketId): NightMarket
+    public function findPubliclyVisibleFood(int $foodId): Food
     {
-        return NightMarket::query()
+        return Food::query()
             ->publiclyVisible()
-            ->findOrFail($nightMarketId);
+            ->with(['stall:id,night_market_id,name,halal_status,halal_evidence_url,status', 'stall.nightMarket:id,name,city,state,status'])
+            ->findOrFail($foodId);
     }
 
-    /**
-     * @param  array{rating: int, comment: string}  $data
-     */
-    public function createForClient(User $user, NightMarket $nightMarket, array $data): Review
-    {
-        return $user->reviews()->create([
-            'night_market_id' => $nightMarket->id,
-            'rating' => $data['rating'],
-            'comment' => $data['comment'],
-            'status' => Review::STATUS_PENDING,
-        ]);
-    }
-
-    /**
-     * @return array{reviews: Collection<int, Review>, averageRating: float|null, reviewCount: int}
-     */
-    public function approvedSummaryForMarket(NightMarket $nightMarket): array
-    {
-        $reviews = Review::query()
-            ->where('night_market_id', $nightMarket->id)
-            ->publiclyVisible()
-            ->with('user:id,name,avatar_path')
-            ->latest()
-            ->get();
-
-        return [
-            'reviews' => $reviews,
-            'averageRating' => $reviews->isEmpty() ? null : round((float) $reviews->avg('rating'), 1),
-            'reviewCount' => $reviews->count(),
-        ];
-    }
-
-    /**
-     * @param  array{search?: string|null, market_id?: int|null, status?: string|null}  $filters
-     * @return Collection<int, Review>
-     */
-    public function reviewsForModeration(array $filters): Collection
+    public function reviewForClient(Food $food, User $user): ?Review
     {
         return Review::query()
-            ->with(['user:id,name,email', 'nightMarket:id,name,city'])
-            ->when($filters['search'] ?? null, function ($query, string $search) {
-                $query->where(function ($query) use ($search) {
-                    $query->where('comment', 'like', '%'.$search.'%')
-                        ->orWhereHas('user', function ($query) use ($search) {
-                            $query->where('name', 'like', '%'.$search.'%')
-                                ->orWhere('email', 'like', '%'.$search.'%');
-                        })
-                        ->orWhereHas('nightMarket', fn ($query) => $query
-                            ->where('name', 'like', '%'.$search.'%'));
-                });
-            })
-            ->when($filters['market_id'] ?? null, fn ($query, int $marketId) => $query
-                ->where('night_market_id', $marketId))
-            ->when($filters['status'] ?? null, fn ($query, string $status) => $query
-                ->where('status', $status))
-            ->latest()
-            ->get();
+            ->where('food_id', $food->id)
+            ->where('user_id', $user->id)
+            ->first();
+    }
+
+    /** @param array{rating: int, comment: string} $data */
+    public function createForClient(User $user, Food $food, array $data): Review
+    {
+        if ($this->reviewForClient($food, $user) !== null) {
+            throw ValidationException::withMessages([
+                'comment' => 'You have already reviewed this Food. Edit your existing review instead.',
+            ]);
+        }
+
+        try {
+            return Review::query()->create([
+                'user_id' => $user->id,
+                'night_market_id' => $food->stall->night_market_id,
+                'food_id' => $food->id,
+                'rating' => $data['rating'],
+                'comment' => $data['comment'],
+                'status' => Review::STATUS_APPROVED,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages([
+                'comment' => 'You have already reviewed this Food. Edit your existing review instead.',
+            ]);
+        }
+    }
+
+    /** @param array{rating: int, comment: string} $data */
+    public function updateForClient(User $user, Food $food, Review $review, array $data): Review
+    {
+        abort_unless($review->user_id === $user->id, 403);
+        abort_unless($review->food_id === $food->id, 404);
+
+        $review->update([
+            'rating' => $data['rating'],
+            'comment' => $data['comment'],
+            'status' => Review::STATUS_APPROVED,
+        ]);
+
+        return $review->refresh();
     }
 
     /**
-     * @return Collection<int, NightMarket>
+     * @return array{reviews: LengthAwarePaginator<Review>, averageRating: float|null, reviewCount: int, ratingDistribution: array<int, int>, viewerReview: Review|null}
      */
-    public function marketsWithReviews(): Collection
+    public function publicSummaryForFood(Food $food, ?User $viewer): array
     {
-        return NightMarket::query()
-            ->whereHas('reviews')
-            ->select(['id', 'name'])
-            ->orderBy('name')
-            ->get();
-    }
+        $base = Review::query()->where('food_id', $food->id)->publiclyVisible();
+        $statistics = (clone $base)
+            ->selectRaw('COUNT(*) AS review_count, AVG(rating) AS average_rating')
+            ->first();
+        $countsByRating = (clone $base)
+            ->selectRaw('rating, COUNT(*) AS aggregate')
+            ->groupBy('rating')
+            ->pluck('aggregate', 'rating');
 
-    /**
-     * @return array<string, string>
-     */
-    public function moderationStatusOptions(): array
-    {
         return [
-            Review::STATUS_PENDING => 'Pending',
-            Review::STATUS_APPROVED => 'Approved',
-            Review::STATUS_REJECTED => 'Rejected',
+            'reviews' => (clone $base)
+                ->with('user:id,name,avatar_path')
+                ->latest('updated_at')
+                ->latest('id')
+                ->paginate(10)
+                ->withQueryString(),
+            'averageRating' => (int) $statistics->review_count === 0
+                ? null
+                : round((float) $statistics->average_rating, 1),
+            'reviewCount' => (int) $statistics->review_count,
+            'ratingDistribution' => collect(range(5, 1))->mapWithKeys(
+                fn (int $rating) => [$rating => (int) ($countsByRating[$rating] ?? 0)]
+            )->all(),
+            'viewerReview' => $viewer?->role === User::ROLE_CLIENT
+                ? $this->reviewForClient($food, $viewer)
+                : null,
         ];
     }
 
-    public function moderate(Review $review, string $status): Review
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return LengthAwarePaginator<Review>
+     */
+    public function reviewsForManagement(array $filters): LengthAwarePaginator
     {
-        $review->update(['status' => $status]);
+        $search = $this->literalLikePattern($filters['search'] ?? null);
 
-        return $review->refresh();
+        return Review::query()
+            ->select(['id', 'user_id', 'night_market_id', 'food_id', 'rating', 'comment', 'created_at', 'updated_at'])
+            ->with([
+                'user:id,name,avatar_path',
+                'food:id,stall_id,name',
+                'food.stall:id,night_market_id,name',
+                'food.stall.nightMarket:id,name',
+                'nightMarket:id,name',
+            ])
+            ->when($search, fn ($query, string $pattern) => $query->where(function ($query) use ($pattern) {
+                $query->where('comment', 'like', $pattern)
+                    ->orWhereHas('user', fn ($query) => $query->where('name', 'like', $pattern));
+            }))
+            ->when($filters['food_id'] ?? null, fn ($query, int $foodId) => $query->where('food_id', $foodId))
+            ->when($filters['stall_id'] ?? null, fn ($query, int $stallId) => $query
+                ->whereHas('food', fn ($query) => $query->where('stall_id', $stallId)))
+            ->when($filters['market_id'] ?? null, fn ($query, int $marketId) => $query
+                ->where(function ($query) use ($marketId) {
+                    $query->whereHas('food.stall', fn ($query) => $query->where('night_market_id', $marketId))
+                        ->orWhere(fn ($query) => $query->whereNull('food_id')->where('night_market_id', $marketId));
+                }))
+            ->when($filters['rating'] ?? null, fn ($query, int $rating) => $query->where('rating', $rating))
+            ->when($filters['date_from'] ?? null, fn ($query, string $date) => $query->whereDate('created_at', '>=', $date))
+            ->when($filters['date_to'] ?? null, fn ($query, string $date) => $query->whereDate('created_at', '<=', $date))
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
+    }
+
+    /** @return array{markets: Collection<int, NightMarket>, stalls: Collection<int, Stall>, foods: Collection<int, Food>} */
+    public function managementFilterOptions(): array
+    {
+        return [
+            'markets' => NightMarket::query()->whereHas('reviews')->select(['id', 'name'])->orderBy('name')->get(),
+            'stalls' => Stall::query()->whereHas('foods.reviews')->select(['id', 'name'])->orderBy('name')->get(),
+            'foods' => Food::query()->whereHas('reviews')->select(['id', 'name'])->orderBy('name')->get(),
+        ];
+    }
+
+    public function delete(Review $review): void
+    {
+        $review->delete();
+    }
+
+    private function literalLikePattern(?string $value): ?string
+    {
+        return $value ? '%'.addcslashes($value, '\\%_').'%' : null;
     }
 }

@@ -60,7 +60,7 @@ class StallFoodDiscoveryController extends Controller
 
         return view('client.foods.show', [
             'food' => $food,
-            ...$this->reviewService->approvedSummaryForMarket($food->stall->nightMarket),
+            ...$this->reviewService->publicSummaryForFood($food, request()->user()),
         ]);
     }
 }

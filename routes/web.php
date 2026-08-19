@@ -97,12 +97,14 @@ Route::middleware('auth')->group(function () {
         ->name('client.home');
 
     Route::middleware(['role:client', 'verified'])->prefix('client')->name('client.')->group(function () {
-        Route::get('/night-markets/{nightMarket}/reviews/create', [ReviewController::class, 'create'])
-            ->whereNumber('nightMarket')
-            ->name('night-markets.reviews.create');
-        Route::post('/night-markets/{nightMarket}/reviews', [ReviewController::class, 'store'])
-            ->whereNumber('nightMarket')
-            ->name('night-markets.reviews.store');
+        Route::get('/foods/{food}/reviews/create', [ReviewController::class, 'create'])
+            ->whereNumber('food')->name('foods.reviews.create');
+        Route::post('/foods/{food}/reviews', [ReviewController::class, 'store'])
+            ->whereNumber('food')->name('foods.reviews.store');
+        Route::get('/foods/{food}/reviews/{review}/edit', [ReviewController::class, 'edit'])
+            ->whereNumber('food')->whereNumber('review')->name('foods.reviews.edit');
+        Route::patch('/foods/{food}/reviews/{review}', [ReviewController::class, 'update'])
+            ->whereNumber('food')->whereNumber('review')->name('foods.reviews.update');
 
         Route::get('/visit-plans', [VisitPlanController::class, 'index'])->name('visit-plans.index');
         Route::get('/visit-plans/create', [VisitPlanController::class, 'create'])->name('visit-plans.create');
@@ -185,8 +187,8 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('food')->name('foods.image.destroy');
 
         Route::get('/reviews', [AdminReviewController::class, 'index'])->name('reviews.index');
-        Route::patch('/reviews/{review}', [AdminReviewController::class, 'update'])
-            ->whereNumber('review')->name('reviews.update');
+        Route::delete('/reviews/{review}', [AdminReviewController::class, 'destroy'])
+            ->whereNumber('review')->name('reviews.destroy');
 
         Route::get('/social-media-records', [SocialMediaRecordController::class, 'index'])
             ->name('social-media-records.index');

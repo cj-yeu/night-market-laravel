@@ -235,7 +235,7 @@ class PublicCatalogDiscoveryTest extends TestCase
         $this->get(route('foods.show', $food))->assertOk()
             ->assertSee($stall->name)->assertSee($market->name)
             ->assertSee(route('night-markets.show', $market), false)
-            ->assertSee('Write a Review')->assertSee('Add to Visit Plan');
+            ->assertSee('Log in to Review')->assertSee('Register to Review')->assertSee('Add to Visit Plan');
 
         $this->get(route('foods.index', ['stall_id' => $stall->id, 'night_market_id' => $unrelatedMarket->id]))
             ->assertOk()->assertDontSee($food->name)->assertSee('No foods found');

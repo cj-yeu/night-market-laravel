@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\NightMarket\MarketDiscoveryRequest;
 use App\Services\NightMarketService;
-use App\Services\ReviewService;
 use App\Services\StallFoodService;
 use Illuminate\View\View;
 
@@ -13,7 +12,6 @@ class NightMarketDiscoveryController extends Controller
 {
     public function __construct(
         private readonly NightMarketService $nightMarketService,
-        private readonly ReviewService $reviewService,
         private readonly StallFoodService $stallFoodService,
     ) {}
 
@@ -45,7 +43,6 @@ class NightMarketDiscoveryController extends Controller
             'nightMarket' => $nightMarket,
             'activeStalls' => $nightMarket->stalls,
             'mustTryFoods' => $this->nightMarketService->mustTryFoods($nightMarket),
-            ...$this->reviewService->approvedSummaryForMarket($nightMarket),
         ]);
     }
 }
