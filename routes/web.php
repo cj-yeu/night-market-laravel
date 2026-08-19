@@ -18,6 +18,7 @@ use App\Http\Controllers\Client\SocialMediaHighlightController;
 use App\Http\Controllers\Client\StallFoodDiscoveryController;
 use App\Http\Controllers\Client\VisitPlanController;
 use App\Http\Controllers\UserAccount\ProfileController;
+use App\Http\Controllers\UserAccount\ProfileImageController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
@@ -58,6 +59,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::patch('/profile/avatar', [ProfileImageController::class, 'update'])->name('profile.avatar.update');
+    Route::delete('/profile/avatar', [ProfileImageController::class, 'destroy'])->name('profile.avatar.destroy');
     Route::get('/profile/password', [ProfileController::class, 'editPassword'])->name('profile.password.edit');
     Route::patch('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 

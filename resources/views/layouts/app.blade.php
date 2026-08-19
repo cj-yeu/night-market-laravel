@@ -77,6 +77,40 @@
                 color: var(--market-orange-dark);
             }
 
+            .user-avatar {
+                display: inline-flex;
+                flex: 0 0 auto;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+                color: #fff;
+                background-color: var(--market-orange);
+                border: 2px solid #f3b46f;
+                border-radius: 50%;
+                font-weight: 700;
+                line-height: 1;
+                object-fit: cover;
+                text-transform: uppercase;
+            }
+
+            .user-avatar-sm {
+                width: 2rem;
+                height: 2rem;
+                font-size: 0.72rem;
+            }
+
+            .user-avatar-md {
+                width: 3rem;
+                height: 3rem;
+                font-size: 1rem;
+            }
+
+            .user-avatar-lg {
+                width: 6rem;
+                height: 6rem;
+                font-size: 2rem;
+            }
+
             .admin-layout {
                 background: var(--admin-cream);
                 color: var(--admin-body-text);
@@ -412,7 +446,11 @@
                             </a>
                         @endif
 
-                        <a class="nav-link fw-semibold me-2" href="{{ route('profile.edit') }}">Profile</a>
+                        <a class="nav-link fw-semibold d-flex align-items-center gap-2 me-2"
+                            href="{{ route('profile.edit') }}">
+                            <x-user-avatar :user="auth()->user()" size="sm" />
+                            <span class="d-none d-sm-inline">Profile</span>
+                        </a>
 
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf

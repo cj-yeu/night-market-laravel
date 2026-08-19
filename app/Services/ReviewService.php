@@ -40,7 +40,7 @@ class ReviewService
         $reviews = Review::query()
             ->where('night_market_id', $nightMarket->id)
             ->publiclyVisible()
-            ->with('user:id,name')
+            ->with('user:id,name,avatar_path')
             ->latest()
             ->get();
 

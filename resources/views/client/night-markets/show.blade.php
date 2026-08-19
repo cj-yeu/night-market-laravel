@@ -157,7 +157,10 @@
                             @foreach ($reviews as $review)
                                 <article class="border rounded-3 p-3 bg-white">
                                     <div class="d-flex justify-content-between gap-3 mb-2">
-                                        <strong>{{ $review->user->name }}</strong>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <x-user-avatar :user="$review->user" size="sm" />
+                                            <strong>{{ $review->user->name }}</strong>
+                                        </div>
                                         <span class="badge text-bg-warning">{{ $review->rating }}/5 stars</span>
                                     </div>
                                     <p class="mb-1">{{ $review->comment }}</p>
