@@ -17,6 +17,17 @@ class CatalogWorkbookImportService
 {
     public const DEFAULT_FILE = 'imports/Collab Night Market Cleaned.xlsx';
 
+    public const PRODUCTION_FILE = 'seeders/data/Collab Night Market Cleaned.xlsx';
+
+    public const PRODUCTION_SHA256 = '5486448056b4502ff8480eeff0c7297f2e21f639ce662dceb4fb684d6200817d';
+
+    public const PRODUCTION_COUNTS = [
+        'NightMarkets' => 17,
+        'MarketSchedules' => 19,
+        'Stalls' => 21,
+        'Foods' => 21,
+    ];
+
     private const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
     private const HEADERS = [
@@ -39,6 +50,21 @@ class CatalogWorkbookImportService
     public function run(string $relativeFile, bool $apply): array
     {
         $path = $this->resolveFile($relativeFile);
+
+        return $this->runResolvedFile($path, $apply, false);
+    }
+
+    /** @return array<string, mixed> */
+    public function runProduction(bool $apply): array
+    {
+        $path = $this->resolveProductionFile();
+
+        return $this->runResolvedFile($path, $apply, true);
+    }
+
+    /** @return array<string, mixed> */
+    private function runResolvedFile(string $path, bool $apply, bool $production): array
+    {
         $report = $this->emptyReport($apply);
         $rows = $this->readWorkbook($path, $report);
 
@@ -47,6 +73,10 @@ class CatalogWorkbookImportService
         }
 
         $data = $this->validateRows($rows, $report);
+
+        if ($report['errors'] === [] && $production) {
+            $this->validateProductionContract($rows, $data, $report);
+        }
 
         if ($report['errors'] !== []) {
             return $report;
@@ -68,6 +98,27 @@ class CatalogWorkbookImportService
         }
 
         return $report;
+    }
+
+    private function resolveProductionFile(): string
+    {
+        $path = realpath(database_path(self::PRODUCTION_FILE));
+
+        if ($path === false || ! is_file($path)) {
+            throw new InvalidArgumentException('The bundled production catalog workbook is missing.');
+        }
+
+        $size = filesize($path);
+        if ($size === false || $size > self::MAX_FILE_BYTES) {
+            throw new InvalidArgumentException('The bundled production catalog workbook exceeds the 5 MB import limit.');
+        }
+
+        $hash = hash_file('sha256', $path);
+        if ($hash === false || ! hash_equals(self::PRODUCTION_SHA256, Str::lower($hash))) {
+            throw new InvalidArgumentException('The bundled production catalog workbook failed its integrity check.');
+        }
+
+        return $path;
     }
 
     private function resolveFile(string $relativeFile): string
@@ -321,6 +372,54 @@ class CatalogWorkbookImportService
         }
 
         return $data;
+    }
+
+    /**
+     * @param  array<string, list<array<string, mixed>>>  $rows
+     * @param  array<string, list<array<string, mixed>>>  $data
+     * @param  array<string, mixed>  $report
+     */
+    private function validateProductionContract(array $rows, array $data, array &$report): void
+    {
+        foreach (self::PRODUCTION_COUNTS as $sheet => $expected) {
+            $actual = count($rows[$sheet] ?? []);
+
+            if ($actual !== $expected) {
+                $report['errors'][] = "Production catalog requires exactly {$expected} {$sheet} records; found {$actual}.";
+            }
+        }
+
+        foreach (['markets', 'stalls', 'foods'] as $entity) {
+            $inactiveRows = collect($data[$entity])
+                ->filter(fn (array $row): bool => $row['attributes']['status'] !== NightMarket::STATUS_ACTIVE)
+                ->pluck('_row')
+                ->all();
+
+            if ($inactiveRows !== []) {
+                $report['errors'][] = ucfirst($entity).' production rows must all be Active; rejected normalized rows: '
+                    .implode(', ', $inactiveRows).'.';
+            }
+        }
+
+        $nonSelangorRows = collect($data['markets'])
+            ->filter(fn (array $row): bool => $row['attributes']['state'] !== 'Selangor')
+            ->pluck('_row')
+            ->all();
+
+        if ($nonSelangorRows !== []) {
+            $report['errors'][] = 'Production NightMarkets rows must all be in Selangor; rejected normalized rows: '
+                .implode(', ', $nonSelangorRows).'.';
+        }
+
+        $nonUnknownHalalRows = collect($data['stalls'])
+            ->filter(fn (array $row): bool => $row['attributes']['halal_status'] !== Stall::HALAL_UNKNOWN)
+            ->pluck('_row')
+            ->all();
+
+        if ($nonUnknownHalalRows !== []) {
+            $report['errors'][] = 'Production Stalls must preserve the reviewed Unknown Halal classification; rejected normalized rows: '
+                .implode(', ', $nonUnknownHalalRows).'.';
+        }
     }
 
     /**
