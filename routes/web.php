@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\CatalogActivityController;
 use App\Http\Controllers\Admin\CatalogDataQualityController;
 use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
@@ -150,6 +151,7 @@ Route::middleware('auth')->group(function () {
         ->name('admin.dashboard');
 
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
+        Route::get('/catalog-activity', [CatalogActivityController::class, 'index'])->name('catalog-activity.index');
         Route::get('/catalog-data-quality', [CatalogDataQualityController::class, 'index'])
             ->name('catalog-data-quality.index');
         Route::get('/catalog-data-quality/{issue}', [CatalogDataQualityController::class, 'records'])
