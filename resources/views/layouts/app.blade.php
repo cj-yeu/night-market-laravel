@@ -48,7 +48,15 @@
                 color: #402a20;
             }
 
+            :where(a, button, input, select, textarea):focus-visible {
+                outline: 3px solid rgba(216, 91, 31, 0.52);
+                outline-offset: 3px;
+            }
+
             .navbar-market {
+                position: sticky;
+                top: 0;
+                z-index: 1020;
                 background-color: #fff;
                 border-bottom: 3px solid #f3b46f;
             }
@@ -72,6 +80,10 @@
 
             .dashboard-action { transition: transform .15s ease, box-shadow .15s ease; }
             .dashboard-action:hover, .dashboard-action:focus { transform: translateY(-2px); box-shadow: 0 .9rem 2rem rgba(94, 55, 30, .18); }
+
+            .card :where(a:not(.btn), p, dd, .text-secondary) {
+                overflow-wrap: anywhere;
+            }
 
             .market-card {
                 border: 0;
@@ -459,6 +471,260 @@
 
                 .admin-main-content {
                     margin-left: 260px;
+                }
+            }
+
+            @media (max-width: 991.98px) {
+                .navbar-market .navbar-collapse {
+                    margin-top: 0.5rem;
+                    border-top: 1px solid #f3d7b8;
+                }
+
+                .navbar-market .navbar-nav {
+                    padding: 0.5rem 0 0.75rem;
+                }
+
+                .navbar-market .nav-link {
+                    min-height: 44px;
+                    padding: 0.625rem 0.75rem !important;
+                    border-radius: 0.5rem;
+                }
+
+                .navbar-market .nav-link.active {
+                    border-bottom: 0;
+                    background-color: #fff1df;
+                }
+
+                .navbar-market .navbar-nav > .btn,
+                .navbar-market .navbar-nav > form,
+                .navbar-market .navbar-nav > form .btn {
+                    width: 100%;
+                }
+
+                .admin-sidebar .offcanvas-header {
+                    min-height: 64px;
+                }
+
+                .admin-sidebar .offcanvas-header .btn-close,
+                .admin-sidebar .admin-sidebar-link,
+                .admin-account-link {
+                    min-height: 44px;
+                }
+
+                .admin-sidebar .offcanvas-body {
+                    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+                }
+
+                .table-responsive {
+                    position: relative;
+                    -webkit-overflow-scrolling: touch;
+                    scrollbar-color: var(--market-orange) #f8e5d0;
+                    scrollbar-width: thin;
+                }
+
+                .table-responsive::after {
+                    content: 'Swipe table horizontally to see all columns';
+                    display: block;
+                    width: max-content;
+                    padding: 0.5rem 0;
+                    color: #6c757d;
+                    font-size: 0.75rem;
+                }
+            }
+
+            @media (max-width: 575.98px) {
+                body {
+                    font-size: 0.975rem;
+                }
+
+                .navbar-market {
+                    border-bottom-width: 2px;
+                }
+
+                .navbar-market .container,
+                main.container {
+                    padding-right: 0.875rem;
+                    padding-left: 0.875rem;
+                }
+
+                .navbar-market .navbar-brand {
+                    max-width: calc(100% - 4.25rem);
+                    overflow: hidden;
+                    font-size: 1rem;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                .navbar-market .navbar-toggler {
+                    width: 44px;
+                    height: 44px;
+                    padding: 0;
+                    justify-content: center;
+                }
+
+                .navbar-market .navbar-nav {
+                    padding: 0.625rem 0 0.875rem;
+                    gap: 0.25rem;
+                }
+
+                .navbar-market .nav-link {
+                    min-height: 44px;
+                    padding: 0.625rem 0.75rem !important;
+                    border-radius: 0.5rem;
+                }
+
+                .navbar-market .nav-link.active {
+                    border-bottom: 0;
+                    background-color: #fff1df;
+                }
+
+                .navbar-market .navbar-nav > .btn,
+                .navbar-market .navbar-nav > form,
+                .navbar-market .navbar-nav > form .btn {
+                    width: 100%;
+                }
+
+                main.container {
+                    padding-top: 1.25rem !important;
+                    padding-bottom: 2rem !important;
+                }
+
+                .market-card {
+                    border-top-width: 4px;
+                    border-radius: 0.875rem;
+                    box-shadow: 0 0.5rem 1.25rem rgba(94, 55, 30, 0.10);
+                }
+
+                .market-card .card-body {
+                    padding: 1.125rem !important;
+                }
+
+                .card-body.p-5,
+                .card-body.p-md-5,
+                .card-body.p-lg-5 {
+                    padding: 1.25rem !important;
+                }
+
+                .display-6 {
+                    font-size: clamp(1.7rem, 8vw, 2.1rem);
+                    line-height: 1.16;
+                }
+
+                .lead {
+                    font-size: 1rem;
+                    line-height: 1.55;
+                }
+
+                .btn,
+                .form-control,
+                .form-select {
+                    min-height: 44px;
+                }
+
+                textarea.form-control {
+                    min-height: 8rem;
+                }
+
+                .d-flex.flex-wrap.gap-2 > .btn,
+                .d-flex.flex-wrap.gap-2 > a.btn {
+                    min-height: 44px;
+                }
+
+                form .row > .col-12.d-flex > .btn,
+                form .row > .col-12.d-flex > a.btn {
+                    flex: 1 1 100%;
+                }
+
+                .form-check {
+                    min-height: 44px;
+                    display: flex;
+                    align-items: center;
+                }
+
+                .form-check-input {
+                    width: 1.2rem;
+                    height: 1.2rem;
+                    margin-top: 0;
+                }
+
+                .form-check-label {
+                    padding: 0.5rem 0;
+                }
+
+                .vstack.gap-4,
+                .vstack.gap-3 {
+                    gap: 1rem !important;
+                }
+
+                .row.g-4 > [class*='col-'],
+                .row.g-3 > [class*='col-'] {
+                    min-width: 0;
+                }
+
+                .table-responsive {
+                    margin-right: -1.125rem;
+                    margin-left: -1.125rem;
+                    padding: 0 1.125rem 0.25rem;
+                    -webkit-overflow-scrolling: touch;
+                }
+
+                .table-responsive table {
+                    min-width: 42rem;
+                }
+
+                .pagination {
+                    flex-wrap: wrap;
+                    gap: 0.25rem;
+                }
+
+                .pagination .page-link {
+                    min-width: 40px;
+                    min-height: 40px;
+                    display: grid;
+                    place-items: center;
+                }
+
+                .admin-mobile-header {
+                    min-height: 60px;
+                }
+
+                .admin-mobile-header .btn {
+                    min-height: 44px;
+                }
+            }
+
+            @media (max-width: 374.98px) {
+                .navbar-market .container,
+                main.container {
+                    padding-right: 0.75rem;
+                    padding-left: 0.75rem;
+                }
+
+                .market-card .card-body,
+                .card-body.p-5,
+                .card-body.p-md-5,
+                .card-body.p-lg-5 {
+                    padding: 1rem !important;
+                }
+
+                .display-6 {
+                    font-size: 1.65rem;
+                }
+
+                .d-flex.flex-wrap.gap-2 > .btn,
+                .d-flex.flex-wrap.gap-2 > a.btn {
+                    width: 100%;
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                *,
+                *::before,
+                *::after {
+                    scroll-behavior: auto !important;
+                    transition-duration: 0.01ms !important;
+                    animation-duration: 0.01ms !important;
+                    animation-iteration-count: 1 !important;
                 }
             }
         </style>
