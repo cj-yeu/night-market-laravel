@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\StallFood;
 
-use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Dimensions;
 use Illuminate\Validation\Rules\File;
@@ -11,7 +10,7 @@ abstract class UpdateCatalogImageRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_ADMIN;
+        return $this->user()?->hasAdminAccess() ?? false;
     }
 
     public function rules(): array

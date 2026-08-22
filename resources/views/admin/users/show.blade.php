@@ -25,7 +25,7 @@
                             <h2 id="account-summary-heading" class="h4 mb-1">{{ $user->name }}</h2>
                             <p class="text-secondary mb-2">{{ $user->email }}</p>
                             <div class="d-flex flex-wrap gap-2">
-                                <span class="badge text-bg-light border">{{ ucfirst($user->role) }}</span>
+                                <span class="badge text-bg-light border">{{ $user->role === \App\Models\User::ROLE_SUPER_ADMIN ? 'Super Admin' : ucfirst($user->role) }}</span>
                                 <span class="badge {{ $user->is_active ? 'text-bg-success' : 'text-bg-secondary' }}">
                                     {{ $user->is_active ? 'Active' : 'Inactive' }}
                                 </span>
@@ -86,9 +86,23 @@
                                 {{ $user->is_active ? 'Deactivate Client' : 'Activate Client' }}
                             </button>
                         </form>
+                        @if ($canManageRoles && $user->is_active && $user->hasVerifiedEmail())
+                            <hr>
+                            <p class="text-secondary small">Promotion grants catalog and management access.</p>
+                            <form method="POST" action="{{ route('admin.users.promote', $user) }}" onsubmit="return confirm('Promote this active, verified Client to Admin? Admin accounts can access catalog and management tools.');">
+                                @csrf @method('PATCH')
+                                <button type="submit" class="btn btn-market">Promote to Admin</button>
+                            </form>
+                        @endif
+                    @elseif ($user->role === \App\Models\User::ROLE_ADMIN && $canManageRoles)
+                        <p class="text-secondary small">Demotion removes catalog and management access.</p>
+                        <form method="POST" action="{{ route('admin.users.demote', $user) }}" onsubmit="return confirm('Demote this Admin to Client? They will lose catalog and management access.');">
+                            @csrf @method('PATCH')
+                            <button type="submit" class="btn btn-outline-warning">Demote to Client</button>
+                        </form>
                     @else
                         <div class="alert alert-light border mb-0" role="status">
-                            Admin accounts are read-only in User Management.
+                            This account role is read-only in User Management.
                         </div>
                     @endif
                 </div>

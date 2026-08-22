@@ -9,6 +9,8 @@ use Illuminate\Validation\ValidationException;
 
 class UserManagementService
 {
+    public function __construct(private readonly CatalogAuditLogService $catalogAuditLogService) {}
+
     /**
      * @param  array{search?: string|null, role?: string|null, status?: string|null, verification?: string|null, auth_method?: string|null}  $filters
      * @return LengthAwarePaginator<User>
@@ -85,5 +87,45 @@ class UserManagementService
         });
 
         return $user->refresh();
+    }
+
+    public function promoteClient(User $actor, User $target): User
+    {
+        if (! $actor->isSuperAdmin()) {
+            throw ValidationException::withMessages(['role' => 'Only a Super Admin can manage roles.']);
+        }
+        if ($target->role !== User::ROLE_CLIENT || ! $target->is_active || ! $target->hasVerifiedEmail()) {
+            throw ValidationException::withMessages(['role' => 'Only active, email-verified Client accounts can be promoted.']);
+        }
+
+        return DB::transaction(function () use ($actor, $target): User {
+            $target->forceFill(['role' => User::ROLE_ADMIN])->save();
+            $updated = $target->refresh();
+            $this->catalogAuditLogService->record($actor, $updated, 'role_promoted', 'Promoted Client to Admin', [
+                'role' => ['label' => 'Role', 'before' => User::ROLE_CLIENT, 'after' => User::ROLE_ADMIN],
+            ]);
+
+            return $updated;
+        });
+    }
+
+    public function demoteAdmin(User $actor, User $target): User
+    {
+        if (! $actor->isSuperAdmin()) {
+            throw ValidationException::withMessages(['role' => 'Only a Super Admin can manage roles.']);
+        }
+        if ($actor->is($target) || $target->role === User::ROLE_SUPER_ADMIN || $target->role !== User::ROLE_ADMIN) {
+            throw ValidationException::withMessages(['role' => 'Only another Admin account can be demoted to Client.']);
+        }
+
+        return DB::transaction(function () use ($actor, $target): User {
+            $target->forceFill(['role' => User::ROLE_CLIENT])->save();
+            $updated = $target->refresh();
+            $this->catalogAuditLogService->record($actor, $updated, 'role_demoted', 'Demoted Admin to Client', [
+                'role' => ['label' => 'Role', 'before' => User::ROLE_ADMIN, 'after' => User::ROLE_CLIENT],
+            ]);
+
+            return $updated;
+        });
     }
 }

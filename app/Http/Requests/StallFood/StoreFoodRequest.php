@@ -4,7 +4,6 @@ namespace App\Http\Requests\StallFood;
 
 use App\Models\Food;
 use App\Models\Stall;
-use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
@@ -14,7 +13,7 @@ class StoreFoodRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_ADMIN;
+        return $this->user()?->hasAdminAccess() ?? false;
     }
 
     /**

@@ -1,6 +1,6 @@
 @php
     $currentUser = auth()->user();
-    $isAdmin = $currentUser?->role === \App\Models\User::ROLE_ADMIN;
+    $isAdmin = $currentUser?->hasAdminAccess() ?? false;
     $isClient = $currentUser?->role === \App\Models\User::ROLE_CLIENT;
     $logoUrl = $isAdmin ? route('admin.dashboard') : ($isClient ? route('client.home') : route('home'));
 @endphp

@@ -88,7 +88,7 @@ class AuthService
     {
         return match ($user->role) {
             User::ROLE_CLIENT => 'client.home',
-            User::ROLE_ADMIN => 'admin.dashboard',
+            User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN => 'admin.dashboard',
             default => throw new UnexpectedValueException('The authenticated user has an unsupported role.'),
         };
     }

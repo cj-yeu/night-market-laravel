@@ -246,5 +246,9 @@ Route::middleware('auth')->group(function () {
         Route::patch('/users/{user}/status', [UserManagementController::class, 'updateStatus'])
             ->whereNumber('user')
             ->name('users.status.update');
+        Route::patch('/users/{user}/promote', [UserManagementController::class, 'promote'])
+            ->middleware('role:super_admin')->whereNumber('user')->name('users.promote');
+        Route::patch('/users/{user}/demote', [UserManagementController::class, 'demote'])
+            ->middleware('role:super_admin')->whereNumber('user')->name('users.demote');
     });
 });
