@@ -53,6 +53,22 @@
                 outline-offset: 3px;
             }
 
+            .skip-link {
+                position: fixed;
+                top: 0.5rem;
+                left: 0.5rem;
+                z-index: 2000;
+                padding: 0.65rem 0.9rem;
+                color: #fff;
+                background: var(--market-orange-dark);
+                border-radius: 0.5rem;
+                transform: translateY(-150%);
+            }
+
+            .skip-link:focus {
+                transform: translateY(0);
+            }
+
             .navbar-market {
                 position: sticky;
                 top: 0;
@@ -732,6 +748,7 @@
         @stack('styles')
     </head>
     <body class="{{ $isAdmin ? 'admin-layout' : '' }}">
+        <a class="skip-link" href="#main-content">Skip to main content</a>
         @if ($isAdmin)
             @include('layouts.partials.admin-sidebar')
 
@@ -771,17 +788,17 @@
             </nav>
         @endif
 
-        <main class="{{ $isAdmin ? 'container-fluid px-3 px-md-4 px-xl-5' : 'container' }} py-4 py-lg-5">
+        <main id="main-content" tabindex="-1" class="{{ $isAdmin ? 'container-fluid px-3 px-md-4 px-xl-5' : 'container' }} py-4 py-lg-5">
             <div class="{{ $isAdmin ? 'admin-content-shell' : '' }}">
             @if (session('status'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <div class="alert alert-success alert-dismissible fade show" role="status" aria-live="polite">
                     {{ session('status') }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
             @if (session('error'))
-                <div class="alert alert-danger" role="alert">
+                <div class="alert alert-danger" role="alert" aria-live="assertive">
                     {{ session('error') }}
                 </div>
             @endif
@@ -799,6 +816,27 @@
             integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
             crossorigin="anonymous"
         ></script>
+
+        <script>
+            document.querySelectorAll('.is-invalid').forEach((field, index) => {
+                const feedback = field.parentElement.querySelector('.invalid-feedback');
+                if (!feedback) return;
+
+                const feedbackId = feedback.id || `validation-error-${index}`;
+                feedback.id = feedbackId;
+                field.setAttribute('aria-invalid', 'true');
+                field.setAttribute('aria-describedby', feedbackId);
+            });
+
+            document.querySelectorAll('#primaryNavigation a[href]').forEach((link) => {
+                link.addEventListener('click', () => {
+                    const navigation = document.querySelector('#primaryNavigation');
+                    if (window.innerWidth < 992 && navigation.classList.contains('show')) {
+                        bootstrap.Collapse.getOrCreateInstance(navigation).hide();
+                    }
+                });
+            });
+        </script>
 
         @stack('scripts')
     </body>

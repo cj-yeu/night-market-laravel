@@ -1,0 +1,1 @@
+@include('errors._page', ['code' => '503', 'title' => 'Service temporarily unavailable', 'heading' => 'We are temporarily unavailable', 'message' => 'Please try again shortly. No technical details are shown here for your security.', 'actions' => [['label' => 'Browse Markets', 'url' => route('night-markets.index'), 'primary' => true], ['label' => 'Home', 'url' => route('home')]]])
