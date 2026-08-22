@@ -1,0 +1,1 @@
+@include('errors._page', ['code' => '500', 'title' => 'Something went wrong', 'heading' => 'We could not complete that request', 'message' => 'Please try again later. No technical details are shown here for your security.', 'actions' => [['label' => 'Browse Markets', 'url' => route('night-markets.index'), 'primary' => true], ['label' => 'Home', 'url' => route('home')]]])
