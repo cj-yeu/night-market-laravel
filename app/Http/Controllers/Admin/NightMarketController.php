@@ -11,9 +11,11 @@ use App\Http\Requests\NightMarket\UpdateNightMarketImageRequest;
 use App\Http\Requests\NightMarket\UpdateNightMarketRequest;
 use App\Models\MarketOperatingDay;
 use App\Models\NightMarket;
+use App\Services\AdminReturnUrlService;
 use App\Services\NightMarketImageService;
 use App\Services\NightMarketService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class NightMarketController extends Controller
@@ -21,6 +23,7 @@ class NightMarketController extends Controller
     public function __construct(
         private readonly NightMarketService $nightMarketService,
         private readonly NightMarketImageService $nightMarketImageService,
+        private readonly AdminReturnUrlService $adminReturnUrlService,
     ) {}
 
     public function index(AdminNightMarketFilterRequest $request): View
@@ -58,11 +61,12 @@ class NightMarketController extends Controller
         ]);
     }
 
-    public function edit(NightMarket $nightMarket): View
+    public function edit(Request $request, NightMarket $nightMarket): View
     {
         return view('admin.night-markets.edit', [
             'nightMarket' => $this->nightMarketService->adminDetails($nightMarket),
             'days' => MarketOperatingDay::DAYS,
+            'returnTo' => $this->adminReturnUrlService->catalogQualityUrl($request),
         ]);
     }
 
@@ -70,9 +74,11 @@ class NightMarketController extends Controller
     {
         $nightMarket = $this->nightMarketService->update($nightMarket, $request->validated());
 
-        return redirect()
-            ->route('admin.night-markets.show', $nightMarket)
-            ->with('status', $nightMarket->name.' was updated successfully.');
+        $redirect = $this->adminReturnUrlService->catalogQualityUrl($request)
+            ? redirect()->to($this->adminReturnUrlService->catalogQualityUrl($request))
+            : redirect()->route('admin.night-markets.show', $nightMarket);
+
+        return $redirect->with('status', $nightMarket->name.' was updated successfully.');
     }
 
     public function activate(OperationalStatusRequest $request, NightMarket $nightMarket): RedirectResponse

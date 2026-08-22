@@ -10,10 +10,12 @@ use App\Http\Requests\StallFood\StoreFoodRequest;
 use App\Http\Requests\StallFood\UpdateFoodImageRequest;
 use App\Http\Requests\StallFood\UpdateFoodRequest;
 use App\Models\Food;
+use App\Services\AdminReturnUrlService;
 use App\Services\NightMarketService;
 use App\Services\StallFoodImageService;
 use App\Services\StallFoodService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class FoodController extends Controller
@@ -22,6 +24,7 @@ class FoodController extends Controller
         private readonly StallFoodService $stallFoodService,
         private readonly NightMarketService $nightMarketService,
         private readonly StallFoodImageService $stallFoodImageService,
+        private readonly AdminReturnUrlService $adminReturnUrlService,
     ) {}
 
     public function index(AdminFoodFilterRequest $request): View
@@ -60,11 +63,12 @@ class FoodController extends Controller
         ]);
     }
 
-    public function edit(Food $food): View
+    public function edit(Request $request, Food $food): View
     {
         return view('admin.foods.edit', [
             'food' => $this->stallFoodService->adminFoodDetails($food),
             'stalls' => $this->stallFoodService->adminStallOptions(),
+            'returnTo' => $this->adminReturnUrlService->catalogQualityUrl($request),
         ]);
     }
 
@@ -72,9 +76,11 @@ class FoodController extends Controller
     {
         $food = $this->stallFoodService->updateFood($food, $request->validated());
 
-        return redirect()
-            ->route('admin.foods.show', $food)
-            ->with('status', $food->name.' was updated successfully.');
+        $redirect = $this->adminReturnUrlService->catalogQualityUrl($request)
+            ? redirect()->to($this->adminReturnUrlService->catalogQualityUrl($request))
+            : redirect()->route('admin.foods.show', $food);
+
+        return $redirect->with('status', $food->name.' was updated successfully.');
     }
 
     public function activate(OperationalStatusRequest $request, Food $food): RedirectResponse

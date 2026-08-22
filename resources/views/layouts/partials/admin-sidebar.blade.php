@@ -42,6 +42,11 @@
                 <i class="bi bi-cup-hot-fill" aria-hidden="true"></i>Foods
             </a>
 
+            <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.catalog-data-quality.*') ? 'active' : '' }}"
+                href="{{ route('admin.catalog-data-quality.index') }}">
+                <i class="bi bi-clipboard2-check-fill" aria-hidden="true"></i>Data Quality
+            </a>
+
             <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.reviews.*') ? 'active' : '' }}"
                 href="{{ route('admin.reviews.index') }}">
                 <i class="bi bi-star-fill" aria-hidden="true"></i>Reviews

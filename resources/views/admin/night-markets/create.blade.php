@@ -76,6 +76,19 @@
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
                             </div>
+
+                            <div class="col-md-7">
+                                <label for="source_url" class="form-label">Source URL</label>
+                                <input type="url" class="form-control @error('source_url') is-invalid @enderror" id="source_url" name="source_url" value="{{ old('source_url') }}" maxlength="255">
+                                <div class="form-text">Link to the source used to confirm the market details.</div>
+                                @error('source_url')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="col-md-5">
+                                <label for="verified_at" class="form-label">Last verified</label>
+                                <input type="date" class="form-control @error('verified_at') is-invalid @enderror" id="verified_at" name="verified_at" value="{{ old('verified_at') }}" max="{{ now()->toDateString() }}">
+                                <div class="form-text">When these details were last checked. Leave blank rather than guess.</div>
+                                @error('verified_at')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
                         </div>
 
                         <fieldset class="mt-4">

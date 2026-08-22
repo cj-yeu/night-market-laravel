@@ -37,6 +37,11 @@
                         <dt class="col-sm-3">District</dt>
                         <dd class="col-sm-9">{{ $nightMarket->city }}, {{ $nightMarket->state }}</dd>
 
+                        @if ($nightMarket->verified_at)
+                            <dt class="col-sm-3">Last verified</dt>
+                            <dd class="col-sm-9">{{ $nightMarket->verified_at->format('M j, Y') }}</dd>
+                        @endif
+
                         <dt class="col-sm-3">Description</dt>
                         <dd class="col-sm-9 mb-0">{{ $nightMarket->description ?: 'No description available.' }}</dd>
                     </dl>

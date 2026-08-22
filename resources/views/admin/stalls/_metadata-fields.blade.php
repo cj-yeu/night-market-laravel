@@ -6,7 +6,9 @@
         <input id="category" name="category" value="{{ old('category', $currentStall?->category) }}"
             class="form-control @error('category') is-invalid @enderror" maxlength="100">
         @error('category') <div class="invalid-feedback">{{ $message }}</div> @enderror
+        <div class="form-text">Use a clear public category to help visitors browse this stall.</div>
     </div>
+    <div class="form-text">Use a source supporting the current stall details; it is not shown as an internal note.</div>
     <div class="col-12 col-md-6">
         <label for="halal_status" class="form-label">Halal classification</label>
         <select id="halal_status" name="halal_status" class="form-select @error('halal_status') is-invalid @enderror" required>
@@ -19,6 +21,7 @@
         @error('halal_status') <div class="invalid-feedback">{{ $message }}</div> @enderror
         <div class="form-text">If evidence is absent, unclear, or conflicting, select Unknown. A vendor claim is not certification.</div>
     </div>
+    <div class="form-text">Record when the source and stall details were last checked. Leave blank rather than guess.</div>
 </div>
 
 <div class="mb-3">
