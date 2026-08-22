@@ -91,14 +91,15 @@
                                     <x-user-avatar :user="$review->user" size="sm" />
                                     <div>
                                         <h2 class="h6 fw-bold mb-0">{{ $review->user->name }}</h2>
-                                        <span class="small text-secondary">{{ $review->food?->name ?? 'Legacy unassigned review' }}</span>
+                                        <span class="small text-secondary">{{ $review->isFoodReview() ? 'Food · '.$review->food?->name : ($review->isMarketReview() ? 'Night Market · '.$review->nightMarket?->name : 'Legacy review') }}</span>
                                     </div>
                                 </div>
                                 <span class="badge text-bg-warning" aria-label="{{ $review->rating }} out of 5 stars">{{ $review->rating }}/5 stars</span>
                             </div>
 
                             <dl class="row small mb-3">
-                                <dt class="col-4">Stall</dt><dd class="col-8">{{ $review->food?->stall?->name ?? 'Not assigned' }}</dd>
+                                <dt class="col-4">Target</dt><dd class="col-8">{{ $review->isFoodReview() ? 'Food' : ($review->isMarketReview() ? 'Night Market' : 'Legacy') }}</dd>
+                                <dt class="col-4">Stall</dt><dd class="col-8">{{ $review->food?->stall?->name ?? 'Not applicable' }}</dd>
                                 <dt class="col-4">Night Market</dt><dd class="col-8">{{ $review->food?->stall?->nightMarket?->name ?? $review->nightMarket?->name ?? 'Not assigned' }}</dd>
                             </dl>
                             <p class="mb-2">{{ \Illuminate\Support\Str::limit($review->comment, 240) }}</p>

@@ -9,21 +9,6 @@
         <p class="text-secondary mb-0">Manage your night market platform from one place.</p>
     </header>
 
-    <section class="mb-4" aria-labelledby="quick-actions-heading">
-        <h2 class="h4 fw-semibold mb-3" id="quick-actions-heading">Quick Actions</h2>
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{{ route('admin.night-markets.create') }}" class="btn btn-market">
-                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Create Night Market
-            </a>
-            <a href="{{ route('admin.stalls.create') }}" class="btn btn-market">
-                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Create Stall
-            </a>
-            <a href="{{ route('admin.foods.create') }}" class="btn btn-market">
-                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Create Food
-            </a>
-        </div>
-    </section>
-
     <section aria-labelledby="management-heading">
         <h2 class="h4 fw-semibold mb-3" id="management-heading">Management</h2>
         <div class="row g-3">

@@ -99,6 +99,15 @@ Route::middleware('auth')->group(function () {
         ->name('client.home');
 
     Route::middleware(['role:client', 'verified'])->prefix('client')->name('client.')->group(function () {
+        Route::get('/night-markets/{nightMarket}/reviews/create', [ReviewController::class, 'createMarket'])
+            ->whereNumber('nightMarket')->name('night-markets.reviews.create');
+        Route::post('/night-markets/{nightMarket}/reviews', [ReviewController::class, 'storeMarket'])
+            ->whereNumber('nightMarket')->name('night-markets.reviews.store');
+        Route::get('/night-markets/{nightMarket}/reviews/{review}/edit', [ReviewController::class, 'editMarket'])
+            ->whereNumber('nightMarket')->whereNumber('review')->name('night-markets.reviews.edit');
+        Route::patch('/night-markets/{nightMarket}/reviews/{review}', [ReviewController::class, 'updateMarket'])
+            ->whereNumber('nightMarket')->whereNumber('review')->name('night-markets.reviews.update');
+
         Route::get('/foods/{food}/reviews/create', [ReviewController::class, 'create'])
             ->whereNumber('food')->name('foods.reviews.create');
         Route::post('/foods/{food}/reviews', [ReviewController::class, 'store'])
