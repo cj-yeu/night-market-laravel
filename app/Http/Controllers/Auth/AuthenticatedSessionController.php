@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\User;
 use App\Services\AuthService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,12 +27,18 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
-        $user = $this->authService->login($request->validated());
+        $user = $this->authService->login($request->validated(), $request->throttleKey());
 
         $request->session()->regenerate();
 
+        if ($user->role === User::ROLE_CLIENT && ! $user->hasVerifiedEmail()) {
+            return redirect()
+                ->route('verification.notice')
+                ->with('status', 'Verify your email address to continue to trusted Client features.');
+        }
+
         return redirect()
-            ->route($this->authService->homeRouteFor($user))
+            ->intended(route($this->authService->homeRouteFor($user)))
             ->with('status', 'Welcome back, '.$user->name.'.');
     }
 

@@ -1,14 +1,14 @@
 <?php
 
-namespace App\Http\Requests\Review;
+namespace App\Http\Requests\SocialMedia;
 
-use App\Models\Review;
+use App\Models\SocialMediaRecord;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class ModerateReviewRequest extends FormRequest
+class ModerateSocialMediaRecordRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -23,7 +23,10 @@ class ModerateReviewRequest extends FormRequest
         return [
             'status' => [
                 'required',
-                Rule::in([Review::STATUS_APPROVED, Review::STATUS_REJECTED]),
+                Rule::in([
+                    SocialMediaRecord::STATUS_APPROVED,
+                    SocialMediaRecord::STATUS_REJECTED,
+                ]),
             ],
         ];
     }

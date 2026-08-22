@@ -62,6 +62,8 @@
                                 @enderror
                             </div>
 
+                            @include('admin.foods._metadata-fields')
+
                             <div class="form-check mb-3">
                                 <input type="hidden" name="is_must_try" value="0">
                                 <input class="form-check-input @error('is_must_try') is-invalid @enderror"

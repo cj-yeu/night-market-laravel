@@ -8,9 +8,15 @@
             <a href="{{ route('client.visit-plans.index') }}"
                 class="btn btn-sm btn-outline-secondary mb-3">Back to My Visit Plans</a>
             <h1 class="display-6 fw-bold text-market mb-1">{{ $visitPlan->title }}</h1>
-            <p class="text-secondary mb-0">{{ $visitPlan->nightMarket->name }}</p>
+            <p class="text-secondary mb-0">{{ $visitPlan->market_display_name }}</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
+            @if ($visitPlan->market_is_available)
+                <a href="{{ route('night-markets.show', $visitPlan->night_market_id) }}"
+                    class="btn btn-outline-secondary">View Market</a>
+                <a href="{{ route('night-markets.stalls.index', $visitPlan->night_market_id) }}"
+                    class="btn btn-outline-secondary">Browse Market Stalls</a>
+            @endif
             <a href="{{ route('client.visit-plans.edit', $visitPlan) }}" class="btn btn-market">Edit Plan</a>
             <form method="POST" action="{{ route('client.visit-plans.destroy', $visitPlan) }}"
                 onsubmit="return confirm('Delete this visit plan?');">
@@ -29,28 +35,61 @@
                     <dl class="row mb-0">
                         <dt class="col-sm-4">Visit Date</dt>
                         <dd class="col-sm-8">{{ $visitPlan->visit_date->format('l, d M Y') }}</dd>
+                        <dt class="col-sm-4">Status</dt>
+                        <dd class="col-sm-8"><span class="badge text-bg-secondary">{{ $visitPlan->visit_status }}</span></dd>
+                        <dt class="col-sm-4">Planned Items</dt>
+                        <dd class="col-sm-8">{{ $visitPlan->items_count }}</dd>
                         <dt class="col-sm-4">Night Market</dt>
-                        <dd class="col-sm-8">{{ $visitPlan->nightMarket->name }}</dd>
-                        <dt class="col-sm-4">Location</dt>
-                        <dd class="col-sm-8">{{ $visitPlan->nightMarket->city }}, {{ $visitPlan->nightMarket->state }}</dd>
+                        <dd class="col-sm-8">{{ $visitPlan->market_display_name }}</dd>
+                        @if ($visitPlan->market_is_available)
+                            <dt class="col-sm-4">Location</dt>
+                            <dd class="col-sm-8">{{ $visitPlan->nightMarket->city }}, {{ $visitPlan->nightMarket->state }}</dd>
+                        @endif
                         <dt class="col-sm-4">Notes</dt>
                         <dd class="col-sm-8 mb-0">{{ $visitPlan->notes ?: 'No notes added.' }}</dd>
                     </dl>
                 </div>
             </div>
 
-            <div class="card market-card">
+            <div class="card market-card mb-4">
                 <div class="card-body p-4">
-                    <h2 class="h4 fw-bold text-market mb-3">Planned Stalls &amp; Foods</h2>
-                    @if ($visitPlan->items->isEmpty())
-                        <div class="alert alert-info mb-0">No stalls or foods have been added yet.</div>
+                    <h2 class="h4 fw-bold text-market mb-3">Selected Stalls</h2>
+                    @if ($selectedStalls->isEmpty())
+                        <div class="alert alert-info mb-0">No stalls have been added yet.</div>
                     @else
                         <div class="list-group list-group-flush">
-                            @foreach ($visitPlan->items as $item)
+                            @foreach ($selectedStalls as $item)
                                 <div class="list-group-item px-0 d-flex justify-content-between gap-3">
                                     <div>
-                                        <span class="badge text-bg-warning mb-1">{{ ucfirst($item->item_type) }}</span>
-                                        <div class="fw-semibold">{{ $item->item_name }}</div>
+                                        <div class="fw-semibold">{{ $item->display_name }}</div>
+                                        @if ($item->notes)
+                                            <div class="small text-secondary">{{ $item->notes }}</div>
+                                        @endif
+                                    </div>
+                                    <form method="POST"
+                                        action="{{ route('client.visit-plans.items.destroy', [$visitPlan, $item]) }}">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                                    </form>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            <div class="card market-card">
+                <div class="card-body p-4">
+                    <h2 class="h4 fw-bold text-market mb-3">Selected Foods</h2>
+                    @if ($selectedFoods->isEmpty())
+                        <div class="alert alert-info mb-0">No must-try foods have been added yet.</div>
+                    @else
+                        <div class="list-group list-group-flush">
+                            @foreach ($selectedFoods as $item)
+                                <div class="list-group-item px-0 d-flex justify-content-between gap-3">
+                                    <div>
+                                        <div class="fw-semibold">{{ $item->display_name }}</div>
                                         @if ($item->notes)
                                             <div class="small text-secondary">{{ $item->notes }}</div>
                                         @endif
@@ -73,7 +112,9 @@
             <div class="card market-card mb-4">
                 <div class="card-body p-4">
                     <h2 class="h4 fw-bold text-market">Operating Schedule</h2>
-                    @if ($visitPlan->nightMarket->operatingDays->isEmpty())
+                    @if (! $visitPlan->market_is_available)
+                        <div class="alert alert-secondary mb-0">This Night Market is no longer publicly available.</div>
+                    @elseif ($visitPlan->nightMarket->operatingDays->isEmpty())
                         <div class="alert alert-warning mb-0">No operating schedule is available.</div>
                     @else
                         <ul class="mb-0 ps-3">

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureAuthenticatedUserIsActive;
 use App\Http\Middleware\EnsureUserHasRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -13,11 +14,22 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        $middleware->web(append: [
+            EnsureAuthenticatedUserIsActive::class,
+        ]);
+
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
         ]);
 
-        $middleware->redirectGuestsTo(fn (Request $request) => route('login'));
+        $middleware->redirectGuestsTo(function (Request $request) {
+            $request->session()->flash(
+                'error',
+                'Please log in or register to continue. You will return to your requested page after login.',
+            );
+
+            return route('login');
+        });
         $middleware->redirectUsersTo(fn (Request $request) => $request->user()?->role === 'admin'
             ? route('admin.dashboard')
             : route('client.home'));

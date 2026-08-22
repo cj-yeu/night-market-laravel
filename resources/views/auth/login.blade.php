@@ -33,7 +33,12 @@
                         </div>
 
                         <div class="mb-4">
-                            <label for="password" class="form-label">Password</label>
+                            <div class="d-flex justify-content-between align-items-center gap-3">
+                                <label for="password" class="form-label">Password</label>
+                                <a href="{{ route('password.request') }}" class="small text-market fw-semibold">
+                                    Forgot your password?
+                                </a>
+                            </div>
                             <input
                                 type="password"
                                 class="form-control @error('password') is-invalid @enderror"
@@ -49,6 +54,16 @@
 
                         <button type="submit" class="btn btn-market w-100">Login</button>
                     </form>
+
+                    <div class="d-flex align-items-center gap-3 my-4" aria-hidden="true">
+                        <hr class="flex-grow-1 my-0">
+                        <span class="small text-secondary">or</span>
+                        <hr class="flex-grow-1 my-0">
+                    </div>
+
+                    <a href="{{ route('auth.google.redirect') }}" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-google me-2" aria-hidden="true"></i>Continue with Google
+                    </a>
 
                     <p class="text-center text-secondary mt-4 mb-0">
                         New here?

@@ -3,6 +3,7 @@
 namespace App\Http\Requests\VisitPlan;
 
 use App\Models\NightMarket;
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
@@ -12,7 +13,7 @@ class StoreVisitPlanRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === 'client';
+        return $this->user()?->role === User::ROLE_CLIENT;
     }
 
     /**
@@ -26,7 +27,9 @@ class StoreVisitPlanRequest extends FormRequest
                 'required',
                 'integer',
                 Rule::exists('night_markets', 'id')
-                    ->where(fn (Builder $query) => $query->where('status', NightMarket::STATUS_ACTIVE)),
+                    ->where(fn (Builder $query) => $query
+                        ->where('status', NightMarket::STATUS_ACTIVE)
+                        ->where('state', 'Selangor')),
             ],
             'visit_date' => ['required', 'date', 'after_or_equal:today'],
             'notes' => ['nullable', 'string', 'max:5000'],
@@ -35,9 +38,12 @@ class StoreVisitPlanRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $title = $this->input('title');
+        $notes = $this->input('notes');
+
         $this->merge([
-            'title' => trim((string) $this->title),
-            'notes' => $this->filled('notes') ? trim((string) $this->notes) : null,
+            'title' => is_string($title) ? trim($title) : $title,
+            'notes' => is_string($notes) ? (trim($notes) !== '' ? trim($notes) : null) : $notes,
         ]);
     }
 }

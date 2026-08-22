@@ -4,12 +4,13 @@ namespace App\Http\Requests\StallFood;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Str;
 
 class StallFoodFilterRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === 'client';
+        return true;
     }
 
     /**
@@ -18,7 +19,7 @@ class StallFoodFilterRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'search' => ['nullable', 'string', 'max:255'],
+            'search' => ['nullable', 'string', 'max:100'],
             'category' => ['nullable', 'string', 'max:100'],
         ];
     }
@@ -26,8 +27,8 @@ class StallFoodFilterRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $this->merge([
-            'search' => $this->filled('search') ? trim((string) $this->search) : null,
-            'category' => $this->filled('category') ? trim((string) $this->category) : null,
+            'search' => $this->filled('search') ? Str::squish((string) $this->search) : null,
+            'category' => $this->filled('category') ? Str::squish((string) $this->category) : null,
         ]);
     }
 }

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" role="img" aria-labelledby="title description">
+  <title id="title">Stall image placeholder</title>
+  <desc id="description">An illustrated night market stall beneath warm lanterns.</desc>
+  <rect width="800" height="450" fill="#fff3df"/>
+  <circle cx="120" cy="88" r="28" fill="#f59e0b"/>
+  <circle cx="680" cy="88" r="28" fill="#f59e0b"/>
+  <path d="M90 116h60M650 116h60" stroke="#9a3412" stroke-width="8" stroke-linecap="round"/>
+  <path d="M180 190h440l-48-82H228z" fill="#d85b1f"/>
+  <path d="M205 190h390v170H205z" fill="#fff" stroke="#7c2d12" stroke-width="12"/>
+  <path d="M205 190h390M265 190v170M535 190v170" stroke="#7c2d12" stroke-width="12"/>
+  <path d="M310 275h180" stroke="#f59e0b" stroke-width="22" stroke-linecap="round"/>
+  <text x="400" y="420" text-anchor="middle" fill="#7c2d12" font-family="Arial, sans-serif" font-size="34" font-weight="700">STALL PHOTO COMING SOON</text>
+</svg>

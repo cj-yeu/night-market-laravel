@@ -31,7 +31,7 @@ class ProfileTest extends TestCase
             ->assertSee($client->email);
     }
 
-    public function test_authenticated_client_can_update_their_own_name_and_email(): void
+    public function test_authenticated_client_can_update_their_own_name_without_changing_email(): void
     {
         $client = User::factory()->create([
             'role' => User::ROLE_CLIENT,
@@ -40,7 +40,7 @@ class ProfileTest extends TestCase
 
         $response = $this->actingAs($client)->patch(route('profile.update'), [
             'name' => 'Updated Client Name',
-            'email' => 'updated.client@example.com',
+            'email' => $client->email,
         ]);
 
         $response
@@ -50,7 +50,7 @@ class ProfileTest extends TestCase
         $this->assertDatabaseHas('users', [
             'id' => $client->id,
             'name' => 'Updated Client Name',
-            'email' => 'updated.client@example.com',
+            'email' => $client->email,
         ]);
     }
 
@@ -86,7 +86,7 @@ class ProfileTest extends TestCase
         $this->actingAs($client)
             ->patch(route('profile.update'), [
                 'name' => 'Safe Client Name',
-                'email' => 'safe.client@example.com',
+                'email' => $client->email,
                 'role' => User::ROLE_ADMIN,
                 'is_active' => false,
             ])
@@ -95,7 +95,7 @@ class ProfileTest extends TestCase
         $client->refresh();
 
         $this->assertSame('Safe Client Name', $client->name);
-        $this->assertSame('safe.client@example.com', $client->email);
+        $this->assertNotNull($client->email_verified_at);
         $this->assertSame(User::ROLE_CLIENT, $client->role);
         $this->assertTrue($client->is_active);
     }

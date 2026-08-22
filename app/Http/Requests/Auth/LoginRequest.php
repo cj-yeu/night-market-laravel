@@ -49,4 +49,12 @@ class LoginRequest extends FormRequest
             'email' => 'email address',
         ];
     }
+
+    /**
+     * Get the privacy-preserving rate limiter key for this email and IP pair.
+     */
+    public function throttleKey(): string
+    {
+        return 'login:'.hash('sha256', $this->string('email')->lower()->value().'|'.$this->ip());
+    }
 }

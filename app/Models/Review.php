@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,13 +18,25 @@ class Review extends Model
 
     public const STATUS_REJECTED = 'rejected';
 
+    public const STATUSES = [
+        self::STATUS_PENDING,
+        self::STATUS_APPROVED,
+        self::STATUS_REJECTED,
+    ];
+
     protected $fillable = [
         'user_id',
         'night_market_id',
+        'food_id',
         'rating',
         'comment',
         'status',
     ];
+
+    public function scopePubliclyVisible(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_APPROVED);
+    }
 
     protected function casts(): array
     {
@@ -40,6 +53,11 @@ class Review extends Model
     public function nightMarket(): BelongsTo
     {
         return $this->belongsTo(NightMarket::class);
+    }
+
+    public function food(): BelongsTo
+    {
+        return $this->belongsTo(Food::class);
     }
 
     public function images(): HasMany

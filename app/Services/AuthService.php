@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\User;
 use Illuminate\Auth\AuthManager;
+use Illuminate\Cache\RateLimiter;
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Contracts\Auth\StatefulGuard;
 use Illuminate\Support\Facades\Hash;
@@ -12,7 +13,14 @@ use UnexpectedValueException;
 
 class AuthService
 {
-    public function __construct(private readonly AuthManager $auth) {}
+    private const LOGIN_MAX_ATTEMPTS = 3;
+
+    private const LOGIN_DECAY_SECONDS = 900;
+
+    public function __construct(
+        private readonly AuthManager $auth,
+        private readonly RateLimiter $limiter,
+    ) {}
 
     /**
      * Register and authenticate a new client account.
@@ -41,22 +49,33 @@ class AuthService
      *
      * @throws ValidationException
      */
-    public function login(array $credentials): User
+    public function login(array $credentials, string $limiterKey): User
     {
+        if ($this->limiter->tooManyAttempts($limiterKey, self::LOGIN_MAX_ATTEMPTS)) {
+            $this->throwCooldownException($limiterKey);
+        }
+
         $user = User::where('email', $credentials['email'])->first();
 
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+        if (! $user
+            || $user->password === null
+            || ! Hash::check($credentials['password'], $user->password)
+            || ! $user->is_active) {
+            $this->limiter->hit($limiterKey, self::LOGIN_DECAY_SECONDS);
+
+            if ($this->limiter->attempts($limiterKey) >= self::LOGIN_MAX_ATTEMPTS) {
+                $this->throwCooldownException($limiterKey);
+            }
+
+            $remainingAttempts = self::LOGIN_MAX_ATTEMPTS - $this->limiter->attempts($limiterKey);
+            $attemptLabel = $remainingAttempts === 1 ? 'attempt' : 'attempts';
+
             throw ValidationException::withMessages([
-                'email' => 'Incorrect email or password. Please try again.',
+                'email' => "The provided credentials are incorrect. You have {$remainingAttempts} {$attemptLabel} remaining.",
             ]);
         }
 
-        if (! $user->is_active) {
-            throw ValidationException::withMessages([
-                'email' => 'Your account is inactive. Please contact the administrator.',
-            ]);
-        }
-
+        $this->limiter->clear($limiterKey);
         $this->guard()->login($user);
 
         return $user;
@@ -88,5 +107,18 @@ class AuthService
         $guard = $this->auth->guard('web');
 
         return $guard;
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function throwCooldownException(string $limiterKey): never
+    {
+        $minutes = max(1, (int) ceil($this->limiter->availableIn($limiterKey) / 60));
+        $unit = $minutes === 1 ? 'minute' : 'minutes';
+
+        throw ValidationException::withMessages([
+            'email' => "Too many unsuccessful login attempts. Please try again in {$minutes} {$unit}.",
+        ]);
     }
 }

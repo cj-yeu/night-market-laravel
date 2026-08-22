@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Food;
 use App\Models\NightMarket;
 use App\Models\Review;
 use App\Models\User;
@@ -36,5 +37,13 @@ class ReviewFactory extends Factory
     public function rejected(): static
     {
         return $this->state(fn () => ['status' => Review::STATUS_REJECTED]);
+    }
+
+    public function forFood(Food $food): static
+    {
+        return $this->state(fn () => [
+            'food_id' => $food->id,
+            'night_market_id' => $food->stall->night_market_id,
+        ]);
     }
 }
