@@ -22,10 +22,27 @@ class ReviewService
             ->findOrFail($foodId);
     }
 
+    public function findPubliclyVisibleMarket(int $marketId): NightMarket
+    {
+        return NightMarket::query()
+            ->publiclyVisible()
+            ->select(['id', 'name', 'address', 'city', 'state', 'description', 'status', 'image_path'])
+            ->findOrFail($marketId);
+    }
+
     public function reviewForClient(Food $food, User $user): ?Review
     {
         return Review::query()
             ->where('food_id', $food->id)
+            ->where('user_id', $user->id)
+            ->first();
+    }
+
+    public function marketReviewForClient(NightMarket $nightMarket, User $user): ?Review
+    {
+        return Review::query()
+            ->where('night_market_id', $nightMarket->id)
+            ->whereNull('food_id')
             ->where('user_id', $user->id)
             ->first();
     }
@@ -42,7 +59,7 @@ class ReviewService
         try {
             return Review::query()->create([
                 'user_id' => $user->id,
-                'night_market_id' => $food->stall->night_market_id,
+                'night_market_id' => null,
                 'food_id' => $food->id,
                 'rating' => $data['rating'],
                 'comment' => $data['comment'],
@@ -56,10 +73,50 @@ class ReviewService
     }
 
     /** @param array{rating: int, comment: string} $data */
+    public function createMarketForClient(User $user, NightMarket $nightMarket, array $data): Review
+    {
+        if ($this->marketReviewForClient($nightMarket, $user) !== null) {
+            throw ValidationException::withMessages([
+                'comment' => 'You have already reviewed this Night Market. Edit your existing review instead.',
+            ]);
+        }
+
+        try {
+            return Review::query()->create([
+                'user_id' => $user->id,
+                'night_market_id' => $nightMarket->id,
+                'food_id' => null,
+                'rating' => $data['rating'],
+                'comment' => $data['comment'],
+                'status' => Review::STATUS_APPROVED,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages([
+                'comment' => 'You have already reviewed this Night Market. Edit your existing review instead.',
+            ]);
+        }
+    }
+
+    /** @param array{rating: int, comment: string} $data */
     public function updateForClient(User $user, Food $food, Review $review, array $data): Review
     {
         abort_unless($review->user_id === $user->id, 403);
         abort_unless($review->food_id === $food->id, 404);
+
+        $review->update([
+            'rating' => $data['rating'],
+            'comment' => $data['comment'],
+            'status' => Review::STATUS_APPROVED,
+        ]);
+
+        return $review->refresh();
+    }
+
+    /** @param array{rating: int, comment: string} $data */
+    public function updateMarketForClient(User $user, NightMarket $nightMarket, Review $review, array $data): Review
+    {
+        abort_unless($review->user_id === $user->id, 403);
+        abort_unless($review->night_market_id === $nightMarket->id && $review->food_id === null, 404);
 
         $review->update([
             'rating' => $data['rating'],
@@ -101,6 +158,24 @@ class ReviewService
             'viewerReview' => $viewer?->role === User::ROLE_CLIENT
                 ? $this->reviewForClient($food, $viewer)
                 : null,
+        ];
+    }
+
+    /**
+     * @return array{reviews: LengthAwarePaginator<Review>, averageRating: float|null, reviewCount: int, ratingDistribution: array<int, int>, viewerReview: Review|null}
+     */
+    public function publicSummaryForMarket(NightMarket $nightMarket, ?User $viewer): array
+    {
+        $base = Review::query()->where('night_market_id', $nightMarket->id)->whereNull('food_id')->publiclyVisible();
+        $statistics = (clone $base)->selectRaw('COUNT(*) AS review_count, AVG(rating) AS average_rating')->first();
+        $countsByRating = (clone $base)->selectRaw('rating, COUNT(*) AS aggregate')->groupBy('rating')->pluck('aggregate', 'rating');
+
+        return [
+            'reviews' => (clone $base)->with('user:id,name,avatar_path')->latest('updated_at')->latest('id')->paginate(10, ['*'], 'market_reviews')->withQueryString(),
+            'averageRating' => (int) $statistics->review_count === 0 ? null : round((float) $statistics->average_rating, 1),
+            'reviewCount' => (int) $statistics->review_count,
+            'ratingDistribution' => collect(range(5, 1))->mapWithKeys(fn (int $rating) => [$rating => (int) ($countsByRating[$rating] ?? 0)])->all(),
+            'viewerReview' => $viewer?->role === User::ROLE_CLIENT ? $this->marketReviewForClient($nightMarket, $viewer) : null,
         ];
     }
 

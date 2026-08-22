@@ -30,5 +30,5 @@
 
 <div class="d-flex flex-wrap gap-2">
     <button type="submit" class="btn btn-market">{{ $submitLabel }}</button>
-    <a href="{{ route('foods.show', $food) }}" class="btn btn-outline-secondary">Cancel</a>
+    <a href="{{ $cancelUrl ?? route('foods.show', $food) }}" class="btn btn-outline-secondary">Cancel</a>
 </div>

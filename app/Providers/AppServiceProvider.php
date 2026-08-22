@@ -10,6 +10,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -31,6 +32,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if (parse_url((string) config('app.url'), PHP_URL_SCHEME) === 'https') {
+            URL::forceScheme('https');
+        }
+
         RateLimiter::for('verification-email', function (Request $request): Limit {
             return Limit::perMinute(1)
                 ->by((string) $request->user()?->getKey())

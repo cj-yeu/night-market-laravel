@@ -1,4 +1,9 @@
-@php($isAdmin = auth()->check() && auth()->user()->role === \App\Models\User::ROLE_ADMIN)
+@php
+    $currentUser = auth()->user();
+    $isAdmin = $currentUser?->role === \App\Models\User::ROLE_ADMIN;
+    $isClient = $currentUser?->role === \App\Models\User::ROLE_CLIENT;
+    $logoUrl = $isAdmin ? route('admin.dashboard') : ($isClient ? route('client.home') : route('home'));
+@endphp
 <!doctype html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
@@ -52,6 +57,21 @@
             .navbar-market .nav-link.active {
                 color: var(--market-orange-dark) !important;
             }
+
+            .navbar-market .nav-link.active {
+                border-bottom: 2px solid var(--market-orange);
+            }
+
+            .navbar-market .nav-link,
+            .navbar-market .navbar-toggler,
+            .navbar-market .btn {
+                min-height: 44px;
+                display: inline-flex;
+                align-items: center;
+            }
+
+            .dashboard-action { transition: transform .15s ease, box-shadow .15s ease; }
+            .dashboard-action:hover, .dashboard-action:focus { transform: translateY(-2px); box-shadow: 0 .9rem 2rem rgba(94, 55, 30, .18); }
 
             .market-card {
                 border: 0;
@@ -462,54 +482,24 @@
         @else
             <nav class="navbar navbar-expand-lg navbar-light navbar-market">
             <div class="container">
-                <a class="navbar-brand fw-bold" href="{{ url('/') }}">Night Market Selangor</a>
-
-                <div class="d-flex flex-wrap justify-content-end align-items-center gap-2">
-                    @guest
-                        <a class="nav-link fw-semibold me-2" href="{{ route('home') }}">Home</a>
-                        <a class="nav-link fw-semibold me-2" href="{{ route('night-markets.index') }}">
-                            Discover Markets
-                        </a>
-                        <a class="nav-link fw-semibold me-2" href="{{ route('stalls.index') }}">Explore Stalls</a>
-                        <a class="nav-link fw-semibold me-2" href="{{ route('foods.index', ['is_must_try' => '1']) }}">Must-Try Foods</a>
-                        <a
-                            class="btn btn-sm {{ request()->routeIs('login') ? 'btn-market' : 'btn-outline-secondary' }}"
-                            href="{{ route('login') }}"
-                        >
-                            Login
-                        </a>
-                        <a
-                            class="btn btn-sm {{ request()->routeIs('register') ? 'btn-market' : 'btn-outline-secondary' }}"
-                            href="{{ route('register') }}"
-                        >
-                            Register
-                        </a>
-                    @else
-                        @if (auth()->user()->role !== \App\Models\User::ROLE_ADMIN)
-                            <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">
-                                Home
-                            </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('night-markets.index') }}">
-                                Discover Markets
-                            </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('stalls.index') }}">Explore Stalls</a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('foods.index', ['is_must_try' => '1']) }}">Must-Try Foods</a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('client.visit-plans.index') }}">
-                                My Visit Plans
-                            </a>
+                <a class="navbar-brand fw-bold" href="{{ $logoUrl }}">Night Market Selangor</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNavigation" aria-controls="primaryNavigation" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
+                <div class="collapse navbar-collapse" id="primaryNavigation">
+                    <div class="navbar-nav ms-auto align-items-lg-center gap-lg-1 pt-2 pt-lg-0">
+                        @if (! $currentUser)
+                            @foreach ([['Home', 'home', 'home'], ['Discover Markets', 'night-markets.index', 'night-markets.*'], ['Explore Stalls', 'stalls.index', 'stalls.*'], ['Must-Try Foods', 'foods.index', 'foods.*']] as [$label, $routeName, $routePattern])
+                                <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs($routePattern) ? 'active' : '' }}" href="{{ route($routeName, $routeName === 'foods.index' ? ['is_must_try' => '1'] : []) }}" @if(request()->routeIs($routePattern)) aria-current="page" @endif>{{ $label }}</a>
+                            @endforeach
+                            <a class="btn btn-sm {{ request()->routeIs('login') ? 'btn-market' : 'btn-outline-secondary' }} ms-lg-2" href="{{ route('login') }}">Login</a>
+                            <a class="btn btn-sm btn-market ms-lg-1" href="{{ route('register') }}">Register</a>
+                        @elseif ($isClient)
+                            @foreach ([['Home', 'client.home'], ['Discover Markets', 'night-markets.*'], ['Explore Stalls', 'stalls.*'], ['Must-Try Foods', 'foods.*'], ['My Visit Plans', 'client.visit-plans.*']] as [$label, $routePattern])
+                                <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs($routePattern) ? 'active' : '' }}" href="{{ route(match($label) {'Home' => 'client.home', 'Discover Markets' => 'night-markets.index', 'Explore Stalls' => 'stalls.index', 'Must-Try Foods' => 'foods.index', default => 'client.visit-plans.index'}, $label === 'Must-Try Foods' ? ['is_must_try' => '1'] : []) }}" @if(request()->routeIs($routePattern)) aria-current="page" @endif>{{ $label }}</a>
+                            @endforeach
+                            <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs('profile.*') ? 'active' : '' }}" href="{{ route('profile.edit') }}" @if(request()->routeIs('profile.*')) aria-current="page" @endif><x-user-avatar :user="$currentUser" size="sm" /> <span>Profile</span></a>
+                            <form method="POST" action="{{ route('logout') }}" class="ms-lg-1">@csrf<button type="submit" class="btn btn-sm btn-outline-danger w-100">Logout</button></form>
                         @endif
-
-                        <a class="nav-link fw-semibold d-flex align-items-center gap-2 me-2"
-                            href="{{ route('profile.edit') }}">
-                            <x-user-avatar :user="auth()->user()" size="sm" />
-                            <span class="d-none d-sm-inline">Profile</span>
-                        </a>
-
-                        <form method="POST" action="{{ route('logout') }}">
-                            @csrf
-                            <button type="submit" class="btn btn-sm btn-outline-danger">Logout</button>
-                        </form>
-                    @endguest
+                    </div>
                 </div>
             </div>
             </nav>

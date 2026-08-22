@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StallFood\PublicFoodDiscoveryRequest;
 use App\Http\Requests\StallFood\PublicStallDiscoveryRequest;
 use App\Http\Requests\StallFood\StallFoodFilterRequest;
+use App\Models\Food;
 use App\Models\Stall;
+use App\Models\User;
 use App\Services\ReviewService;
 use App\Services\StallFoodService;
 use Illuminate\View\View;
@@ -60,7 +62,23 @@ class StallFoodDiscoveryController extends Controller
 
         return view('client.foods.show', [
             'food' => $food,
-            ...$this->reviewService->publicSummaryForFood($food, request()->user()),
+            ...$this->reviewContextForFood($food),
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function reviewContextForFood(Food $food): array
+    {
+        $viewer = request()->user();
+        $summary = $this->reviewService->publicSummaryForFood($food, $viewer);
+        $summary['reviewActions'] = match (true) {
+            $viewer === null => [['label' => 'Log in to Review', 'url' => route('login')], ['label' => 'Register to Review', 'url' => route('register')]],
+            $viewer->role !== User::ROLE_CLIENT => [],
+            ! $viewer->hasVerifiedEmail() => [['label' => 'Verify Email to Review', 'url' => route('verification.notice')]],
+            $summary['viewerReview'] !== null => [['label' => 'Edit My Review', 'url' => route('client.foods.reviews.edit', [$food, $summary['viewerReview']])]],
+            default => [['label' => 'Write a Review', 'url' => route('client.foods.reviews.create', $food)]],
+        };
+
+        return $summary;
     }
 }

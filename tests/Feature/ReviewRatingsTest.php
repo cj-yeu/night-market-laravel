@@ -75,7 +75,7 @@ class ReviewRatingsTest extends TestCase
         $this->assertDatabaseHas('reviews', [
             'user_id' => $this->client->id,
             'food_id' => $food->id,
-            'night_market_id' => $food->stall->night_market_id,
+            'night_market_id' => null,
             'rating' => 5,
             'comment' => 'Excellent noodles and friendly service.',
             'status' => Review::STATUS_APPROVED,
@@ -251,14 +251,14 @@ class ReviewRatingsTest extends TestCase
     public function test_legacy_market_reviews_are_preserved_but_not_guessed_onto_a_food(): void
     {
         $food = Food::factory()->create();
-        Review::factory()->count(2)->approved()->create([
+        Review::factory()->approved()->create([
             'user_id' => $this->client->id,
             'night_market_id' => $food->stall->night_market_id,
             'food_id' => null,
             'comment' => 'Legacy market feedback remains unassigned.',
         ]);
 
-        $this->assertDatabaseCount('reviews', 2);
+        $this->assertDatabaseCount('reviews', 1);
         $this->get(route('foods.show', $food))
             ->assertOk()->assertDontSee('Legacy market feedback remains unassigned.')->assertSee('No reviews yet.');
     }

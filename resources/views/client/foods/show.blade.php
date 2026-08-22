@@ -12,22 +12,9 @@
                     class="btn btn-outline-secondary">Back to Stalls</a>
                 <a href="{{ route('night-markets.show', $food->stall->night_market_id) }}"
                     class="btn btn-outline-secondary">Back to Market</a>
-                @guest
-                    <a href="{{ route('login') }}" class="btn btn-outline-secondary">Log in to Review</a>
-                    <a href="{{ route('register') }}" class="btn btn-outline-secondary">Register to Review</a>
-                @else
-                    @if (auth()->user()->role === \App\Models\User::ROLE_CLIENT)
-                        @if (! auth()->user()->hasVerifiedEmail())
-                            <a href="{{ route('verification.notice') }}" class="btn btn-outline-secondary">Verify Email to Review</a>
-                        @elseif ($viewerReview)
-                            <a href="{{ route('client.foods.reviews.edit', [$food, $viewerReview]) }}"
-                                class="btn btn-outline-secondary">Edit My Review</a>
-                        @else
-                            <a href="{{ route('client.foods.reviews.create', $food) }}"
-                                class="btn btn-outline-secondary">Write a Review</a>
-                        @endif
-                    @endif
-                @endguest
+                @foreach ($reviewActions as $reviewAction)
+                    <a href="{{ $reviewAction['url'] }}" class="btn btn-outline-secondary">{{ $reviewAction['label'] }}</a>
+                @endforeach
                 <a href="{{ route('client.visit-plans.index', ['item_type' => 'food', 'item_id' => $food->id]) }}"
                     class="btn btn-market">Add to Visit Plan</a>
             </div>

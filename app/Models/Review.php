@@ -38,6 +38,16 @@ class Review extends Model
         return $query->where('status', self::STATUS_APPROVED);
     }
 
+    public function isMarketReview(): bool
+    {
+        return $this->night_market_id !== null && $this->food_id === null;
+    }
+
+    public function isFoodReview(): bool
+    {
+        return $this->food_id !== null && $this->night_market_id === null;
+    }
+
     protected function casts(): array
     {
         return [

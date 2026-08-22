@@ -14,6 +14,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Railway terminates TLS at its proxy. Trust forwarded protocol headers so the
+        // application retains the original HTTPS scheme for routes, redirects and forms.
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
             EnsureAuthenticatedUserIsActive::class,
         ]);
