@@ -16,6 +16,8 @@ class CatalogAuditLog extends Model
 
     public const ENTITY_FOOD = 'food';
 
+    public const ENTITY_USER = 'user';
+
     protected $fillable = ['user_id', 'entity_type', 'entity_id', 'action', 'summary', 'changed_fields'];
 
     public $timestamps = false;

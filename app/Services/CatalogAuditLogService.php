@@ -74,6 +74,7 @@ class CatalogAuditLogService
             NightMarket::class => CatalogAuditLog::ENTITY_MARKET,
             Stall::class => CatalogAuditLog::ENTITY_STALL,
             Food::class => CatalogAuditLog::ENTITY_FOOD,
+            User::class => CatalogAuditLog::ENTITY_USER,
         };
     }
 

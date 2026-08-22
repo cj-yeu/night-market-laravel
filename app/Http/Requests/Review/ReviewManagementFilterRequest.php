@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\Review;
 
-use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -10,7 +9,7 @@ class ReviewManagementFilterRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_ADMIN;
+        return $this->user()?->hasAdminAccess() ?? false;
     }
 
     /**

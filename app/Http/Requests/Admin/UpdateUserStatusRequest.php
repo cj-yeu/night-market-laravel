@@ -11,7 +11,7 @@ class UpdateUserStatusRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_ADMIN;
+        return $this->user()?->hasAdminAccess() ?? false;
     }
 
     /**
@@ -23,7 +23,7 @@ class UpdateUserStatusRequest extends FormRequest
             'is_active' => ['required', 'boolean'],
             'redirect_to' => ['nullable', Rule::in(['index', 'show'])],
             'search' => ['nullable', 'string', 'max:100'],
-            'role' => ['nullable', Rule::in([User::ROLE_ADMIN, User::ROLE_CLIENT])],
+            'role' => ['nullable', Rule::in([User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN, User::ROLE_CLIENT])],
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
             'verification' => ['nullable', Rule::in(['verified', 'pending'])],
             'auth_method' => ['nullable', Rule::in([

@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\SocialMedia;
 
-use App\Models\User;
 use App\Rules\SupportedSocialMediaSourceUrl;
 use App\Services\SocialMediaUrlPolicy;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -12,7 +11,7 @@ class ExtractSocialMediaMetadataRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_ADMIN;
+        return $this->user()?->hasAdminAccess() ?? false;
     }
 
     /** @return array<string, ValidationRule|array<mixed>|string> */
