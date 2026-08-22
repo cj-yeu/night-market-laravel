@@ -47,6 +47,11 @@
                 <i class="bi bi-clipboard2-check-fill" aria-hidden="true"></i>Data Quality
             </a>
 
+            <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.catalog-activity.*') ? 'active' : '' }}"
+                href="{{ route('admin.catalog-activity.index') }}">
+                <i class="bi bi-clock-history" aria-hidden="true"></i>Activity Log
+            </a>
+
             <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.reviews.*') ? 'active' : '' }}"
                 href="{{ route('admin.reviews.index') }}">
                 <i class="bi bi-star-fill" aria-hidden="true"></i>Reviews
