@@ -24,6 +24,8 @@ class NightMarket extends Model
         'city',
         'state',
         'description',
+        'source_url',
+        'verified_at',
         'status',
     ];
 
@@ -55,6 +57,11 @@ class NightMarket extends Model
         return self::isOwnedImagePath($this->image_path)
             ? Storage::disk('public')->url($this->image_path)
             : null;
+    }
+
+    protected function casts(): array
+    {
+        return ['verified_at' => 'date'];
     }
 
     public function googleMapsUrl(): ?string

@@ -25,6 +25,8 @@ class UpdateNightMarketRequest extends FormRequest
             'address' => ['required', 'string', 'max:255'],
             'city' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:5000'],
+            'source_url' => ['nullable', 'url', 'max:255'],
+            'verified_at' => ['nullable', 'date', 'before_or_equal:today'],
             'operating_days' => ['required', 'array', 'min:1'],
             'operating_days.*.day_of_week' => ['required', 'distinct', Rule::in(MarketOperatingDay::DAYS)],
             'operating_days.*.opening_time' => ['required', 'date_format:H:i'],
@@ -39,6 +41,8 @@ class UpdateNightMarketRequest extends FormRequest
             'address' => str((string) $this->address)->squish()->value(),
             'city' => str((string) $this->city)->squish()->value(),
             'description' => $this->filled('description') ? trim((string) $this->description) : null,
+            'source_url' => $this->filled('source_url') ? trim((string) $this->source_url) : null,
+            'verified_at' => $this->filled('verified_at') ? $this->verified_at : null,
         ]);
     }
 

@@ -25,6 +25,8 @@ class StoreNightMarketRequest extends FormRequest
             'address' => ['required', 'string', 'max:255'],
             'city' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:5000'],
+            'source_url' => ['nullable', 'url', 'max:255'],
+            'verified_at' => ['nullable', 'date', 'before_or_equal:today'],
             'status' => ['required', Rule::in([NightMarket::STATUS_ACTIVE, NightMarket::STATUS_INACTIVE])],
             'operating_days' => ['required', 'array', 'min:1'],
             'operating_days.*.day_of_week' => [
@@ -44,6 +46,8 @@ class StoreNightMarketRequest extends FormRequest
             'address' => trim((string) $this->address),
             'city' => trim((string) $this->city),
             'description' => $this->filled('description') ? trim((string) $this->description) : null,
+            'source_url' => $this->filled('source_url') ? trim((string) $this->source_url) : null,
+            'verified_at' => $this->filled('verified_at') ? $this->verified_at : null,
         ]);
     }
 

@@ -10,10 +10,12 @@ use App\Http\Requests\StallFood\StoreStallRequest;
 use App\Http\Requests\StallFood\UpdateStallImageRequest;
 use App\Http\Requests\StallFood\UpdateStallRequest;
 use App\Models\Stall;
+use App\Services\AdminReturnUrlService;
 use App\Services\NightMarketService;
 use App\Services\StallFoodImageService;
 use App\Services\StallFoodService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class StallController extends Controller
@@ -22,6 +24,7 @@ class StallController extends Controller
         private readonly StallFoodService $stallFoodService,
         private readonly NightMarketService $nightMarketService,
         private readonly StallFoodImageService $stallFoodImageService,
+        private readonly AdminReturnUrlService $adminReturnUrlService,
     ) {}
 
     public function index(AdminStallFilterRequest $request): View
@@ -61,12 +64,13 @@ class StallController extends Controller
         ]);
     }
 
-    public function edit(Stall $stall): View
+    public function edit(Request $request, Stall $stall): View
     {
         return view('admin.stalls.edit', [
             'stall' => $this->stallFoodService->adminStallDetails($stall),
             'nightMarkets' => $this->nightMarketService->adminMarketOptions(),
             'halalStatuses' => Stall::halalStatusOptions(),
+            'returnTo' => $this->adminReturnUrlService->catalogQualityUrl($request),
         ]);
     }
 
@@ -74,9 +78,11 @@ class StallController extends Controller
     {
         $stall = $this->stallFoodService->updateStall($stall, $request->validated());
 
-        return redirect()
-            ->route('admin.stalls.show', $stall)
-            ->with('status', $stall->name.' was updated successfully.');
+        $redirect = $this->adminReturnUrlService->catalogQualityUrl($request)
+            ? redirect()->to($this->adminReturnUrlService->catalogQualityUrl($request))
+            : redirect()->route('admin.stalls.show', $stall);
+
+        return $redirect->with('status', $stall->name.' was updated successfully.');
     }
 
     public function activate(OperationalStatusRequest $request, Stall $stall): RedirectResponse

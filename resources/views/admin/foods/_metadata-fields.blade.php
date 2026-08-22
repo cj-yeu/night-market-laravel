@@ -23,6 +23,7 @@
         @error('price_checked_at') <div class="invalid-feedback">{{ $message }}</div> @enderror
     </div>
 </div>
+<div class="form-text mb-3">Use numeric prices only in the minimum and maximum fields; never derive them from display text.</div>
 
 <div class="mb-3">
     <label for="price_display" class="form-label">Price display text</label>
@@ -30,7 +31,7 @@
         class="form-control @error('price_display') is-invalid @enderror" maxlength="255"
         placeholder="For example: RM5 for 4 pieces or Market price">
     @error('price_display') <div class="invalid-feedback">{{ $message }}</div> @enderror
-    <div class="form-text">When provided, this text is displayed instead of the numeric price or range.</div>
+    <div class="form-text">When provided, this text is displayed instead of the numeric price or range. It is never parsed as a numeric price.</div>
 </div>
 
 <div class="mb-3">
@@ -38,7 +39,7 @@
     <textarea id="recommendation_reason" name="recommendation_reason" rows="3"
         class="form-control @error('recommendation_reason') is-invalid @enderror">{{ old('recommendation_reason', $currentFood?->recommendation_reason) }}</textarea>
     @error('recommendation_reason') <div class="invalid-feedback">{{ $message }}</div> @enderror
-    <div class="form-text">Shown publicly only while the food is marked Must-Try.</div>
+    <div class="form-text">Shown publicly only while the food is marked Must-Try. Explain the recommendation without inventing evidence.</div>
 </div>
 
 <div class="row g-3 mb-3">
@@ -49,6 +50,7 @@
             placeholder="https://example.com/source">
         @error('source_url') <div class="invalid-feedback">{{ $message }}</div> @enderror
     </div>
+    <div class="form-text">Link to the source used for food details and price information.</div>
     <div class="col-12 col-md-5">
         <label for="verified_at" class="form-label">Verification date</label>
         <input id="verified_at" name="verified_at" type="date"
@@ -56,4 +58,5 @@
             class="form-control @error('verified_at') is-invalid @enderror" max="{{ now()->toDateString() }}">
         @error('verified_at') <div class="invalid-feedback">{{ $message }}</div> @enderror
     </div>
+    <div class="form-text">Record when the food details were last checked. Leave blank rather than guess.</div>
 </div>

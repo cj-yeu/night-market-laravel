@@ -66,7 +66,7 @@
                         </dd>
 
                         @if ($food->verified_at)
-                            <dt class="col-sm-3">Verified</dt>
+                            <dt class="col-sm-3">Last verified</dt>
                             <dd class="col-sm-9">{{ $food->verified_at->format('M j, Y') }}</dd>
                         @endif
 
