@@ -39,7 +39,10 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME'),
+            // Laravel 12 uses a transport scheme. Keep MAIL_SCHEME as the explicit
+            // override while accepting the conventional MAIL_ENCRYPTION variable
+            // used by managed SMTP providers and existing Railway documentation.
+            'scheme' => env('MAIL_SCHEME', env('MAIL_ENCRYPTION') === 'ssl' ? 'smtps' : null),
             'url' => env('MAIL_URL'),
             'host' => env('MAIL_HOST', '127.0.0.1'),
             'port' => env('MAIL_PORT', 2525),
