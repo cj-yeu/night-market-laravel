@@ -35,6 +35,7 @@ class ReviewService
         return Review::query()
             ->where('food_id', $food->id)
             ->where('user_id', $user->id)
+            ->whereDate('review_date', Review::currentReviewDate())
             ->first();
     }
 
@@ -44,6 +45,7 @@ class ReviewService
             ->where('night_market_id', $nightMarket->id)
             ->whereNull('food_id')
             ->where('user_id', $user->id)
+            ->whereDate('review_date', Review::currentReviewDate())
             ->first();
     }
 
@@ -52,7 +54,7 @@ class ReviewService
     {
         if ($this->reviewForClient($food, $user) !== null) {
             throw ValidationException::withMessages([
-                'comment' => 'You have already reviewed this Food. Edit your existing review instead.',
+                'comment' => 'You have already reviewed this Food today. Edit your review or try again tomorrow.',
             ]);
         }
 
@@ -61,6 +63,7 @@ class ReviewService
                 'user_id' => $user->id,
                 'night_market_id' => null,
                 'food_id' => $food->id,
+                'review_date' => Review::currentReviewDate(),
                 'rating' => $data['rating'],
                 'comment' => $data['comment'],
                 'tags' => Review::tagsForFood($data['tags'] ?? []),
@@ -68,7 +71,7 @@ class ReviewService
             ]);
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
-                'comment' => 'You have already reviewed this Food. Edit your existing review instead.',
+                'comment' => 'You have already reviewed this Food today. Edit your review or try again tomorrow.',
             ]);
         }
     }
@@ -78,7 +81,7 @@ class ReviewService
     {
         if ($this->marketReviewForClient($nightMarket, $user) !== null) {
             throw ValidationException::withMessages([
-                'comment' => 'You have already reviewed this Night Market. Edit your existing review instead.',
+                'comment' => 'You have already reviewed this Night Market today. Edit your review or try again tomorrow.',
             ]);
         }
 
@@ -87,6 +90,7 @@ class ReviewService
                 'user_id' => $user->id,
                 'night_market_id' => $nightMarket->id,
                 'food_id' => null,
+                'review_date' => Review::currentReviewDate(),
                 'rating' => $data['rating'],
                 'comment' => $data['comment'],
                 'tags' => Review::tagsForMarket($data['tags'] ?? []),
@@ -94,7 +98,7 @@ class ReviewService
             ]);
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
-                'comment' => 'You have already reviewed this Night Market. Edit your existing review instead.',
+                'comment' => 'You have already reviewed this Night Market today. Edit your review or try again tomorrow.',
             ]);
         }
     }
@@ -104,6 +108,7 @@ class ReviewService
     {
         abort_unless($review->user_id === $user->id, 403);
         abort_unless($review->food_id === $food->id, 404);
+        abort_unless($review->review_date?->isSameDay(Review::currentReviewDate()), 403);
 
         $review->update([
             'rating' => $data['rating'],
@@ -120,6 +125,7 @@ class ReviewService
     {
         abort_unless($review->user_id === $user->id, 403);
         abort_unless($review->night_market_id === $nightMarket->id && $review->food_id === null, 404);
+        abort_unless($review->review_date?->isSameDay(Review::currentReviewDate()), 403);
 
         $review->update([
             'rating' => $data['rating'],

@@ -135,7 +135,7 @@ class ReviewRatingsTest extends TestCase
         $this->assertDatabaseCount('reviews', 5);
     }
 
-    public function test_one_review_per_client_per_food_is_guarded_in_application_and_database(): void
+    public function test_one_review_per_client_per_food_per_day_is_guarded_in_application_and_database(): void
     {
         $food = Food::factory()->create();
         $review = Review::factory()->forFood($food)->approved()->create(['user_id' => $this->client->id]);
@@ -150,7 +150,39 @@ class ReviewRatingsTest extends TestCase
         $this->assertDatabaseCount('reviews', 1);
     }
 
-    public function test_database_unique_index_rejects_a_duplicate_user_and_food_pair(): void
+    public function test_client_can_add_a_new_food_review_on_a_later_day_without_replacing_history(): void
+    {
+        $food = Food::factory()->create();
+        $yesterday = now(Review::REVIEW_TIMEZONE)->subDay()->toDateString();
+
+        Review::factory()->forFood($food)->approved()->create([
+            'user_id' => $this->client->id,
+            'review_date' => $yesterday,
+            'comment' => 'Yesterday the noodles were excellent.',
+        ]);
+
+        $this->actingAs($this->client)
+            ->get(route('client.foods.reviews.create', $food))
+            ->assertOk()
+            ->assertSee('Publish Review');
+
+        $this->actingAs($this->client)
+            ->post(route('client.foods.reviews.store', $food), $this->validReview([
+                'comment' => 'Today the noodles are still excellent.',
+            ]))
+            ->assertRedirect(route('foods.show', $food));
+
+        $this->assertSame(2, Review::query()
+            ->where('user_id', $this->client->id)
+            ->where('food_id', $food->id)
+            ->count());
+        $this->assertDatabaseHas('reviews', ['user_id' => $this->client->id, 'food_id' => $food->id, 'review_date' => Review::currentReviewDate()]);
+        $this->get(route('foods.show', $food))
+            ->assertSee('Yesterday the noodles were excellent.')
+            ->assertSee('Today the noodles are still excellent.');
+    }
+
+    public function test_database_unique_index_rejects_a_duplicate_user_and_food_pair_on_the_same_day(): void
     {
         $food = Food::factory()->create();
         Review::factory()->forFood($food)->approved()->create(['user_id' => $this->client->id]);
@@ -159,7 +191,11 @@ class ReviewRatingsTest extends TestCase
             Review::factory()->forFood($food)->approved()->create(['user_id' => $this->client->id]);
             $this->fail('The database accepted a duplicate user and Food review.');
         } catch (UniqueConstraintViolationException) {
-            $this->assertDatabaseCount('reviews', 1);
+            $this->assertSame(1, Review::query()
+                ->where('user_id', $this->client->id)
+                ->where('food_id', $food->id)
+                ->whereDate('review_date', Review::currentReviewDate())
+                ->count());
         }
     }
 

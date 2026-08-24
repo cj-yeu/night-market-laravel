@@ -38,10 +38,13 @@ class Review extends Model
         'family_friendly' => 'Family-friendly',
     ];
 
+    public const REVIEW_TIMEZONE = 'Asia/Kuala_Lumpur';
+
     protected $fillable = [
         'user_id',
         'night_market_id',
         'food_id',
+        'review_date',
         'rating',
         'comment',
         'tags',
@@ -68,7 +71,13 @@ class Review extends Model
         return [
             'rating' => 'integer',
             'tags' => 'array',
+            'review_date' => 'date',
         ];
+    }
+
+    public static function currentReviewDate(): string
+    {
+        return now(self::REVIEW_TIMEZONE)->toDateString();
     }
 
     /** @return array<string, string> */

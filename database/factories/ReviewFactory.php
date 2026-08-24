@@ -23,6 +23,7 @@ class ReviewFactory extends Factory
         return [
             'user_id' => User::factory(),
             'night_market_id' => NightMarket::factory(),
+            'review_date' => Review::currentReviewDate(),
             'rating' => fake()->numberBetween(1, 5),
             'comment' => fake()->sentence(12),
             'status' => Review::STATUS_PENDING,

@@ -129,7 +129,7 @@
                                         </div>
                                     @endif
                                     <small class="text-secondary">
-                                        {{ $review->created_at->format('M j, Y') }}
+                                        Reviewed {{ $review->review_date->format('M j, Y') }}
                                         @if ($review->updated_at->gt($review->created_at))
                                             · Updated {{ $review->updated_at->format('M j, Y') }}
                                         @endif

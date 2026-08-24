@@ -47,6 +47,7 @@ class ReviewController extends Controller
         $food = $this->reviewService->findPubliclyVisibleFood($food->id);
         abort_unless($review->user_id === $request->user()->id, 403);
         abort_unless($review->food_id === $food->id, 404);
+        abort_unless($review->review_date?->isSameDay(Review::currentReviewDate()), 403);
 
         return view('client.reviews.edit', compact('food', 'review') + ['tagOptions' => Review::foodTagOptions()]);
     }
@@ -86,6 +87,7 @@ class ReviewController extends Controller
         $nightMarket = $this->reviewService->findPubliclyVisibleMarket($nightMarket->id);
         abort_unless($review->user_id === $request->user()->id, 403);
         abort_unless($review->night_market_id === $nightMarket->id && $review->food_id === null, 404);
+        abort_unless($review->review_date?->isSameDay(Review::currentReviewDate()), 403);
 
         return view('client.reviews.market-edit', compact('nightMarket', 'review') + ['tagOptions' => Review::marketTagOptions()]);
     }

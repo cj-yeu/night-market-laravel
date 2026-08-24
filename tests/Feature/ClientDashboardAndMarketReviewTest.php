@@ -66,6 +66,35 @@ class ClientDashboardAndMarketReviewTest extends TestCase
         }
     }
 
+    public function test_client_can_add_a_new_market_review_on_a_later_day_without_replacing_history(): void
+    {
+        $market = NightMarket::factory()->create();
+
+        Review::factory()->approved()->create([
+            'user_id' => $this->client->id,
+            'night_market_id' => $market->id,
+            'food_id' => null,
+            'review_date' => now(Review::REVIEW_TIMEZONE)->subDay()->toDateString(),
+            'comment' => 'Yesterday there were many delicious choices.',
+        ]);
+
+        $this->actingAs($this->client)
+            ->post(route('client.night-markets.reviews.store', $market), [
+                'rating' => 4,
+                'comment' => 'Today the market still has great choices.',
+            ])
+            ->assertRedirect(route('night-markets.show', $market));
+
+        $this->assertSame(2, Review::query()
+            ->where('user_id', $this->client->id)
+            ->where('night_market_id', $market->id)
+            ->count());
+        $this->assertDatabaseHas('reviews', ['user_id' => $this->client->id, 'night_market_id' => $market->id, 'review_date' => Review::currentReviewDate()]);
+        $this->get(route('night-markets.show', $market))
+            ->assertSee('Yesterday there were many delicious choices.')
+            ->assertSee('Today the market still has great choices.');
+    }
+
     public function test_market_review_access_and_target_rules_are_enforced(): void
     {
         $market = NightMarket::factory()->create();
