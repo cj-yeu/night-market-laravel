@@ -243,6 +243,50 @@ class ReviewRatingsTest extends TestCase
         $this->assertSame($food->id, $review->fresh()->food_id);
     }
 
+    public function test_client_can_delete_only_own_food_review_and_replace_it_that_day(): void
+    {
+        $food = Food::factory()->create();
+        $review = Review::factory()->forFood($food)->approved()->create(['user_id' => $this->client->id]);
+        $otherReview = Review::factory()->forFood($food)->approved()->create();
+
+        $this->actingAs($this->client)
+            ->delete(route('client.foods.reviews.destroy', [$food, $otherReview]))
+            ->assertForbidden();
+
+        $this->actingAs($this->client)
+            ->delete(route('client.foods.reviews.destroy', [$food, $review]))
+            ->assertRedirect(route('foods.show', $food))
+            ->assertSessionHas('status', 'Your review has been deleted.');
+
+        $this->assertDatabaseMissing('reviews', ['id' => $review->id]);
+        $this->get(route('foods.show', $food))->assertDontSee($review->comment);
+        $this->actingAs($this->client)
+            ->post(route('client.foods.reviews.store', $food), $this->validReview())
+            ->assertRedirect(route('foods.show', $food));
+    }
+
+    public function test_client_can_delete_only_own_market_review_and_replace_it_that_day(): void
+    {
+        $market = NightMarket::factory()->create();
+        $review = Review::factory()->approved()->create(['user_id' => $this->client->id, 'night_market_id' => $market->id, 'food_id' => null]);
+        $otherReview = Review::factory()->approved()->create(['night_market_id' => $market->id, 'food_id' => null]);
+
+        $this->actingAs($this->client)
+            ->delete(route('client.night-markets.reviews.destroy', [$market, $otherReview]))
+            ->assertForbidden();
+
+        $this->actingAs($this->client)
+            ->delete(route('client.night-markets.reviews.destroy', [$market, $review]))
+            ->assertRedirect(route('night-markets.show', $market))
+            ->assertSessionHas('status', 'Your market review has been deleted.');
+
+        $this->assertDatabaseMissing('reviews', ['id' => $review->id]);
+        $this->get(route('night-markets.show', $market))->assertDontSee($review->comment);
+        $this->actingAs($this->client)
+            ->post(route('client.night-markets.reviews.store', $market), $this->validReview())
+            ->assertRedirect(route('night-markets.show', $market));
+    }
+
     public function test_reviews_are_rejected_for_non_public_food_stall_or_market(): void
     {
         $inactiveFood = Food::factory()->inactive()->create();
@@ -331,6 +375,47 @@ class ReviewRatingsTest extends TestCase
             ->assertDontSee('Write a Review')->assertDontSee('Edit My Review');
     }
 
+    public function test_client_can_view_only_own_review_history_and_filter_by_target_type(): void
+    {
+        $food = Food::factory()->create(['name' => 'History Food']);
+        $market = NightMarket::factory()->create(['name' => 'History Market']);
+        $foodReview = Review::factory()->forFood($food)->approved()->create([
+            'user_id' => $this->client->id,
+            'comment' => 'My food review history entry.',
+        ]);
+        $marketReview = Review::factory()->approved()->create([
+            'user_id' => $this->client->id,
+            'night_market_id' => $market->id,
+            'food_id' => null,
+            'comment' => 'My market review history entry.',
+        ]);
+        Review::factory()->forFood($food)->approved()->create(['comment' => 'Another client private review.']);
+
+        $this->actingAs($this->client)
+            ->get(route('client.reviews.index'))
+            ->assertOk()
+            ->assertSee('My Reviews')
+            ->assertSee($foodReview->comment)
+            ->assertSee($marketReview->comment)
+            ->assertDontSee('Another client private review.')
+            ->assertSee(route('client.foods.reviews.edit', [$food, $foodReview]), false)
+            ->assertSee(route('client.night-markets.reviews.edit', [$market, $marketReview]), false);
+
+        $this->actingAs($this->client)
+            ->get(route('client.reviews.index', ['type' => 'food']))
+            ->assertOk()
+            ->assertSee($foodReview->comment)
+            ->assertDontSee($marketReview->comment);
+
+        $this->actingAs($this->client)
+            ->get(route('client.reviews.index', ['type' => 'market']))
+            ->assertOk()
+            ->assertSee($marketReview->comment)
+            ->assertDontSee($foodReview->comment);
+
+        $this->actingAs($this->client)->get(route('client.reviews.index', ['type' => 'invalid']))->assertNotFound();
+    }
+
     public function test_admin_access_is_authorized_and_management_hides_sensitive_user_fields(): void
     {
         $food = Food::factory()->create();
@@ -403,7 +488,8 @@ class ReviewRatingsTest extends TestCase
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
 
         $this->assertFalse(app('router')->has('admin.reviews.update'));
-        $this->assertFalse(app('router')->has('client.foods.reviews.destroy'));
+        $this->assertTrue(app('router')->has('client.foods.reviews.destroy'));
+        $this->assertTrue(app('router')->has('client.night-markets.reviews.destroy'));
         $this->actingAs($admin)->patch('/admin/reviews/'.$review->id, ['status' => Review::STATUS_APPROVED])->assertMethodNotAllowed();
         $this->actingAs($admin)->get('/admin/reviews/'.$review->id)->assertMethodNotAllowed();
         $this->assertDatabaseHas('reviews', ['id' => $review->id]);

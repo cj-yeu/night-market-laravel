@@ -49,6 +49,25 @@ class ReviewService
             ->first();
     }
 
+    /** @return LengthAwarePaginator<Review> */
+    public function reviewHistoryForClient(User $user, string $type = 'all'): LengthAwarePaginator
+    {
+        return Review::query()
+            ->where('user_id', $user->id)
+            ->with([
+                'food:id,stall_id,name',
+                'food.stall:id,night_market_id,name',
+                'nightMarket:id,name',
+            ])
+            ->when($type === 'food', fn ($query) => $query->whereNotNull('food_id'))
+            ->when($type === 'market', fn ($query) => $query->whereNull('food_id')->whereNotNull('night_market_id'))
+            ->orderByDesc('review_date')
+            ->latest('updated_at')
+            ->latest('id')
+            ->paginate(10)
+            ->withQueryString();
+    }
+
     /** @param array{rating: int, comment: string} $data */
     public function createForClient(User $user, Food $food, array $data): Review
     {
@@ -135,6 +154,22 @@ class ReviewService
         ]);
 
         return $review->refresh();
+    }
+
+    public function deleteForClient(User $user, Food $food, Review $review): void
+    {
+        abort_unless($review->user_id === $user->id, 403);
+        abort_unless($review->food_id === $food->id, 404);
+
+        $review->delete();
+    }
+
+    public function deleteMarketForClient(User $user, NightMarket $nightMarket, Review $review): void
+    {
+        abort_unless($review->user_id === $user->id, 403);
+        abort_unless($review->night_market_id === $nightMarket->id && $review->food_id === null, 404);
+
+        $review->delete();
     }
 
     /**

@@ -11,13 +11,15 @@
                         <div>
                             <h1 class="h3 fw-bold text-market mb-1">My Profile</h1>
                             <p class="text-secondary mb-0">Update your personal account information.</p>
-                            <span class="badge {{ $user->hasVerifiedEmail() ? 'text-bg-success' : 'text-bg-warning' }} mt-2">
-                                Email: {{ $user->hasVerifiedEmail() ? 'Verified' : 'Verification pending' }}
-                            </span>
                         </div>
-                        <a href="{{ route('profile.password.edit') }}" class="btn btn-outline-secondary align-self-start">
-                            Change Password
-                        </a>
+                        <div class="d-flex flex-wrap gap-2 align-self-start">
+                            @if ($user->role === \App\Models\User::ROLE_CLIENT)
+                                <a href="{{ route('client.reviews.index') }}" class="btn btn-outline-secondary">
+                                    <i class="bi bi-chat-square-text me-1" aria-hidden="true"></i>My Reviews
+                                </a>
+                            @endif
+                            <a href="{{ route('profile.password.edit') }}" class="btn btn-outline-secondary">Change Password</a>
+                        </div>
                     </div>
 
                     <section class="border rounded-3 bg-light p-3 p-md-4 mb-4" aria-labelledby="profile-image-heading">
@@ -88,7 +90,12 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="email" class="form-label">Email Address</label>
+                            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                                <label for="email" class="form-label mb-0">Email Address</label>
+                                <span class="badge {{ $user->hasVerifiedEmail() ? 'text-bg-success' : 'text-bg-warning' }}">
+                                    {{ $user->hasVerifiedEmail() ? 'Verified' : 'Verification pending' }}
+                                </span>
+                            </div>
                             <input
                                 type="email"
                                 class="form-control @error('email') is-invalid @enderror"

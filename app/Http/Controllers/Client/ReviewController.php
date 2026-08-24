@@ -32,6 +32,17 @@ class ReviewController extends Controller
         ]);
     }
 
+    public function index(Request $request): View
+    {
+        $type = $request->query('type', 'all');
+        abort_unless(in_array($type, ['all', 'food', 'market'], true), 404);
+
+        return view('client.reviews.index', [
+            'reviews' => $this->reviewService->reviewHistoryForClient($request->user(), $type),
+            'type' => $type,
+        ]);
+    }
+
     public function store(StoreReviewRequest $request, Food $food): RedirectResponse
     {
         $food = $this->reviewService->findPubliclyVisibleFood($food->id);
@@ -60,6 +71,16 @@ class ReviewController extends Controller
         return redirect()
             ->route('foods.show', $food)
             ->with('status', 'Your review has been updated and remains published.');
+    }
+
+    public function destroy(Request $request, Food $food, Review $review): RedirectResponse
+    {
+        $food = $this->reviewService->findPubliclyVisibleFood($food->id);
+        $this->reviewService->deleteForClient($request->user(), $food, $review);
+
+        return redirect()
+            ->route('foods.show', $food)
+            ->with('status', 'Your review has been deleted.');
     }
 
     public function createMarket(Request $request, NightMarket $nightMarket): View|RedirectResponse
@@ -98,5 +119,13 @@ class ReviewController extends Controller
         $this->reviewService->updateMarketForClient($request->user(), $nightMarket, $review, $request->validated());
 
         return redirect()->route('night-markets.show', $nightMarket)->with('status', 'Your market review has been updated and remains published.');
+    }
+
+    public function destroyMarket(Request $request, NightMarket $nightMarket, Review $review): RedirectResponse
+    {
+        $nightMarket = $this->reviewService->findPubliclyVisibleMarket($nightMarket->id);
+        $this->reviewService->deleteMarketForClient($request->user(), $nightMarket, $review);
+
+        return redirect()->route('night-markets.show', $nightMarket)->with('status', 'Your market review has been deleted.');
     }
 }

@@ -13,6 +13,12 @@
                 @method('PATCH')
                 @include('client.reviews.partials.fields', ['submitLabel' => 'Update Market Review', 'cancelUrl' => route('night-markets.show', $nightMarket)])
             </form>
+            <form method="POST" action="{{ route('client.night-markets.reviews.destroy', [$nightMarket, $review]) }}" class="mt-3"
+                onsubmit="return confirm('Delete this review? It will no longer be visible and cannot be restored.');">
+                @csrf
+                @method('DELETE')
+                <button type="submit" class="btn btn-outline-danger">Delete My Market Review</button>
+            </form>
         </div></div>
     </div></div>
 @endsection
