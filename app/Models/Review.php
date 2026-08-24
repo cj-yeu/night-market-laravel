@@ -24,12 +24,27 @@ class Review extends Model
         self::STATUS_REJECTED,
     ];
 
+    public const FOOD_TAGS = [
+        'tasty' => 'Tasty',
+        'good_value' => 'Good value',
+        'large_portion' => 'Large portion',
+        'long_queue' => 'Long queue',
+    ];
+
+    public const MARKET_TAGS = [
+        'many_choices' => 'Many choices',
+        'clean' => 'Clean',
+        'easy_parking' => 'Easy parking',
+        'family_friendly' => 'Family-friendly',
+    ];
+
     protected $fillable = [
         'user_id',
         'night_market_id',
         'food_id',
         'rating',
         'comment',
+        'tags',
         'status',
     ];
 
@@ -52,7 +67,32 @@ class Review extends Model
     {
         return [
             'rating' => 'integer',
+            'tags' => 'array',
         ];
+    }
+
+    /** @return array<string, string> */
+    public static function foodTagOptions(): array
+    {
+        return self::FOOD_TAGS;
+    }
+
+    /** @return array<string, string> */
+    public static function marketTagOptions(): array
+    {
+        return self::MARKET_TAGS;
+    }
+
+    /** @return list<string> */
+    public static function tagsForFood(array $tags): array
+    {
+        return array_values(array_intersect($tags, array_keys(self::FOOD_TAGS)));
+    }
+
+    /** @return list<string> */
+    public static function tagsForMarket(array $tags): array
+    {
+        return array_values(array_intersect($tags, array_keys(self::MARKET_TAGS)));
     }
 
     public function user(): BelongsTo

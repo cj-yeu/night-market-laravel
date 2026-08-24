@@ -63,7 +63,10 @@ class ReviewRatingsTest extends TestCase
 
         $this->actingAs($this->client)
             ->post(route('client.foods.reviews.store', $food), [
-                ...$this->validReview(['comment' => '  Excellent noodles and friendly service.  ']),
+                ...$this->validReview([
+                    'comment' => '  Excellent noodles and friendly service.  ',
+                    'tags' => ['tasty', 'good_value'],
+                ]),
                 'user_id' => $otherUser->id,
                 'food_id' => $otherFood->id,
                 'status' => Review::STATUS_REJECTED,
@@ -81,7 +84,9 @@ class ReviewRatingsTest extends TestCase
             'status' => Review::STATUS_APPROVED,
         ]);
         $this->get(route('foods.show', $food))
-            ->assertOk()->assertSee('Excellent noodles and friendly service.')->assertSee('5.0/5');
+            ->assertOk()->assertSee('Excellent noodles and friendly service.')->assertSee('Tasty')->assertSee('Good value')->assertSee('5.0/5');
+
+        $this->assertSame(['tasty', 'good_value'], Review::query()->where('user_id', $this->client->id)->firstOrFail()->tags);
     }
 
     public function test_invalid_and_whitespace_only_reviews_are_rejected_without_consuming_rate_limit(): void
@@ -100,6 +105,15 @@ class ReviewRatingsTest extends TestCase
 
         $this->assertSame(0, RateLimiter::attempts($this->rateLimitKey($this->client)));
         $this->assertDatabaseCount('reviews', 0);
+    }
+
+    public function test_review_tags_are_limited_to_the_allowed_food_choices(): void
+    {
+        $food = Food::factory()->create();
+
+        $this->actingAs($this->client)
+            ->post(route('client.foods.reviews.store', $food), $this->validReview(['tags' => ['easy_parking']]))
+            ->assertSessionHasErrors(['tags.0']);
     }
 
     public function test_rate_limiter_blocks_the_sixth_valid_submission_attempt(): void

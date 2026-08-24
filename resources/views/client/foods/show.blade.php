@@ -119,10 +119,19 @@
                                         </span>
                                     </div>
                                     <p class="mb-1">{{ $review->comment }}</p>
+                                    @if ($review->tags)
+                                        <div class="d-flex flex-wrap gap-1 mb-2">
+                                            @foreach ($review->tags as $tag)
+                                                @if (isset(\App\Models\Review::FOOD_TAGS[$tag]))
+                                                    <span class="badge text-bg-light border text-secondary">{{ \App\Models\Review::FOOD_TAGS[$tag] }}</span>
+                                                @endif
+                                            @endforeach
+                                        </div>
+                                    @endif
                                     <small class="text-secondary">
-                                        {{ $review->created_at->format('M j, Y') }}
+                                        Posted {{ $review->created_at->format('M j, Y, g:i A') }}
                                         @if ($review->updated_at->gt($review->created_at))
-                                            · Updated {{ $review->updated_at->format('M j, Y') }}
+                                            · Updated {{ $review->updated_at->format('M j, Y, g:i A') }}
                                         @endif
                                     </small>
                                 </article>

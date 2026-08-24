@@ -63,6 +63,7 @@ class ReviewService
                 'food_id' => $food->id,
                 'rating' => $data['rating'],
                 'comment' => $data['comment'],
+                'tags' => Review::tagsForFood($data['tags'] ?? []),
                 'status' => Review::STATUS_APPROVED,
             ]);
         } catch (UniqueConstraintViolationException) {
@@ -88,6 +89,7 @@ class ReviewService
                 'food_id' => null,
                 'rating' => $data['rating'],
                 'comment' => $data['comment'],
+                'tags' => Review::tagsForMarket($data['tags'] ?? []),
                 'status' => Review::STATUS_APPROVED,
             ]);
         } catch (UniqueConstraintViolationException) {
@@ -106,6 +108,7 @@ class ReviewService
         $review->update([
             'rating' => $data['rating'],
             'comment' => $data['comment'],
+            'tags' => Review::tagsForFood($data['tags'] ?? []),
             'status' => Review::STATUS_APPROVED,
         ]);
 
@@ -121,6 +124,7 @@ class ReviewService
         $review->update([
             'rating' => $data['rating'],
             'comment' => $data['comment'],
+            'tags' => Review::tagsForMarket($data['tags'] ?? []),
             'status' => Review::STATUS_APPROVED,
         ]);
 

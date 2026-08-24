@@ -28,6 +28,7 @@ class ReviewController extends Controller
 
         return view('client.reviews.create', [
             'food' => $food,
+            'tagOptions' => Review::foodTagOptions(),
         ]);
     }
 
@@ -47,7 +48,7 @@ class ReviewController extends Controller
         abort_unless($review->user_id === $request->user()->id, 403);
         abort_unless($review->food_id === $food->id, 404);
 
-        return view('client.reviews.edit', compact('food', 'review'));
+        return view('client.reviews.edit', compact('food', 'review') + ['tagOptions' => Review::foodTagOptions()]);
     }
 
     public function update(UpdateReviewRequest $request, Food $food, Review $review): RedirectResponse
@@ -69,7 +70,7 @@ class ReviewController extends Controller
             return redirect()->route('client.night-markets.reviews.edit', [$nightMarket, $review]);
         }
 
-        return view('client.reviews.market-create', compact('nightMarket'));
+        return view('client.reviews.market-create', compact('nightMarket') + ['tagOptions' => Review::marketTagOptions()]);
     }
 
     public function storeMarket(StoreReviewRequest $request, NightMarket $nightMarket): RedirectResponse
@@ -86,7 +87,7 @@ class ReviewController extends Controller
         abort_unless($review->user_id === $request->user()->id, 403);
         abort_unless($review->night_market_id === $nightMarket->id && $review->food_id === null, 404);
 
-        return view('client.reviews.market-edit', compact('nightMarket', 'review'));
+        return view('client.reviews.market-edit', compact('nightMarket', 'review') + ['tagOptions' => Review::marketTagOptions()]);
     }
 
     public function updateMarket(UpdateReviewRequest $request, NightMarket $nightMarket, Review $review): RedirectResponse

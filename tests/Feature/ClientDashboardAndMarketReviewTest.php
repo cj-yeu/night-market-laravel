@@ -46,16 +46,17 @@ class ClientDashboardAndMarketReviewTest extends TestCase
     public function test_market_reviews_are_directly_published_unique_owned_and_public(): void
     {
         $market = NightMarket::factory()->create();
-        $payload = ['rating' => 5, 'comment' => '  A detailed market review for visitors.  '];
+        $payload = ['rating' => 5, 'comment' => '  A detailed market review for visitors.  ', 'tags' => ['many_choices', 'family_friendly']];
 
         $this->actingAs($this->client)->post(route('client.night-markets.reviews.store', $market), $payload)
             ->assertRedirect(route('night-markets.show', $market));
         $review = Review::query()->where('user_id', $this->client->id)->firstOrFail();
         $this->assertDatabaseHas('reviews', ['id' => $review->id, 'night_market_id' => $market->id, 'food_id' => null, 'comment' => 'A detailed market review for visitors.', 'status' => Review::STATUS_APPROVED]);
+        $this->assertSame(['many_choices', 'family_friendly'], $review->tags);
 
         $this->actingAs($this->client)->post(route('client.night-markets.reviews.store', $market), $payload)->assertSessionHasErrors('comment');
-        $this->actingAs($this->client)->patch(route('client.night-markets.reviews.update', [$market, $review]), ['rating' => 4, 'comment' => 'Updated market review remains public.'])->assertRedirect(route('night-markets.show', $market));
-        $this->get(route('night-markets.show', $market))->assertSee('Updated market review remains public.')->assertSee('4.0/5');
+        $this->actingAs($this->client)->patch(route('client.night-markets.reviews.update', [$market, $review]), ['rating' => 4, 'comment' => 'Updated market review remains public.', 'tags' => ['many_choices', 'family_friendly']])->assertRedirect(route('night-markets.show', $market));
+        $this->get(route('night-markets.show', $market))->assertSee('Updated market review remains public.')->assertSee('Many choices')->assertSee('Family-friendly')->assertSee('4.0/5');
 
         try {
             Review::factory()->approved()->create(['user_id' => $this->client->id, 'night_market_id' => $market->id, 'food_id' => null]);
