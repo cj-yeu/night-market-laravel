@@ -42,7 +42,10 @@
     <label for="comment" class="form-label">Comment</label>
     <textarea class="form-control @error('comment') is-invalid @enderror" id="comment" name="comment"
         rows="5" minlength="10" maxlength="1000" required>{{ old('comment', $review->comment ?? '') }}</textarea>
-    <div class="form-text">Enter between 10 and 1,000 characters.</div>
+    <div class="d-flex justify-content-between gap-2 form-text">
+        <span>Enter between 10 and 1,000 characters.</span>
+        <span id="comment-count" aria-live="polite">0 / 1000 characters</span>
+    </div>
     @error('comment')
         <div class="invalid-feedback">{{ $message }}</div>
     @enderror
@@ -52,3 +55,21 @@
     <button type="submit" class="btn btn-market">{{ $submitLabel }}</button>
     <a href="{{ $cancelUrl ?? route('foods.show', $food) }}" class="btn btn-outline-secondary">Cancel</a>
 </div>
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const comment = document.querySelector('#comment');
+            const counter = document.querySelector('#comment-count');
+
+            if (!comment || !counter) return;
+
+            const updateCounter = () => {
+                counter.textContent = `${comment.value.length} / ${comment.maxLength} characters`;
+            };
+
+            comment.addEventListener('input', updateCounter);
+            updateCounter();
+        });
+    </script>
+@endpush

@@ -129,9 +129,9 @@
                                         </div>
                                     @endif
                                     <small class="text-secondary">
-                                        Posted {{ $review->created_at->format('M j, Y, g:i A') }}
+                                        {{ $review->created_at->format('M j, Y') }}
                                         @if ($review->updated_at->gt($review->created_at))
-                                            · Updated {{ $review->updated_at->format('M j, Y, g:i A') }}
+                                            · Updated {{ $review->updated_at->format('M j, Y') }}
                                         @endif
                                     </small>
                                 </article>
