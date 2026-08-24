@@ -21,9 +21,6 @@
                         @endif
                         <a href="{{ route('client.visit-plans.create', ['night_market_id' => $nightMarket->id]) }}"
                             class="btn btn-outline-secondary">Plan a Visit to This Market</a>
-                        @foreach ($reviewActions as $reviewAction)
-                            <a href="{{ $reviewAction['url'] }}" class="btn btn-outline-secondary">{{ $reviewAction['label'] }}</a>
-                        @endforeach
                         @if ($nightMarket->googleMapsUrl())
                             <a href="{{ $nightMarket->googleMapsUrl() }}" class="btn btn-outline-secondary"
                                 target="_blank" rel="noopener noreferrer">View on Google Maps</a>
@@ -127,7 +124,13 @@
             <section class="card market-card mb-4" aria-labelledby="market-reviews-heading">
                 <div class="card-body p-4 p-md-5">
                     <div class="d-flex flex-column flex-sm-row justify-content-between gap-2 mb-4">
-                        <div><h2 id="market-reviews-heading" class="h4 fw-bold text-market mb-1">Night Market Reviews</h2><p class="text-secondary mb-0">Directly published visitor feedback for {{ $nightMarket->name }}.</p></div>
+                        <div>
+                            <h2 id="market-reviews-heading" class="h4 fw-bold text-market mb-1">Night Market Reviews</h2>
+                            <p class="text-secondary mb-0">Directly published visitor feedback for {{ $nightMarket->name }}.</p>
+                            @foreach ($reviewActions as $reviewAction)
+                                <a href="{{ $reviewAction['url'] }}" class="btn btn-market mt-3">{{ $reviewAction['label'] }}</a>
+                            @endforeach
+                        </div>
                         @if ($reviewCount > 0)<div><strong>{{ number_format($averageRating, 1) }}/5</strong> <span class="text-secondary">from {{ $reviewCount }} {{ $reviewCount === 1 ? 'review' : 'reviews' }}</span></div>@endif
                     </div>
                     @if ($reviews->isEmpty())

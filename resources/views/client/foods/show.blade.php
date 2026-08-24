@@ -12,9 +12,6 @@
                     class="btn btn-outline-secondary">Back to Stalls</a>
                 <a href="{{ route('night-markets.show', $food->stall->night_market_id) }}"
                     class="btn btn-outline-secondary">Back to Market</a>
-                @foreach ($reviewActions as $reviewAction)
-                    <a href="{{ $reviewAction['url'] }}" class="btn btn-outline-secondary">{{ $reviewAction['label'] }}</a>
-                @endforeach
                 <a href="{{ route('client.visit-plans.index', ['item_type' => 'food', 'item_id' => $food->id]) }}"
                     class="btn btn-market">Add to Visit Plan</a>
             </div>
@@ -87,6 +84,9 @@
                         <div>
                             <h2 id="food-reviews-heading" class="h4 fw-bold text-market mb-1">Food Reviews</h2>
                             <p class="text-secondary mb-0">Directly published feedback for {{ $food->name }}.</p>
+                            @foreach ($reviewActions as $reviewAction)
+                                <a href="{{ $reviewAction['url'] }}" class="btn btn-market mt-3">{{ $reviewAction['label'] }}</a>
+                            @endforeach
                         </div>
                         @if ($reviewCount > 0)
                             <div class="text-sm-end">
