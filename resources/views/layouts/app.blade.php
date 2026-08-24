@@ -226,6 +226,22 @@
                 border-radius: 50%;
             }
 
+            .review-tag {
+                display: inline-flex;
+                align-items: center;
+                min-height: 1.65rem;
+                padding: 0.2rem 0.55rem;
+                border-radius: 999px;
+                font-size: 0.78rem;
+                font-weight: 600;
+            }
+
+            .review-tag-warm { color: #8f3d14; background: #ffe1bd; }
+            .review-tag-positive { color: #17663a; background: #d9f3e2; }
+            .review-tag-info { color: #155f7a; background: #d9f1f8; }
+            .review-tag-caution { color: #815d05; background: #fff1bd; }
+            .review-tag-neutral { color: #52616b; background: #edf0f2; }
+
             .admin-layout {
                 background: var(--admin-cream);
                 color: var(--admin-body-text);

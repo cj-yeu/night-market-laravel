@@ -96,7 +96,10 @@
                         @endif
                     </div>
                     @if ($reviews->isEmpty())
-                        <div class="alert alert-info mb-0">No reviews yet. Be the first verified Client to review this Food.</div>
+                        <div class="alert alert-info text-center mb-0">
+                            <i class="bi bi-chat-square-text fs-3 d-block mb-2" aria-hidden="true"></i>
+                            No reviews yet. Be the first verified Client to review this Food.
+                        </div>
                     @else
                         <div class="row g-2 mb-4" aria-label="Rating distribution">
                             @foreach ($ratingDistribution as $rating => $count)
@@ -123,7 +126,7 @@
                                         <div class="d-flex flex-wrap gap-1 mb-2">
                                             @foreach ($review->tags as $tag)
                                                 @if (isset(\App\Models\Review::FOOD_TAGS[$tag]))
-                                                    <span class="badge text-bg-light border text-secondary">{{ \App\Models\Review::FOOD_TAGS[$tag] }}</span>
+                                                    <x-review-tag :tag="$tag" :label="\App\Models\Review::FOOD_TAGS[$tag]" />
                                                 @endif
                                             @endforeach
                                         </div>
