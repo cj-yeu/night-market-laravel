@@ -120,7 +120,7 @@
 
                                         @if ($user->role === \App\Models\User::ROLE_CLIENT)
                                             <form method="POST" action="{{ route('admin.users.status.update', $user) }}"
-                                                onsubmit="return confirm('{{ $user->is_active ? 'Deactivate this Client account?' : 'Activate this Client account?' }}');">
+                                                onsubmit="return confirm('{{ $user->is_active ? 'Deactivate this Client account?\n\nThe user will lose access but their reviews and visit plans will be preserved.' : 'Activate this Client account?' }}');">
                                                 @csrf
                                                 @method('PATCH')
                                                 <input type="hidden" name="is_active" value="{{ $user->is_active ? 0 : 1 }}">
