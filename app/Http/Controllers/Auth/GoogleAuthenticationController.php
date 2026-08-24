@@ -77,7 +77,8 @@ class GoogleAuthenticationController extends Controller
 
             return redirect()
                 ->intended(route('client.home'))
-                ->with('status', 'Welcome back, '.$user->name.'.');
+                ->with('status', 'Login successful.')
+                ->with('status_auto_dismiss', true);
         } catch (SocialAuthenticationException $exception) {
             return $this->failureResponse($request, $intent, $exception->getMessage());
         } catch (Throwable) {

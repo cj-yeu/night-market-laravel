@@ -121,6 +121,16 @@
                 --bs-btn-active-border-color: var(--market-orange-dark);
             }
 
+            .password-toggle {
+                z-index: 2;
+                display: inline-flex;
+                width: 44px;
+                min-width: 44px;
+                height: 44px;
+                align-items: center;
+                justify-content: center;
+            }
+
             .text-market {
                 color: var(--market-orange-dark);
             }
@@ -206,6 +216,14 @@
                 width: 6rem;
                 height: 6rem;
                 font-size: 2rem;
+            }
+
+            .navbar-profile-avatar {
+                width: 1.9rem;
+                height: 1.9rem;
+                object-fit: cover;
+                border: 1px solid #f3b46f;
+                border-radius: 50%;
             }
 
             .admin-layout {
@@ -779,7 +797,14 @@
                             @foreach ([['Home', 'client.home'], ['Discover Markets', 'night-markets.*'], ['Explore Stalls', 'stalls.*'], ['Must-Try Foods', 'foods.*'], ['My Visit Plans', 'client.visit-plans.*']] as [$label, $routePattern])
                                 <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs($routePattern) ? 'active' : '' }}" href="{{ route(match($label) {'Home' => 'client.home', 'Discover Markets' => 'night-markets.index', 'Explore Stalls' => 'stalls.index', 'Must-Try Foods' => 'foods.index', default => 'client.visit-plans.index'}, $label === 'Must-Try Foods' ? ['is_must_try' => '1'] : []) }}" @if(request()->routeIs($routePattern)) aria-current="page" @endif>{{ $label }}</a>
                             @endforeach
-                            <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs('profile.*') ? 'active' : '' }}" href="{{ route('profile.edit') }}" @if(request()->routeIs('profile.*')) aria-current="page" @endif><x-user-avatar :user="$currentUser" size="sm" /> <span>Profile</span></a>
+                            <a class="nav-link fw-semibold px-lg-2 d-inline-flex align-items-center gap-1 {{ request()->routeIs('profile.*') ? 'active' : '' }}" href="{{ route('profile.edit') }}" @if(request()->routeIs('profile.*')) aria-current="page" @endif>
+                                @if ($currentUser->avatarUrl())
+                                    <img src="{{ $currentUser->avatarUrl() }}" class="navbar-profile-avatar" alt="">
+                                @else
+                                    <i class="bi bi-person-circle fs-5" aria-hidden="true"></i>
+                                @endif
+                                <span>Profile</span>
+                            </a>
                             <form method="POST" action="{{ route('logout') }}" class="ms-lg-1">@csrf<button type="submit" class="btn btn-sm btn-outline-danger w-100">Logout</button></form>
                         @endif
                     </div>
@@ -791,7 +816,8 @@
         <main id="main-content" tabindex="-1" class="{{ $isAdmin ? 'container-fluid px-3 px-md-4 px-xl-5' : 'container' }} py-4 py-lg-5">
             <div class="{{ $isAdmin ? 'admin-content-shell' : '' }}">
             @if (session('status'))
-                <div class="alert alert-success alert-dismissible fade show" role="status" aria-live="polite">
+                <div class="alert alert-success alert-dismissible fade show" role="status" aria-live="polite"
+                    @if (session('status_auto_dismiss')) data-auto-dismiss="true" @endif>
                     {{ session('status') }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
@@ -835,6 +861,37 @@
                         bootstrap.Collapse.getOrCreateInstance(navigation).hide();
                     }
                 });
+            });
+
+            document.querySelectorAll('input[type="password"][data-password-toggle]').forEach((input) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'position-relative';
+                input.parentNode.insertBefore(wrapper, input);
+                wrapper.appendChild(input);
+
+                const toggle = document.createElement('button');
+                toggle.type = 'button';
+                toggle.className = 'btn btn-link text-secondary border-0 position-absolute top-50 end-0 translate-middle-y me-1 password-toggle';
+                toggle.setAttribute('aria-label', 'Show password');
+                toggle.setAttribute('aria-pressed', 'false');
+                toggle.innerHTML = '<i class="bi bi-eye" aria-hidden="true"></i>';
+
+                input.style.paddingRight = '3.25rem';
+                wrapper.appendChild(toggle);
+
+                toggle.addEventListener('click', () => {
+                    const isHidden = input.type === 'password';
+                    input.type = isHidden ? 'text' : 'password';
+                    toggle.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+                    toggle.setAttribute('aria-pressed', String(isHidden));
+                    toggle.innerHTML = isHidden
+                        ? '<i class="bi bi-eye-slash" aria-hidden="true"></i>'
+                        : '<i class="bi bi-eye" aria-hidden="true"></i>';
+                });
+            });
+
+            document.querySelectorAll('[data-auto-dismiss="true"]').forEach((alert) => {
+                window.setTimeout(() => bootstrap.Alert.getOrCreateInstance(alert).close(), 4000);
             });
         </script>
 

@@ -41,6 +41,7 @@
                             </div>
                             <input
                                 type="password"
+                                data-password-toggle
                                 class="form-control @error('password') is-invalid @enderror"
                                 id="password"
                                 name="password"

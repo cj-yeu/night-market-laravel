@@ -36,6 +36,7 @@
                             <label for="password" class="form-label">New Password</label>
                             <input
                                 type="password"
+                                data-password-toggle
                                 class="form-control @error('password') is-invalid @enderror"
                                 id="password"
                                 name="password"
@@ -51,6 +52,7 @@
                             <label for="password_confirmation" class="form-label">Confirm New Password</label>
                             <input
                                 type="password"
+                                data-password-toggle
                                 class="form-control"
                                 id="password_confirmation"
                                 name="password_confirmation"
