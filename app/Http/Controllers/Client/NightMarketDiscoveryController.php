@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\NightMarket\MarketDiscoveryRequest;
 use App\Services\NightMarketService;
+use App\Services\SocialMediaDataService;
 use App\Services\StallFoodService;
 use Illuminate\View\View;
 
@@ -13,6 +14,7 @@ class NightMarketDiscoveryController extends Controller
     public function __construct(
         private readonly NightMarketService $nightMarketService,
         private readonly StallFoodService $stallFoodService,
+        private readonly SocialMediaDataService $socialMediaDataService,
     ) {}
 
     public function home(): View
@@ -43,6 +45,7 @@ class NightMarketDiscoveryController extends Controller
             'nightMarket' => $nightMarket,
             'activeStalls' => $nightMarket->stalls,
             'mustTryFoods' => $this->nightMarketService->mustTryFoods($nightMarket),
+            'socialMediaHighlights' => $this->socialMediaDataService->marketHighlights($nightMarket),
         ]);
     }
 }

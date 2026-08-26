@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -93,7 +94,7 @@ class SocialMediaDataService
         $this->validateEligibility($data);
         $this->validatePresentationUrls($data);
         $socialMediaRecord->update([
-            ...$this->recordData($data),
+            ...$this->recordData($data, allowClearing: true),
             'status' => SocialMediaRecord::STATUS_PENDING,
             'approved_by' => null,
             'approved_at' => null,
@@ -129,6 +130,22 @@ class SocialMediaDataService
     public function delete(SocialMediaRecord $socialMediaRecord): void
     {
         $socialMediaRecord->delete();
+    }
+
+    /**
+     * @return SupportCollection<int, SocialMediaRecord>
+     */
+    public function marketHighlights(NightMarket $nightMarket, int $limit = 6): SupportCollection
+    {
+        $records = $this->publiclyVisibleQuery()
+            ->where('night_market_id', $nightMarket->id)
+            ->latest('posted_date')
+            ->limit($limit)
+            ->get();
+
+        $this->decorateSafeUrls($records);
+
+        return $records;
     }
 
     /**
@@ -310,16 +327,22 @@ class SocialMediaDataService
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    private function recordData(array $data): array
+    private function recordData(array $data, bool $allowClearing = false): array
     {
         $extracted = $this->extractFromText($data['content_summary']);
 
         foreach (array_keys($extracted) as $field) {
-            if (array_key_exists($field, $data) && filled($data[$field])) {
+            if (! array_key_exists($field, $data)) {
+                continue;
+            }
+
+            if (filled($data[$field])) {
                 $extracted[$field] = $this->normalizeEditableList(
                     $data[$field],
                     hashtags: $field === 'extracted_hashtags',
                 );
+            } elseif ($allowClearing) {
+                $extracted[$field] = [];
             }
         }
 
@@ -398,9 +421,9 @@ class SocialMediaDataService
     }
 
     /**
-     * @param  Collection<int, SocialMediaRecord>  $records
+     * @param  SupportCollection<int, SocialMediaRecord>  $records
      */
-    private function decorateSafeUrls(Collection $records): void
+    private function decorateSafeUrls(SupportCollection $records): void
     {
         $records->each(function (SocialMediaRecord $record): void {
             $record->setAttribute(
