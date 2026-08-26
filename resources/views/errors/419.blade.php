@@ -1,0 +1,1 @@
+@include('errors._page', ['code' => '419', 'title' => 'Page expired', 'heading' => 'Your session has expired', 'message' => 'For your security, the form was not submitted. Go back, refresh the page, and try again.', 'actions' => [['label' => 'Go back', 'type' => 'back'], ['label' => 'Home', 'url' => route('home'), 'primary' => true]]])

@@ -1,0 +1,1 @@
+@include('errors._page', ['code' => '403', 'title' => 'Access restricted', 'heading' => 'This page needs a different account role', 'message' => 'Please sign in with an account that has permission to use this page.', 'actions' => [['label' => 'Go back', 'type' => 'back'], ['label' => 'Home', 'url' => route('home'), 'primary' => true]]])

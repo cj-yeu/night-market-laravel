@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\CatalogActivityController;
+use App\Http\Controllers\Admin\CatalogDataQualityController;
 use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
 use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
@@ -99,6 +101,19 @@ Route::middleware('auth')->group(function () {
         ->name('client.home');
 
     Route::middleware(['role:client', 'verified'])->prefix('client')->name('client.')->group(function () {
+        Route::get('/reviews', [ReviewController::class, 'index'])->name('reviews.index');
+
+        Route::get('/night-markets/{nightMarket}/reviews/create', [ReviewController::class, 'createMarket'])
+            ->whereNumber('nightMarket')->name('night-markets.reviews.create');
+        Route::post('/night-markets/{nightMarket}/reviews', [ReviewController::class, 'storeMarket'])
+            ->whereNumber('nightMarket')->name('night-markets.reviews.store');
+        Route::get('/night-markets/{nightMarket}/reviews/{review}/edit', [ReviewController::class, 'editMarket'])
+            ->whereNumber('nightMarket')->whereNumber('review')->name('night-markets.reviews.edit');
+        Route::patch('/night-markets/{nightMarket}/reviews/{review}', [ReviewController::class, 'updateMarket'])
+            ->whereNumber('nightMarket')->whereNumber('review')->name('night-markets.reviews.update');
+        Route::delete('/night-markets/{nightMarket}/reviews/{review}', [ReviewController::class, 'destroyMarket'])
+            ->whereNumber('nightMarket')->whereNumber('review')->name('night-markets.reviews.destroy');
+
         Route::get('/foods/{food}/reviews/create', [ReviewController::class, 'create'])
             ->whereNumber('food')->name('foods.reviews.create');
         Route::post('/foods/{food}/reviews', [ReviewController::class, 'store'])
@@ -107,6 +122,8 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('food')->whereNumber('review')->name('foods.reviews.edit');
         Route::patch('/foods/{food}/reviews/{review}', [ReviewController::class, 'update'])
             ->whereNumber('food')->whereNumber('review')->name('foods.reviews.update');
+        Route::delete('/foods/{food}/reviews/{review}', [ReviewController::class, 'destroy'])
+            ->whereNumber('food')->whereNumber('review')->name('foods.reviews.destroy');
 
         Route::get('/visit-plans', [VisitPlanController::class, 'index'])->name('visit-plans.index');
         Route::get('/visit-plans/smart-planner', [SmartVisitPlannerController::class, 'index'])
@@ -140,6 +157,12 @@ Route::middleware('auth')->group(function () {
         ->name('admin.dashboard');
 
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
+        Route::get('/catalog-activity', [CatalogActivityController::class, 'index'])->name('catalog-activity.index');
+        Route::get('/catalog-data-quality', [CatalogDataQualityController::class, 'index'])
+            ->name('catalog-data-quality.index');
+        Route::get('/catalog-data-quality/{issue}', [CatalogDataQualityController::class, 'records'])
+            ->name('catalog-data-quality.records');
+
         Route::get('/night-markets', [NightMarketController::class, 'index'])->name('night-markets.index');
         Route::get('/night-markets/create', [NightMarketController::class, 'create'])->name('night-markets.create');
         Route::post('/night-markets', [NightMarketController::class, 'store'])->name('night-markets.store');
@@ -229,5 +252,9 @@ Route::middleware('auth')->group(function () {
         Route::patch('/users/{user}/status', [UserManagementController::class, 'updateStatus'])
             ->whereNumber('user')
             ->name('users.status.update');
+        Route::patch('/users/{user}/promote', [UserManagementController::class, 'promote'])
+            ->middleware('role:super_admin')->whereNumber('user')->name('users.promote');
+        Route::patch('/users/{user}/demote', [UserManagementController::class, 'demote'])
+            ->middleware('role:super_admin')->whereNumber('user')->name('users.demote');
     });
 });

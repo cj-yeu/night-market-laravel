@@ -1,0 +1,1 @@
+@include('errors._page', ['code' => '429', 'title' => 'Please slow down', 'heading' => 'Too many requests', 'message' => 'Please wait a moment before trying again. This helps protect login, verification, and review actions.', 'actions' => [['label' => 'Go back', 'type' => 'back'], ['label' => 'Home', 'url' => route('home'), 'primary' => true]]])

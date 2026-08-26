@@ -53,6 +53,14 @@ We would like to extend our thanks to the following sponsors for funding Laravel
 
 Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
 
+## Production catalog deployment
+
+Use the dry-run-first, integrity-checked workflow documented in [docs/production-catalog-import.md](docs/production-catalog-import.md). The reviewed production catalog is never loaded by the default application seeder.
+
+## Production operations
+
+Use [docs/production-operations.md](docs/production-operations.md) for the Admin bootstrap recovery procedure, backups, release checklist, and audit scope. Use [docs/railway-storage-and-email.md](docs/railway-storage-and-email.md) to configure the Railway Volume and production SMTP without putting secrets or uploads in Git.
+
 ## Code of Conduct
 
 In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).

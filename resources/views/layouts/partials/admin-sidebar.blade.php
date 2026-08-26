@@ -42,6 +42,16 @@
                 <i class="bi bi-cup-hot-fill" aria-hidden="true"></i>Foods
             </a>
 
+            <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.catalog-data-quality.*') ? 'active' : '' }}"
+                href="{{ route('admin.catalog-data-quality.index') }}">
+                <i class="bi bi-clipboard2-check-fill" aria-hidden="true"></i>Data Quality
+            </a>
+
+            <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.catalog-activity.*') ? 'active' : '' }}"
+                href="{{ route('admin.catalog-activity.index') }}">
+                <i class="bi bi-clock-history" aria-hidden="true"></i>Activity Log
+            </a>
+
             <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.reviews.*') ? 'active' : '' }}"
                 href="{{ route('admin.reviews.index') }}">
                 <i class="bi bi-star-fill" aria-hidden="true"></i>Reviews
@@ -52,24 +62,6 @@
                 <i class="bi bi-megaphone-fill" aria-hidden="true"></i>Social Media
             </a>
 
-            <div class="admin-nav-heading">QUICK ACTIONS</div>
-            @php($createMenuOpen = request()->routeIs('admin.night-markets.*', 'admin.stalls.*', 'admin.foods.*'))
-            <button class="nav-link admin-sidebar-link d-flex justify-content-between align-items-center"
-                type="button" data-bs-toggle="collapse" data-bs-target="#adminCreateMenu"
-                aria-expanded="{{ $createMenuOpen ? 'true' : 'false' }}" aria-controls="adminCreateMenu">
-                <span><i class="bi bi-plus-square-fill" aria-hidden="true"></i>Create New</span>
-                <i class="bi bi-chevron-down admin-menu-chevron" aria-hidden="true"></i>
-            </button>
-            <div class="collapse {{ $createMenuOpen ? 'show' : '' }}" id="adminCreateMenu">
-                <div class="nav flex-column admin-sidebar-submenu py-1">
-                    <a class="nav-link {{ request()->routeIs('admin.night-markets.*') ? 'active' : '' }}"
-                        href="{{ route('admin.night-markets.create') }}">Create Night Market</a>
-                    <a class="nav-link {{ request()->routeIs('admin.stalls.*') ? 'active' : '' }}"
-                        href="{{ route('admin.stalls.create') }}">Create Stall</a>
-                    <a class="nav-link {{ request()->routeIs('admin.foods.*') ? 'active' : '' }}"
-                        href="{{ route('admin.foods.create') }}">Create Food</a>
-                </div>
-            </div>
         </nav>
 
         @php($adminInitial = mb_strtoupper(mb_substr(trim(auth()->user()->name), 0, 1)))

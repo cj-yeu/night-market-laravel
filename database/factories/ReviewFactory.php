@@ -23,6 +23,7 @@ class ReviewFactory extends Factory
         return [
             'user_id' => User::factory(),
             'night_market_id' => NightMarket::factory(),
+            'review_date' => Review::currentReviewDate(),
             'rating' => fake()->numberBetween(1, 5),
             'comment' => fake()->sentence(12),
             'status' => Review::STATUS_PENDING,
@@ -43,7 +44,10 @@ class ReviewFactory extends Factory
     {
         return $this->state(fn () => [
             'food_id' => $food->id,
-            'night_market_id' => $food->stall->night_market_id,
+            // A review belongs to exactly one target. Food reviews must not
+            // also retain the food's market ID, otherwise they violate the
+            // database target constraint introduced for review separation.
+            'night_market_id' => null,
         ]);
     }
 }

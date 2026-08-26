@@ -1,4 +1,9 @@
-@php($isAdmin = auth()->check() && auth()->user()->role === \App\Models\User::ROLE_ADMIN)
+@php
+    $currentUser = auth()->user();
+    $isAdmin = $currentUser?->hasAdminAccess() ?? false;
+    $isClient = $currentUser?->role === \App\Models\User::ROLE_CLIENT;
+    $logoUrl = $isAdmin ? route('admin.dashboard') : ($isClient ? route('client.home') : route('home'));
+@endphp
 <!doctype html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
@@ -43,7 +48,31 @@
                 color: #402a20;
             }
 
+            :where(a, button, input, select, textarea):focus-visible {
+                outline: 3px solid rgba(216, 91, 31, 0.52);
+                outline-offset: 3px;
+            }
+
+            .skip-link {
+                position: fixed;
+                top: 0.5rem;
+                left: 0.5rem;
+                z-index: 2000;
+                padding: 0.65rem 0.9rem;
+                color: #fff;
+                background: var(--market-orange-dark);
+                border-radius: 0.5rem;
+                transform: translateY(-150%);
+            }
+
+            .skip-link:focus {
+                transform: translateY(0);
+            }
+
             .navbar-market {
+                position: sticky;
+                top: 0;
+                z-index: 1020;
                 background-color: #fff;
                 border-bottom: 3px solid #f3b46f;
             }
@@ -51,6 +80,25 @@
             .navbar-market .navbar-brand,
             .navbar-market .nav-link.active {
                 color: var(--market-orange-dark) !important;
+            }
+
+            .navbar-market .nav-link.active {
+                border-bottom: 2px solid var(--market-orange);
+            }
+
+            .navbar-market .nav-link,
+            .navbar-market .navbar-toggler,
+            .navbar-market .btn {
+                min-height: 44px;
+                display: inline-flex;
+                align-items: center;
+            }
+
+            .dashboard-action { transition: transform .15s ease, box-shadow .15s ease; }
+            .dashboard-action:hover, .dashboard-action:focus { transform: translateY(-2px); box-shadow: 0 .9rem 2rem rgba(94, 55, 30, .18); }
+
+            .card :where(a:not(.btn), p, dd, .text-secondary) {
+                overflow-wrap: anywhere;
             }
 
             .market-card {
@@ -71,6 +119,16 @@
                 --bs-btn-active-color: #fff;
                 --bs-btn-active-bg: var(--market-orange-dark);
                 --bs-btn-active-border-color: var(--market-orange-dark);
+            }
+
+            .password-toggle {
+                z-index: 2;
+                display: inline-flex;
+                width: 44px;
+                min-width: 44px;
+                height: 44px;
+                align-items: center;
+                justify-content: center;
             }
 
             .text-market {
@@ -159,6 +217,30 @@
                 height: 6rem;
                 font-size: 2rem;
             }
+
+            .navbar-profile-avatar {
+                width: 1.9rem;
+                height: 1.9rem;
+                object-fit: cover;
+                border: 1px solid #f3b46f;
+                border-radius: 50%;
+            }
+
+            .review-tag {
+                display: inline-flex;
+                align-items: center;
+                min-height: 1.65rem;
+                padding: 0.2rem 0.55rem;
+                border-radius: 999px;
+                font-size: 0.78rem;
+                font-weight: 600;
+            }
+
+            .review-tag-warm { color: #8f3d14; background: #ffe1bd; }
+            .review-tag-positive { color: #17663a; background: #d9f3e2; }
+            .review-tag-info { color: #155f7a; background: #d9f1f8; }
+            .review-tag-caution { color: #815d05; background: #fff1bd; }
+            .review-tag-neutral { color: #52616b; background: #edf0f2; }
 
             .admin-layout {
                 background: var(--admin-cream);
@@ -441,11 +523,266 @@
                     margin-left: 260px;
                 }
             }
+
+            @media (max-width: 991.98px) {
+                .navbar-market .navbar-collapse {
+                    margin-top: 0.5rem;
+                    border-top: 1px solid #f3d7b8;
+                }
+
+                .navbar-market .navbar-nav {
+                    padding: 0.5rem 0 0.75rem;
+                }
+
+                .navbar-market .nav-link {
+                    min-height: 44px;
+                    padding: 0.625rem 0.75rem !important;
+                    border-radius: 0.5rem;
+                }
+
+                .navbar-market .nav-link.active {
+                    border-bottom: 0;
+                    background-color: #fff1df;
+                }
+
+                .navbar-market .navbar-nav > .btn,
+                .navbar-market .navbar-nav > form,
+                .navbar-market .navbar-nav > form .btn {
+                    width: 100%;
+                }
+
+                .admin-sidebar .offcanvas-header {
+                    min-height: 64px;
+                }
+
+                .admin-sidebar .offcanvas-header .btn-close,
+                .admin-sidebar .admin-sidebar-link,
+                .admin-account-link {
+                    min-height: 44px;
+                }
+
+                .admin-sidebar .offcanvas-body {
+                    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+                }
+
+                .table-responsive {
+                    position: relative;
+                    -webkit-overflow-scrolling: touch;
+                    scrollbar-color: var(--market-orange) #f8e5d0;
+                    scrollbar-width: thin;
+                }
+
+                .table-responsive::after {
+                    content: 'Swipe table horizontally to see all columns';
+                    display: block;
+                    width: max-content;
+                    padding: 0.5rem 0;
+                    color: #6c757d;
+                    font-size: 0.75rem;
+                }
+            }
+
+            @media (max-width: 575.98px) {
+                body {
+                    font-size: 0.975rem;
+                }
+
+                .navbar-market {
+                    border-bottom-width: 2px;
+                }
+
+                .navbar-market .container,
+                main.container {
+                    padding-right: 0.875rem;
+                    padding-left: 0.875rem;
+                }
+
+                .navbar-market .navbar-brand {
+                    max-width: calc(100% - 4.25rem);
+                    overflow: hidden;
+                    font-size: 1rem;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                .navbar-market .navbar-toggler {
+                    width: 44px;
+                    height: 44px;
+                    padding: 0;
+                    justify-content: center;
+                }
+
+                .navbar-market .navbar-nav {
+                    padding: 0.625rem 0 0.875rem;
+                    gap: 0.25rem;
+                }
+
+                .navbar-market .nav-link {
+                    min-height: 44px;
+                    padding: 0.625rem 0.75rem !important;
+                    border-radius: 0.5rem;
+                }
+
+                .navbar-market .nav-link.active {
+                    border-bottom: 0;
+                    background-color: #fff1df;
+                }
+
+                .navbar-market .navbar-nav > .btn,
+                .navbar-market .navbar-nav > form,
+                .navbar-market .navbar-nav > form .btn {
+                    width: 100%;
+                }
+
+                main.container {
+                    padding-top: 1.25rem !important;
+                    padding-bottom: 2rem !important;
+                }
+
+                .market-card {
+                    border-top-width: 4px;
+                    border-radius: 0.875rem;
+                    box-shadow: 0 0.5rem 1.25rem rgba(94, 55, 30, 0.10);
+                }
+
+                .market-card .card-body {
+                    padding: 1.125rem !important;
+                }
+
+                .card-body.p-5,
+                .card-body.p-md-5,
+                .card-body.p-lg-5 {
+                    padding: 1.25rem !important;
+                }
+
+                .display-6 {
+                    font-size: clamp(1.7rem, 8vw, 2.1rem);
+                    line-height: 1.16;
+                }
+
+                .lead {
+                    font-size: 1rem;
+                    line-height: 1.55;
+                }
+
+                .btn,
+                .form-control,
+                .form-select {
+                    min-height: 44px;
+                }
+
+                textarea.form-control {
+                    min-height: 8rem;
+                }
+
+                .d-flex.flex-wrap.gap-2 > .btn,
+                .d-flex.flex-wrap.gap-2 > a.btn {
+                    min-height: 44px;
+                }
+
+                form .row > .col-12.d-flex > .btn,
+                form .row > .col-12.d-flex > a.btn {
+                    flex: 1 1 100%;
+                }
+
+                .form-check {
+                    min-height: 44px;
+                    display: flex;
+                    align-items: center;
+                }
+
+                .form-check-input {
+                    width: 1.2rem;
+                    height: 1.2rem;
+                    margin-top: 0;
+                }
+
+                .form-check-label {
+                    padding: 0.5rem 0;
+                }
+
+                .vstack.gap-4,
+                .vstack.gap-3 {
+                    gap: 1rem !important;
+                }
+
+                .row.g-4 > [class*='col-'],
+                .row.g-3 > [class*='col-'] {
+                    min-width: 0;
+                }
+
+                .table-responsive {
+                    margin-right: -1.125rem;
+                    margin-left: -1.125rem;
+                    padding: 0 1.125rem 0.25rem;
+                    -webkit-overflow-scrolling: touch;
+                }
+
+                .table-responsive table {
+                    min-width: 42rem;
+                }
+
+                .pagination {
+                    flex-wrap: wrap;
+                    gap: 0.25rem;
+                }
+
+                .pagination .page-link {
+                    min-width: 40px;
+                    min-height: 40px;
+                    display: grid;
+                    place-items: center;
+                }
+
+                .admin-mobile-header {
+                    min-height: 60px;
+                }
+
+                .admin-mobile-header .btn {
+                    min-height: 44px;
+                }
+            }
+
+            @media (max-width: 374.98px) {
+                .navbar-market .container,
+                main.container {
+                    padding-right: 0.75rem;
+                    padding-left: 0.75rem;
+                }
+
+                .market-card .card-body,
+                .card-body.p-5,
+                .card-body.p-md-5,
+                .card-body.p-lg-5 {
+                    padding: 1rem !important;
+                }
+
+                .display-6 {
+                    font-size: 1.65rem;
+                }
+
+                .d-flex.flex-wrap.gap-2 > .btn,
+                .d-flex.flex-wrap.gap-2 > a.btn {
+                    width: 100%;
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                *,
+                *::before,
+                *::after {
+                    scroll-behavior: auto !important;
+                    transition-duration: 0.01ms !important;
+                    animation-duration: 0.01ms !important;
+                    animation-iteration-count: 1 !important;
+                }
+            }
         </style>
 
         @stack('styles')
     </head>
     <body class="{{ $isAdmin ? 'admin-layout' : '' }}">
+        <a class="skip-link" href="#main-content">Skip to main content</a>
         @if ($isAdmin)
             @include('layouts.partials.admin-sidebar')
 
@@ -462,70 +799,48 @@
         @else
             <nav class="navbar navbar-expand-lg navbar-light navbar-market">
             <div class="container">
-                <a class="navbar-brand fw-bold" href="{{ url('/') }}">Night Market Selangor</a>
-
-                <div class="d-flex flex-wrap justify-content-end align-items-center gap-2">
-                    @guest
-                        <a class="nav-link fw-semibold me-2" href="{{ route('home') }}">Home</a>
-                        <a class="nav-link fw-semibold me-2" href="{{ route('night-markets.index') }}">
-                            Discover Markets
-                        </a>
-                        <a class="nav-link fw-semibold me-2" href="{{ route('stalls.index') }}">Explore Stalls</a>
-                        <a class="nav-link fw-semibold me-2" href="{{ route('foods.index', ['is_must_try' => '1']) }}">Must-Try Foods</a>
-                        <a
-                            class="btn btn-sm {{ request()->routeIs('login') ? 'btn-market' : 'btn-outline-secondary' }}"
-                            href="{{ route('login') }}"
-                        >
-                            Login
-                        </a>
-                        <a
-                            class="btn btn-sm {{ request()->routeIs('register') ? 'btn-market' : 'btn-outline-secondary' }}"
-                            href="{{ route('register') }}"
-                        >
-                            Register
-                        </a>
-                    @else
-                        @if (auth()->user()->role !== \App\Models\User::ROLE_ADMIN)
-                            <a class="nav-link active fw-semibold me-2" href="{{ route('client.home') }}">
-                                Home
+                <a class="navbar-brand fw-bold" href="{{ $logoUrl }}">Night Market Selangor</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNavigation" aria-controls="primaryNavigation" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
+                <div class="collapse navbar-collapse" id="primaryNavigation">
+                    <div class="navbar-nav ms-auto align-items-lg-center gap-lg-1 pt-2 pt-lg-0">
+                        @if (! $currentUser)
+                            @foreach ([['Home', 'home', 'home'], ['Discover Markets', 'night-markets.index', 'night-markets.*'], ['Explore Stalls', 'stalls.index', 'stalls.*'], ['Must-Try Foods', 'foods.index', 'foods.*']] as [$label, $routeName, $routePattern])
+                                <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs($routePattern) ? 'active' : '' }}" href="{{ route($routeName, $routeName === 'foods.index' ? ['is_must_try' => '1'] : []) }}" @if(request()->routeIs($routePattern)) aria-current="page" @endif>{{ $label }}</a>
+                            @endforeach
+                            <a class="btn btn-sm {{ request()->routeIs('login') ? 'btn-market' : 'btn-outline-secondary' }} ms-lg-2" href="{{ route('login') }}">Login</a>
+                            <a class="btn btn-sm btn-market ms-lg-1" href="{{ route('register') }}">Register</a>
+                        @elseif ($isClient)
+                            @foreach ([['Home', 'client.home'], ['Discover Markets', 'night-markets.*'], ['Explore Stalls', 'stalls.*'], ['Must-Try Foods', 'foods.*'], ['My Visit Plans', 'client.visit-plans.*']] as [$label, $routePattern])
+                                <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs($routePattern) ? 'active' : '' }}" href="{{ route(match($label) {'Home' => 'client.home', 'Discover Markets' => 'night-markets.index', 'Explore Stalls' => 'stalls.index', 'Must-Try Foods' => 'foods.index', default => 'client.visit-plans.index'}, $label === 'Must-Try Foods' ? ['is_must_try' => '1'] : []) }}" @if(request()->routeIs($routePattern)) aria-current="page" @endif>{{ $label }}</a>
+                            @endforeach
+                            <a class="nav-link fw-semibold px-lg-2 d-inline-flex align-items-center gap-1 {{ request()->routeIs('profile.*') ? 'active' : '' }}" href="{{ route('profile.edit') }}" @if(request()->routeIs('profile.*')) aria-current="page" @endif>
+                                @if ($currentUser->avatarUrl())
+                                    <img src="{{ $currentUser->avatarUrl() }}" class="navbar-profile-avatar" alt="">
+                                @else
+                                    <i class="bi bi-person-circle fs-5" aria-hidden="true"></i>
+                                @endif
+                                <span>Profile</span>
                             </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('night-markets.index') }}">
-                                Discover Markets
-                            </a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('stalls.index') }}">Explore Stalls</a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('foods.index', ['is_must_try' => '1']) }}">Must-Try Foods</a>
-                            <a class="nav-link fw-semibold me-2" href="{{ route('client.visit-plans.index') }}">
-                                My Visit Plans
-                            </a>
+                            <form method="POST" action="{{ route('logout') }}" class="ms-lg-1">@csrf<button type="submit" class="btn btn-sm btn-outline-danger w-100">Logout</button></form>
                         @endif
-
-                        <a class="nav-link fw-semibold d-flex align-items-center gap-2 me-2"
-                            href="{{ route('profile.edit') }}">
-                            <x-user-avatar :user="auth()->user()" size="sm" />
-                            <span class="d-none d-sm-inline">Profile</span>
-                        </a>
-
-                        <form method="POST" action="{{ route('logout') }}">
-                            @csrf
-                            <button type="submit" class="btn btn-sm btn-outline-danger">Logout</button>
-                        </form>
-                    @endguest
+                    </div>
                 </div>
             </div>
             </nav>
         @endif
 
-        <main class="{{ $isAdmin ? 'container-fluid px-3 px-md-4 px-xl-5' : 'container' }} py-4 py-lg-5">
+        <main id="main-content" tabindex="-1" class="{{ $isAdmin ? 'container-fluid px-3 px-md-4 px-xl-5' : 'container' }} py-4 py-lg-5">
             <div class="{{ $isAdmin ? 'admin-content-shell' : '' }}">
             @if (session('status'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <div class="alert alert-success alert-dismissible fade show" role="status" aria-live="polite"
+                    @if (session('status_auto_dismiss')) data-auto-dismiss="true" @endif>
                     {{ session('status') }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             @endif
 
             @if (session('error'))
-                <div class="alert alert-danger" role="alert">
+                <div class="alert alert-danger" role="alert" aria-live="assertive">
                     {{ session('error') }}
                 </div>
             @endif
@@ -543,6 +858,58 @@
             integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
             crossorigin="anonymous"
         ></script>
+
+        <script>
+            document.querySelectorAll('.is-invalid').forEach((field, index) => {
+                const feedback = field.parentElement.querySelector('.invalid-feedback');
+                if (!feedback) return;
+
+                const feedbackId = feedback.id || `validation-error-${index}`;
+                feedback.id = feedbackId;
+                field.setAttribute('aria-invalid', 'true');
+                field.setAttribute('aria-describedby', feedbackId);
+            });
+
+            document.querySelectorAll('#primaryNavigation a[href]').forEach((link) => {
+                link.addEventListener('click', () => {
+                    const navigation = document.querySelector('#primaryNavigation');
+                    if (window.innerWidth < 992 && navigation.classList.contains('show')) {
+                        bootstrap.Collapse.getOrCreateInstance(navigation).hide();
+                    }
+                });
+            });
+
+            document.querySelectorAll('input[type="password"][data-password-toggle]').forEach((input) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'position-relative';
+                input.parentNode.insertBefore(wrapper, input);
+                wrapper.appendChild(input);
+
+                const toggle = document.createElement('button');
+                toggle.type = 'button';
+                toggle.className = 'btn btn-link text-secondary border-0 position-absolute top-50 end-0 translate-middle-y me-1 password-toggle';
+                toggle.setAttribute('aria-label', 'Show password');
+                toggle.setAttribute('aria-pressed', 'false');
+                toggle.innerHTML = '<i class="bi bi-eye" aria-hidden="true"></i>';
+
+                input.style.paddingRight = '3.25rem';
+                wrapper.appendChild(toggle);
+
+                toggle.addEventListener('click', () => {
+                    const isHidden = input.type === 'password';
+                    input.type = isHidden ? 'text' : 'password';
+                    toggle.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+                    toggle.setAttribute('aria-pressed', String(isHidden));
+                    toggle.innerHTML = isHidden
+                        ? '<i class="bi bi-eye-slash" aria-hidden="true"></i>'
+                        : '<i class="bi bi-eye" aria-hidden="true"></i>';
+                });
+            });
+
+            document.querySelectorAll('[data-auto-dismiss="true"]').forEach((alert) => {
+                window.setTimeout(() => bootstrap.Alert.getOrCreateInstance(alert).close(), 4000);
+            });
+        </script>
 
         @stack('scripts')
     </body>

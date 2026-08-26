@@ -1,0 +1,1 @@
+@include('errors._page', ['code' => '404', 'title' => 'Page not found', 'heading' => 'This page is unavailable', 'message' => 'The page, market, stall, food, or visit plan may have moved or is no longer available.', 'actions' => [['label' => 'Browse Markets', 'url' => route('night-markets.index'), 'primary' => true], ['label' => 'Home', 'url' => route('home')]]])

@@ -205,6 +205,8 @@ class NightMarketService
                 'city' => $data['city'],
                 'state' => 'Selangor',
                 'description' => $data['description'] ?? null,
+                'source_url' => $data['source_url'] ?? null,
+                'verified_at' => $data['verified_at'] ?? null,
                 'status' => $data['status'],
             ]);
 
@@ -226,6 +228,8 @@ class NightMarketService
                 'city' => $data['city'],
                 'state' => 'Selangor',
                 'description' => $data['description'] ?? null,
+                'source_url' => $data['source_url'] ?? null,
+                'verified_at' => $data['verified_at'] ?? null,
             ]);
 
             $submittedDays = collect($data['operating_days'])->keyBy('day_of_week');

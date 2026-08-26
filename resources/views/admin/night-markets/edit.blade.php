@@ -5,7 +5,7 @@
 @section('content')
     @php($existingDays = $nightMarket->operatingDays->keyBy('day_of_week'))
     <div class="mx-auto" style="max-width: 960px;">
-        <div class="d-flex justify-content-between gap-3 mb-4"><div><h1 class="h2 fw-bold mb-1">Edit Night Market</h1><p class="text-secondary mb-0">Status is managed separately from catalog details.</p></div><a href="{{ route('admin.night-markets.show', $nightMarket) }}" class="btn btn-outline-secondary align-self-start">Cancel</a></div>
+        <div class="d-flex justify-content-between gap-3 mb-4"><div><h1 class="h2 fw-bold mb-1">Edit Night Market</h1><p class="text-secondary mb-0">Status is managed separately from catalog details.</p></div><a href="{{ $returnTo ?? route('admin.night-markets.show', $nightMarket) }}" class="btn btn-outline-secondary align-self-start">Cancel</a></div>
         <div class="card market-card overflow-hidden mb-4">
             <x-night-market-image :night-market="$nightMarket" loading="eager" />
             <div class="card-body p-3">
@@ -14,13 +14,15 @@
         </div>
         <div class="card market-card"><div class="card-body p-4 p-md-5">
             <form method="POST" action="{{ route('admin.night-markets.update', $nightMarket) }}" novalidate>
-                @csrf @method('PATCH')
+                @csrf @method('PATCH') @if($returnTo)<input type="hidden" name="return_to" value="{{ $returnTo }}">@endif
                 <div class="row g-3">
                     <div class="col-12"><label for="name" class="form-label">Market Name</label><input id="name" name="name" value="{{ old('name', $nightMarket->name) }}" class="form-control @error('name') is-invalid @enderror" required>@error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                     <div class="col-12"><label for="address" class="form-label">Address</label><input id="address" name="address" value="{{ old('address', $nightMarket->address) }}" class="form-control @error('address') is-invalid @enderror" required>@error('address')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                     <div class="col-md-6"><label for="city" class="form-label">City</label><input id="city" name="city" value="{{ old('city', $nightMarket->city) }}" class="form-control @error('city') is-invalid @enderror" required>@error('city')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                     <div class="col-md-6"><label class="form-label">State</label><input value="Selangor" class="form-control" disabled></div>
                     <div class="col-12"><label for="description" class="form-label">Description</label><textarea id="description" name="description" rows="4" class="form-control @error('description') is-invalid @enderror">{{ old('description', $nightMarket->description) }}</textarea>@error('description')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+                    <div class="col-md-7"><label for="source_url" class="form-label">Source URL</label><input type="url" id="source_url" name="source_url" value="{{ old('source_url', $nightMarket->source_url) }}" class="form-control @error('source_url') is-invalid @enderror" maxlength="255"><div class="form-text">Link to the source used to confirm the market details.</div>@error('source_url')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+                    <div class="col-md-5"><label for="verified_at" class="form-label">Last verified</label><input type="date" id="verified_at" name="verified_at" value="{{ old('verified_at', $nightMarket->verified_at?->format('Y-m-d')) }}" class="form-control @error('verified_at') is-invalid @enderror" max="{{ now()->toDateString() }}"><div class="form-text">When these details were last checked. Leave blank rather than guess.</div>@error('verified_at')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                 </div>
                 <fieldset class="mt-4"><legend class="h5">Operating Days</legend>@error('operating_days')<div class="alert alert-danger py-2">{{ $message }}</div>@enderror
                     <div class="vstack gap-3">

@@ -39,7 +39,8 @@ class AuthenticatedSessionController extends Controller
 
         return redirect()
             ->intended(route($this->authService->homeRouteFor($user)))
-            ->with('status', 'Welcome back, '.$user->name.'.');
+            ->with('status', 'Login successful.')
+            ->with('status_auto_dismiss', true);
     }
 
     /**

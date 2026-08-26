@@ -20,7 +20,11 @@ class User extends Authenticatable implements MustVerifyEmailContract
 
     public const ROLE_ADMIN = 'admin';
 
+    public const ROLE_SUPER_ADMIN = 'super_admin';
+
     public const ROLE_CLIENT = 'client';
+
+    public const ADMIN_ROLES = [self::ROLE_ADMIN, self::ROLE_SUPER_ADMIN];
 
     public const AUTH_PASSWORD = 'password';
 
@@ -80,6 +84,23 @@ class User extends Authenticatable implements MustVerifyEmailContract
             $query->where('name', 'like', '%'.$escapedSearch.'%')
                 ->orWhere('email', 'like', '%'.$escapedSearch.'%');
         });
+    }
+
+    public function hasRole(string $role): bool
+    {
+        return $role === self::ROLE_ADMIN
+            ? in_array($this->role, self::ADMIN_ROLES, true)
+            : $this->role === $role;
+    }
+
+    public function hasAdminAccess(): bool
+    {
+        return $this->hasRole(self::ROLE_ADMIN);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === self::ROLE_SUPER_ADMIN;
     }
 
     public function scopeWithRole(Builder $query, ?string $role): Builder

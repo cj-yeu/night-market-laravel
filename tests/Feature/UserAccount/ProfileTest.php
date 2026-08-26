@@ -28,7 +28,8 @@ class ProfileTest extends TestCase
             ->assertOk()
             ->assertSee('My Profile')
             ->assertSee($client->name)
-            ->assertSee($client->email);
+            ->assertSee($client->email)
+            ->assertSee(route('client.reviews.index'), false);
     }
 
     public function test_authenticated_client_can_update_their_own_name_without_changing_email(): void

@@ -34,6 +34,11 @@
                         <dt class="col-sm-3">District</dt>
                         <dd class="col-sm-9">{{ $nightMarket->city }}, {{ $nightMarket->state }}</dd>
 
+                        @if ($nightMarket->verified_at)
+                            <dt class="col-sm-3">Last verified</dt>
+                            <dd class="col-sm-9">{{ $nightMarket->verified_at->format('M j, Y') }}</dd>
+                        @endif
+
                         <dt class="col-sm-3">Description</dt>
                         <dd class="col-sm-9 mb-0">{{ $nightMarket->description ?: 'No description available.' }}</dd>
                     </dl>
@@ -158,6 +163,28 @@
                             <a href="{{ route('social-media-highlights.index') }}"
                                 class="btn btn-outline-secondary mt-4">View All Social Media Highlights</a>
                         @endif
+                    @endif
+                </div>
+            </section>
+
+            <section class="card market-card mb-4" aria-labelledby="market-reviews-heading">
+                <div class="card-body p-4 p-md-5">
+                    <div class="d-flex flex-column flex-sm-row justify-content-between gap-2 mb-4">
+                        <div>
+                            <h2 id="market-reviews-heading" class="h4 fw-bold text-market mb-1">Night Market Reviews</h2>
+                            <p class="text-secondary mb-0">Directly published visitor feedback for {{ $nightMarket->name }}.</p>
+                            @foreach ($reviewActions as $reviewAction)
+                                <a href="{{ $reviewAction['url'] }}" class="btn btn-market mt-3">{{ $reviewAction['label'] }}</a>
+                            @endforeach
+                        </div>
+                        @if ($reviewCount > 0)<div><strong>{{ number_format($averageRating, 1) }}/5</strong> <span class="text-secondary">from {{ $reviewCount }} {{ $reviewCount === 1 ? 'review' : 'reviews' }}</span></div>@endif
+                    </div>
+                    @if ($reviews->isEmpty())
+                        <div class="alert alert-info text-center mb-0"><i class="bi bi-chat-square-text fs-3 d-block mb-2" aria-hidden="true"></i>No market reviews yet. Be the first verified Client to share feedback.</div>
+                    @else
+                        <div class="row g-2 mb-4" aria-label="Market rating distribution">@foreach ($ratingDistribution as $rating => $count)<div class="col-12 col-sm"><div class="border rounded-3 p-2 text-center"><strong>{{ $rating }} star</strong><span class="d-block text-secondary">{{ $count }}</span></div></div>@endforeach</div>
+                        <div class="vstack gap-3">@foreach ($reviews as $review)<article class="border rounded-3 p-3 bg-white"><div class="d-flex justify-content-between gap-3 mb-2"><div class="d-flex align-items-center gap-2"><x-user-avatar :user="$review->user" size="sm" /><strong>{{ $review->user->name }}</strong></div><span class="badge text-bg-warning" aria-label="{{ $review->rating }} out of 5 stars"><span aria-hidden="true">{{ str_repeat('★', $review->rating) }}{{ str_repeat('☆', 5 - $review->rating) }}</span><span class="visually-hidden">{{ $review->rating }} out of 5 stars</span></span></div><p class="mb-1">{{ $review->comment }}</p>@if ($review->tags)<div class="d-flex flex-wrap gap-1 mb-2">@foreach ($review->tags as $tag)@if (isset(\App\Models\Review::MARKET_TAGS[$tag]))<x-review-tag :tag="$tag" :label="\App\Models\Review::MARKET_TAGS[$tag]" />@endif @endforeach</div>@endif<small class="text-secondary">Reviewed {{ $review->review_date->format('M j, Y') }}@if ($review->updated_at->gt($review->created_at)) · Updated {{ $review->updated_at->format('M j, Y') }}@endif</small></article>@endforeach</div>
+                        <div class="mt-4">{{ $reviews->links() }}</div>
                     @endif
                 </div>
             </section>

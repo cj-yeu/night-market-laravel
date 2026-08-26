@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\VisitPlan;
 use App\Models\VisitPlanItem;
 use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
@@ -18,6 +19,14 @@ use Tests\TestCase;
 class EmailVerificationTest extends TestCase
 {
     use DatabaseTransactions;
+
+    public function test_verification_email_uses_the_project_name_in_its_salutation(): void
+    {
+        $message = (new VerifyEmail)->toMail(User::factory()->create());
+
+        $this->assertInstanceOf(MailMessage::class, $message);
+        $this->assertSame("Regards,\nNight Market Selangor", $message->salutation);
+    }
 
     public function test_password_registration_creates_only_an_unverified_client_and_sends_verification(): void
     {

@@ -16,6 +16,12 @@
                         @method('PATCH')
                         @include('client.reviews.partials.fields', ['submitLabel' => 'Update Review'])
                     </form>
+                    <form method="POST" action="{{ route('client.foods.reviews.destroy', [$food, $review]) }}" class="mt-3"
+                        onsubmit="return confirm('Delete this review? It will no longer be visible and cannot be restored.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-outline-danger">Delete My Review</button>
+                    </form>
                 </div>
             </div>
         </div>

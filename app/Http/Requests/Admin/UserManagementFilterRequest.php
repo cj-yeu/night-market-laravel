@@ -11,7 +11,7 @@ class UserManagementFilterRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_ADMIN;
+        return $this->user()?->hasAdminAccess() ?? false;
     }
 
     /**
@@ -21,7 +21,7 @@ class UserManagementFilterRequest extends FormRequest
     {
         return [
             'search' => ['nullable', 'string', 'max:100'],
-            'role' => ['nullable', Rule::in([User::ROLE_ADMIN, User::ROLE_CLIENT])],
+            'role' => ['nullable', Rule::in([User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN, User::ROLE_CLIENT])],
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
             'verification' => ['nullable', Rule::in(['verified', 'pending'])],
             'auth_method' => ['nullable', Rule::in([

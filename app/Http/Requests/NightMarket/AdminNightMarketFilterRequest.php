@@ -4,7 +4,6 @@ namespace App\Http\Requests\NightMarket;
 
 use App\Models\MarketOperatingDay;
 use App\Models\NightMarket;
-use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -13,7 +12,7 @@ class AdminNightMarketFilterRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_ADMIN;
+        return $this->user()?->hasAdminAccess() ?? false;
     }
 
     /**

@@ -3,7 +3,6 @@
 namespace App\Http\Requests\SocialMedia;
 
 use App\Models\SocialMediaRecord;
-use App\Models\User;
 use App\Rules\SafeSocialMediaImageUrl;
 use App\Rules\SupportedSocialMediaSourceUrl;
 use App\Services\SocialMediaUrlPolicy;
@@ -15,7 +14,7 @@ class StoreSocialMediaRecordRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_ADMIN;
+        return $this->user()?->hasAdminAccess() ?? false;
     }
 
     /**

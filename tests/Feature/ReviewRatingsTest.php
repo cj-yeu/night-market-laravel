@@ -63,7 +63,10 @@ class ReviewRatingsTest extends TestCase
 
         $this->actingAs($this->client)
             ->post(route('client.foods.reviews.store', $food), [
-                ...$this->validReview(['comment' => '  Excellent noodles and friendly service.  ']),
+                ...$this->validReview([
+                    'comment' => '  Excellent noodles and friendly service.  ',
+                    'tags' => ['tasty', 'good_value'],
+                ]),
                 'user_id' => $otherUser->id,
                 'food_id' => $otherFood->id,
                 'status' => Review::STATUS_REJECTED,
@@ -75,13 +78,15 @@ class ReviewRatingsTest extends TestCase
         $this->assertDatabaseHas('reviews', [
             'user_id' => $this->client->id,
             'food_id' => $food->id,
-            'night_market_id' => $food->stall->night_market_id,
+            'night_market_id' => null,
             'rating' => 5,
             'comment' => 'Excellent noodles and friendly service.',
             'status' => Review::STATUS_APPROVED,
         ]);
         $this->get(route('foods.show', $food))
-            ->assertOk()->assertSee('Excellent noodles and friendly service.')->assertSee('5.0/5');
+            ->assertOk()->assertSee('Excellent noodles and friendly service.')->assertSee('Tasty')->assertSee('Good value')->assertSee('5.0/5');
+
+        $this->assertSame(['tasty', 'good_value'], Review::query()->where('user_id', $this->client->id)->firstOrFail()->tags);
     }
 
     public function test_invalid_and_whitespace_only_reviews_are_rejected_without_consuming_rate_limit(): void
@@ -100,6 +105,15 @@ class ReviewRatingsTest extends TestCase
 
         $this->assertSame(0, RateLimiter::attempts($this->rateLimitKey($this->client)));
         $this->assertDatabaseCount('reviews', 0);
+    }
+
+    public function test_review_tags_are_limited_to_the_allowed_food_choices(): void
+    {
+        $food = Food::factory()->create();
+
+        $this->actingAs($this->client)
+            ->post(route('client.foods.reviews.store', $food), $this->validReview(['tags' => ['easy_parking']]))
+            ->assertSessionHasErrors(['tags.0']);
     }
 
     public function test_rate_limiter_blocks_the_sixth_valid_submission_attempt(): void
@@ -121,7 +135,7 @@ class ReviewRatingsTest extends TestCase
         $this->assertDatabaseCount('reviews', 5);
     }
 
-    public function test_one_review_per_client_per_food_is_guarded_in_application_and_database(): void
+    public function test_one_review_per_client_per_food_per_day_is_guarded_in_application_and_database(): void
     {
         $food = Food::factory()->create();
         $review = Review::factory()->forFood($food)->approved()->create(['user_id' => $this->client->id]);
@@ -136,7 +150,39 @@ class ReviewRatingsTest extends TestCase
         $this->assertDatabaseCount('reviews', 1);
     }
 
-    public function test_database_unique_index_rejects_a_duplicate_user_and_food_pair(): void
+    public function test_client_can_add_a_new_food_review_on_a_later_day_without_replacing_history(): void
+    {
+        $food = Food::factory()->create();
+        $yesterday = now(Review::REVIEW_TIMEZONE)->subDay()->toDateString();
+
+        Review::factory()->forFood($food)->approved()->create([
+            'user_id' => $this->client->id,
+            'review_date' => $yesterday,
+            'comment' => 'Yesterday the noodles were excellent.',
+        ]);
+
+        $this->actingAs($this->client)
+            ->get(route('client.foods.reviews.create', $food))
+            ->assertOk()
+            ->assertSee('Publish Review');
+
+        $this->actingAs($this->client)
+            ->post(route('client.foods.reviews.store', $food), $this->validReview([
+                'comment' => 'Today the noodles are still excellent.',
+            ]))
+            ->assertRedirect(route('foods.show', $food));
+
+        $this->assertSame(2, Review::query()
+            ->where('user_id', $this->client->id)
+            ->where('food_id', $food->id)
+            ->count());
+        $this->assertDatabaseHas('reviews', ['user_id' => $this->client->id, 'food_id' => $food->id, 'review_date' => Review::currentReviewDate()]);
+        $this->get(route('foods.show', $food))
+            ->assertSee('Yesterday the noodles were excellent.')
+            ->assertSee('Today the noodles are still excellent.');
+    }
+
+    public function test_database_unique_index_rejects_a_duplicate_user_and_food_pair_on_the_same_day(): void
     {
         $food = Food::factory()->create();
         Review::factory()->forFood($food)->approved()->create(['user_id' => $this->client->id]);
@@ -145,7 +191,11 @@ class ReviewRatingsTest extends TestCase
             Review::factory()->forFood($food)->approved()->create(['user_id' => $this->client->id]);
             $this->fail('The database accepted a duplicate user and Food review.');
         } catch (UniqueConstraintViolationException) {
-            $this->assertDatabaseCount('reviews', 1);
+            $this->assertSame(1, Review::query()
+                ->where('user_id', $this->client->id)
+                ->where('food_id', $food->id)
+                ->whereDate('review_date', Review::currentReviewDate())
+                ->count());
         }
     }
 
@@ -191,6 +241,50 @@ class ReviewRatingsTest extends TestCase
             ->assertNotFound();
 
         $this->assertSame($food->id, $review->fresh()->food_id);
+    }
+
+    public function test_client_can_delete_only_own_food_review_and_replace_it_that_day(): void
+    {
+        $food = Food::factory()->create();
+        $review = Review::factory()->forFood($food)->approved()->create(['user_id' => $this->client->id]);
+        $otherReview = Review::factory()->forFood($food)->approved()->create();
+
+        $this->actingAs($this->client)
+            ->delete(route('client.foods.reviews.destroy', [$food, $otherReview]))
+            ->assertForbidden();
+
+        $this->actingAs($this->client)
+            ->delete(route('client.foods.reviews.destroy', [$food, $review]))
+            ->assertRedirect(route('foods.show', $food))
+            ->assertSessionHas('status', 'Your review has been deleted.');
+
+        $this->assertDatabaseMissing('reviews', ['id' => $review->id]);
+        $this->get(route('foods.show', $food))->assertDontSee($review->comment);
+        $this->actingAs($this->client)
+            ->post(route('client.foods.reviews.store', $food), $this->validReview())
+            ->assertRedirect(route('foods.show', $food));
+    }
+
+    public function test_client_can_delete_only_own_market_review_and_replace_it_that_day(): void
+    {
+        $market = NightMarket::factory()->create();
+        $review = Review::factory()->approved()->create(['user_id' => $this->client->id, 'night_market_id' => $market->id, 'food_id' => null]);
+        $otherReview = Review::factory()->approved()->create(['night_market_id' => $market->id, 'food_id' => null]);
+
+        $this->actingAs($this->client)
+            ->delete(route('client.night-markets.reviews.destroy', [$market, $otherReview]))
+            ->assertForbidden();
+
+        $this->actingAs($this->client)
+            ->delete(route('client.night-markets.reviews.destroy', [$market, $review]))
+            ->assertRedirect(route('night-markets.show', $market))
+            ->assertSessionHas('status', 'Your market review has been deleted.');
+
+        $this->assertDatabaseMissing('reviews', ['id' => $review->id]);
+        $this->get(route('night-markets.show', $market))->assertDontSee($review->comment);
+        $this->actingAs($this->client)
+            ->post(route('client.night-markets.reviews.store', $market), $this->validReview())
+            ->assertRedirect(route('night-markets.show', $market));
     }
 
     public function test_reviews_are_rejected_for_non_public_food_stall_or_market(): void
@@ -251,14 +345,14 @@ class ReviewRatingsTest extends TestCase
     public function test_legacy_market_reviews_are_preserved_but_not_guessed_onto_a_food(): void
     {
         $food = Food::factory()->create();
-        Review::factory()->count(2)->approved()->create([
+        Review::factory()->approved()->create([
             'user_id' => $this->client->id,
             'night_market_id' => $food->stall->night_market_id,
             'food_id' => null,
             'comment' => 'Legacy market feedback remains unassigned.',
         ]);
 
-        $this->assertDatabaseCount('reviews', 2);
+        $this->assertDatabaseCount('reviews', 1);
         $this->get(route('foods.show', $food))
             ->assertOk()->assertDontSee('Legacy market feedback remains unassigned.')->assertSee('No reviews yet.');
     }
@@ -279,6 +373,47 @@ class ReviewRatingsTest extends TestCase
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
         $this->actingAs($admin)->get(route('foods.show', $food))
             ->assertDontSee('Write a Review')->assertDontSee('Edit My Review');
+    }
+
+    public function test_client_can_view_only_own_review_history_and_filter_by_target_type(): void
+    {
+        $food = Food::factory()->create(['name' => 'History Food']);
+        $market = NightMarket::factory()->create(['name' => 'History Market']);
+        $foodReview = Review::factory()->forFood($food)->approved()->create([
+            'user_id' => $this->client->id,
+            'comment' => 'My food review history entry.',
+        ]);
+        $marketReview = Review::factory()->approved()->create([
+            'user_id' => $this->client->id,
+            'night_market_id' => $market->id,
+            'food_id' => null,
+            'comment' => 'My market review history entry.',
+        ]);
+        Review::factory()->forFood($food)->approved()->create(['comment' => 'Another client private review.']);
+
+        $this->actingAs($this->client)
+            ->get(route('client.reviews.index'))
+            ->assertOk()
+            ->assertSee('My Reviews')
+            ->assertSee($foodReview->comment)
+            ->assertSee($marketReview->comment)
+            ->assertDontSee('Another client private review.')
+            ->assertSee(route('client.foods.reviews.edit', [$food, $foodReview]), false)
+            ->assertSee(route('client.night-markets.reviews.edit', [$market, $marketReview]), false);
+
+        $this->actingAs($this->client)
+            ->get(route('client.reviews.index', ['type' => 'food']))
+            ->assertOk()
+            ->assertSee($foodReview->comment)
+            ->assertDontSee($marketReview->comment);
+
+        $this->actingAs($this->client)
+            ->get(route('client.reviews.index', ['type' => 'market']))
+            ->assertOk()
+            ->assertSee($marketReview->comment)
+            ->assertDontSee($foodReview->comment);
+
+        $this->actingAs($this->client)->get(route('client.reviews.index', ['type' => 'invalid']))->assertNotFound();
     }
 
     public function test_admin_access_is_authorized_and_management_hides_sensitive_user_fields(): void
@@ -353,7 +488,8 @@ class ReviewRatingsTest extends TestCase
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
 
         $this->assertFalse(app('router')->has('admin.reviews.update'));
-        $this->assertFalse(app('router')->has('client.foods.reviews.destroy'));
+        $this->assertTrue(app('router')->has('client.foods.reviews.destroy'));
+        $this->assertTrue(app('router')->has('client.night-markets.reviews.destroy'));
         $this->actingAs($admin)->patch('/admin/reviews/'.$review->id, ['status' => Review::STATUS_APPROVED])->assertMethodNotAllowed();
         $this->actingAs($admin)->get('/admin/reviews/'.$review->id)->assertMethodNotAllowed();
         $this->assertDatabaseHas('reviews', ['id' => $review->id]);

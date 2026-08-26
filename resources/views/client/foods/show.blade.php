@@ -12,22 +12,6 @@
                     class="btn btn-outline-secondary">Back to Stalls</a>
                 <a href="{{ route('night-markets.show', $food->stall->night_market_id) }}"
                     class="btn btn-outline-secondary">Back to Market</a>
-                @guest
-                    <a href="{{ route('login') }}" class="btn btn-outline-secondary">Log in to Review</a>
-                    <a href="{{ route('register') }}" class="btn btn-outline-secondary">Register to Review</a>
-                @else
-                    @if (auth()->user()->role === \App\Models\User::ROLE_CLIENT)
-                        @if (! auth()->user()->hasVerifiedEmail())
-                            <a href="{{ route('verification.notice') }}" class="btn btn-outline-secondary">Verify Email to Review</a>
-                        @elseif ($viewerReview)
-                            <a href="{{ route('client.foods.reviews.edit', [$food, $viewerReview]) }}"
-                                class="btn btn-outline-secondary">Edit My Review</a>
-                        @else
-                            <a href="{{ route('client.foods.reviews.create', $food) }}"
-                                class="btn btn-outline-secondary">Write a Review</a>
-                        @endif
-                    @endif
-                @endguest
                 <a href="{{ route('client.visit-plans.index', ['item_type' => 'food', 'item_id' => $food->id]) }}"
                     class="btn btn-market">Add to Visit Plan</a>
             </div>
@@ -79,7 +63,7 @@
                         </dd>
 
                         @if ($food->verified_at)
-                            <dt class="col-sm-3">Verified</dt>
+                            <dt class="col-sm-3">Last verified</dt>
                             <dd class="col-sm-9">{{ $food->verified_at->format('M j, Y') }}</dd>
                         @endif
 
@@ -100,6 +84,9 @@
                         <div>
                             <h2 id="food-reviews-heading" class="h4 fw-bold text-market mb-1">Food Reviews</h2>
                             <p class="text-secondary mb-0">Directly published feedback for {{ $food->name }}.</p>
+                            @foreach ($reviewActions as $reviewAction)
+                                <a href="{{ $reviewAction['url'] }}" class="btn btn-market mt-3">{{ $reviewAction['label'] }}</a>
+                            @endforeach
                         </div>
                         @if ($reviewCount > 0)
                             <div class="text-sm-end">
@@ -109,7 +96,10 @@
                         @endif
                     </div>
                     @if ($reviews->isEmpty())
-                        <div class="alert alert-info mb-0">No reviews yet. Be the first verified Client to review this Food.</div>
+                        <div class="alert alert-info text-center mb-0">
+                            <i class="bi bi-chat-square-text fs-3 d-block mb-2" aria-hidden="true"></i>
+                            No reviews yet. Be the first verified Client to review this Food.
+                        </div>
                     @else
                         <div class="row g-2 mb-4" aria-label="Rating distribution">
                             @foreach ($ratingDistribution as $rating => $count)
@@ -132,8 +122,17 @@
                                         </span>
                                     </div>
                                     <p class="mb-1">{{ $review->comment }}</p>
+                                    @if ($review->tags)
+                                        <div class="d-flex flex-wrap gap-1 mb-2">
+                                            @foreach ($review->tags as $tag)
+                                                @if (isset(\App\Models\Review::FOOD_TAGS[$tag]))
+                                                    <x-review-tag :tag="$tag" :label="\App\Models\Review::FOOD_TAGS[$tag]" />
+                                                @endif
+                                            @endforeach
+                                        </div>
+                                    @endif
                                     <small class="text-secondary">
-                                        {{ $review->created_at->format('M j, Y') }}
+                                        Reviewed {{ $review->review_date->format('M j, Y') }}
                                         @if ($review->updated_at->gt($review->created_at))
                                             · Updated {{ $review->updated_at->format('M j, Y') }}
                                         @endif

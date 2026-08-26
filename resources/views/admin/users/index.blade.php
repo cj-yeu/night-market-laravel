@@ -32,6 +32,7 @@
                         <select id="role" name="role" class="form-select">
                             <option value="">All roles</option>
                             <option value="admin" @selected(($filters['role'] ?? '') === 'admin')>Admin</option>
+                            <option value="super_admin" @selected(($filters['role'] ?? '') === 'super_admin')>Super Admin</option>
                             <option value="client" @selected(($filters['role'] ?? '') === 'client')>Client</option>
                         </select>
                     </div>
@@ -100,7 +101,7 @@
                                         </div>
                                     </div>
                                 </td>
-                                <td><span class="badge text-bg-light border">{{ ucfirst($user->role) }}</span></td>
+                                <td><span class="badge text-bg-light border">{{ $user->role === \App\Models\User::ROLE_SUPER_ADMIN ? 'Super Admin' : ucfirst($user->role) }}</span></td>
                                 <td>
                                     <span class="badge {{ $user->is_active ? 'text-bg-success' : 'text-bg-secondary' }}">
                                         {{ $user->is_active ? 'Active' : 'Inactive' }}
@@ -119,7 +120,7 @@
 
                                         @if ($user->role === \App\Models\User::ROLE_CLIENT)
                                             <form method="POST" action="{{ route('admin.users.status.update', $user) }}"
-                                                onsubmit="return confirm('{{ $user->is_active ? 'Deactivate this Client account?' : 'Activate this Client account?' }}');">
+                                                onsubmit="return confirm('{{ $user->is_active ? 'Deactivate this Client account?\n\nThe user will lose access but their reviews and visit plans will be preserved.' : 'Activate this Client account?' }}');">
                                                 @csrf
                                                 @method('PATCH')
                                                 <input type="hidden" name="is_active" value="{{ $user->is_active ? 0 : 1 }}">
@@ -133,6 +134,17 @@
                                                     class="btn btn-sm {{ $user->is_active ? 'btn-outline-danger' : 'btn-outline-success' }}">
                                                     {{ $user->is_active ? 'Deactivate' : 'Activate' }}
                                                 </button>
+                                            </form>
+                                            @if ($canManageRoles && $user->is_active && $user->hasVerifiedEmail())
+                                                <form method="POST" action="{{ route('admin.users.promote', $user) }}" onsubmit="return confirm('Promote this active, verified Client to Admin? Admin accounts can access catalog and management tools.');">
+                                                    @csrf @method('PATCH')
+                                                    <button type="submit" class="btn btn-sm btn-market">Promote to Admin</button>
+                                                </form>
+                                            @endif
+                                        @elseif ($user->role === \App\Models\User::ROLE_ADMIN && $canManageRoles)
+                                            <form method="POST" action="{{ route('admin.users.demote', $user) }}" onsubmit="return confirm('Demote this Admin to Client? They will lose catalog and management access.');">
+                                                @csrf @method('PATCH')
+                                                <button type="submit" class="btn btn-sm btn-outline-warning">Demote to Client</button>
                                             </form>
                                         @else
                                             <span class="badge text-bg-light border align-self-center">Read only</span>
