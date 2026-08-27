@@ -48,6 +48,7 @@ class SocialMediaRecord extends Model
         'food_id',
         'platform',
         'original_post_url',
+        'source_url_hash',
         'extracted_title',
         'content_summary',
         'external_image_url',
@@ -64,6 +65,16 @@ class SocialMediaRecord extends Model
         'extracted_food_mentions',
         'approved_by',
         'approved_at',
+    ];
+
+    /**
+     * Internal de-duplication key. It is derived from the stored URL and never
+     * shown publicly, so it stays out of array and JSON serialisation.
+     *
+     * @var list<string>
+     */
+    protected $hidden = [
+        'source_url_hash',
     ];
 
     public function scopePubliclyVisible(Builder $query): Builder

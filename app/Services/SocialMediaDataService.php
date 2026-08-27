@@ -90,10 +90,10 @@ class SocialMediaDataService
     public function create(array $data): SocialMediaRecord
     {
         $this->validateEligibility($data);
-        $this->validatePresentationUrls($data);
+        $sourceUrl = $this->validateSourceUrl($data);
 
         return SocialMediaRecord::create([
-            ...$this->recordData($data),
+            ...$this->recordData($data, $sourceUrl),
             'status' => SocialMediaRecord::STATUS_PENDING,
             'extraction_status' => $data['extraction_status'] ?? SocialMediaRecord::EXTRACTION_MANUAL,
         ]);
@@ -105,9 +105,9 @@ class SocialMediaDataService
     public function update(SocialMediaRecord $socialMediaRecord, array $data): SocialMediaRecord
     {
         $this->validateEligibility($data);
-        $this->validatePresentationUrls($data);
+        $sourceUrl = $this->validateSourceUrl($data, $socialMediaRecord);
         $socialMediaRecord->update([
-            ...$this->recordData($data, allowClearing: true),
+            ...$this->recordData($data, $sourceUrl, allowClearing: true),
             'status' => SocialMediaRecord::STATUS_PENDING,
             'approved_by' => null,
             'approved_at' => null,
@@ -385,7 +385,7 @@ class SocialMediaDataService
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    private function recordData(array $data, bool $allowClearing = false): array
+    private function recordData(array $data, string $sourceUrl, bool $allowClearing = false): array
     {
         $extracted = $this->extractFromText($data['content_summary']);
 
@@ -412,7 +412,8 @@ class SocialMediaDataService
             'night_market_id' => $data['night_market_id'] ?? null,
             'food_id' => $data['food_id'] ?? null,
             'platform' => $data['platform'],
-            'original_post_url' => $data['original_post_url'],
+            'original_post_url' => $sourceUrl,
+            'source_url_hash' => $this->sourceUrlHash($sourceUrl),
             'extracted_title' => $data['extracted_title'] ?? null,
             'content_summary' => $data['content_summary'],
             'external_image_url' => $data['external_image_url'] ?? null,
@@ -523,8 +524,15 @@ class SocialMediaDataService
         });
     }
 
-    /** @param array<string, mixed> $data */
-    private function validatePresentationUrls(array $data): void
+    /**
+     * Validates the submitted post URL and returns the normalised form that
+     * gets stored. Normalising here means the same post reached through two
+     * slightly different URLs (a trailing fragment, for instance) resolves to
+     * one stored value and therefore one de-duplication hash.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function validateSourceUrl(array $data, ?SocialMediaRecord $ignore = null): string
     {
         try {
             $source = $this->urlPolicy->inspectSourceUrl($data['original_post_url']);
@@ -539,6 +547,31 @@ class SocialMediaDataService
                 'platform' => 'The selected platform must match the original post URL.',
             ]);
         }
+
+        $alreadyRecorded = SocialMediaRecord::query()
+            ->where('source_url_hash', $this->sourceUrlHash($source['url']))
+            ->when($ignore, fn (Builder $query, SocialMediaRecord $record) => $query
+                ->whereKeyNot($record->getKey()))
+            ->exists();
+
+        if ($alreadyRecorded) {
+            throw ValidationException::withMessages([
+                'original_post_url' => 'This post has already been recorded. Search the existing records instead of adding it again.',
+            ]);
+        }
+
+        return $source['url'];
+    }
+
+    /**
+     * A varchar(2048) column cannot carry a full unique index under InnoDB, so
+     * duplicates are detected through a fixed-width hash of the stored URL.
+     * The URL is hashed as-is: post paths are case-sensitive on several
+     * platforms, so lower-casing here would merge two different posts.
+     */
+    private function sourceUrlHash(string $sourceUrl): string
+    {
+        return hash('sha256', $sourceUrl);
     }
 
     private function literalLikePattern(string $value): string
