@@ -17,6 +17,19 @@ use Illuminate\Validation\ValidationException;
 
 class SocialMediaDataService
 {
+    public const SORT_LATEST = 'latest';
+
+    public const SORT_OLDEST = 'oldest';
+
+    public const SORT_ENGAGEMENT = 'engagement';
+
+    /** @var array<string, string> */
+    public const PUBLIC_SORTS = [
+        self::SORT_LATEST => 'Newest first',
+        self::SORT_OLDEST => 'Oldest first',
+        self::SORT_ENGAGEMENT => 'Most engagement',
+    ];
+
     public function __construct(private readonly SocialMediaUrlPolicy $urlPolicy) {}
 
     /**
@@ -149,16 +162,14 @@ class SocialMediaDataService
     }
 
     /**
-     * @param  array{search?: string|null}  $filters
+     * @param  array{search?: string|null, platform?: string|null, night_market_id?: int|null, hashtag?: string|null, sort?: string|null}  $filters
      */
     public function publicHighlights(array $filters): LengthAwarePaginator
     {
-        $records = $this->publiclyVisibleQuery()
-            ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
-                ->applyKeywordSearch($query, $search))
-            ->latest('posted_date')
-            ->paginate(12)
-            ->withQueryString();
+        $query = $this->applyPublicFilters($this->publiclyVisibleQuery(), $filters);
+        $this->applyPublicSort($query, $filters['sort'] ?? null);
+
+        $records = $query->paginate(12)->withQueryString();
 
         $this->decorateSafeUrls($records->getCollection());
 
@@ -166,7 +177,7 @@ class SocialMediaDataService
     }
 
     /**
-     * @param  array{search?: string|null}  $filters
+     * @param  array{search?: string|null, platform?: string|null, night_market_id?: int|null, hashtag?: string|null, sort?: string|null}  $filters
      * @return array{
      *   recordsByPlatform: array<string, int>,
      *   engagementByPlatform: array<string, int>,
@@ -177,10 +188,7 @@ class SocialMediaDataService
      */
     public function publicInsights(array $filters): array
     {
-        $records = $this->publiclyVisibleQuery()
-            ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
-                ->applyKeywordSearch($query, $search))
-            ->get();
+        $records = $this->applyPublicFilters($this->publiclyVisibleQuery(), $filters)->get();
 
         $this->decorateSafeUrls($records);
 
@@ -201,6 +209,56 @@ class SocialMediaDataService
                 ->take(5)
                 ->values(),
         ];
+    }
+
+    /**
+     * Most-used hashtags across the publicly visible records that match the
+     * current filters. The hashtag filter itself is ignored on purpose, so the
+     * list stays usable for switching between tags.
+     *
+     * @param  array{search?: string|null, platform?: string|null, night_market_id?: int|null, hashtag?: string|null}  $filters
+     * @return array<int, array{tag: string, count: int}>
+     */
+    public function popularHashtags(array $filters, int $limit = 10): array
+    {
+        unset($filters['hashtag']);
+
+        return $this->applyPublicFilters(SocialMediaRecord::query()->publiclyVisible(), $filters)
+            ->get(['id', 'extracted_hashtags'])
+            ->pluck('extracted_hashtags')
+            ->flatten()
+            ->filter()
+            ->countBy()
+            ->sortDesc()
+            ->take($limit)
+            ->map(fn (int $count, string $tag) => ['tag' => $tag, 'count' => $count])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Night markets that actually have publicly visible highlights, so the
+     * public filter never offers a market with nothing behind it.
+     *
+     * @return Collection<int, NightMarket>
+     */
+    public function highlightedMarkets(): Collection
+    {
+        $marketIds = SocialMediaRecord::query()
+            ->publiclyVisible()
+            ->distinct()
+            ->pluck('night_market_id')
+            ->filter()
+            ->all();
+
+        if ($marketIds === []) {
+            return NightMarket::query()->whereRaw('1 = 0')->get(['id', 'name']);
+        }
+
+        return NightMarket::query()
+            ->whereKey($marketIds)
+            ->orderBy('name')
+            ->get(['id', 'name']);
     }
 
     /**
@@ -402,6 +460,34 @@ class SocialMediaDataService
                         ->where('status', Stall::STATUS_ACTIVE))
                     ->with('stall:id,night_market_id,status'),
             ]);
+    }
+
+    /**
+     * Filters shared by the public highlight list, its insights, and the
+     * hashtag cloud, so all three always describe the same set of records.
+     *
+     * @param  array{search?: string|null, platform?: string|null, night_market_id?: int|null, hashtag?: string|null}  $filters
+     */
+    private function applyPublicFilters(Builder $query, array $filters): Builder
+    {
+        return $query
+            ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
+                ->applyKeywordSearch($query, $search))
+            ->when($filters['platform'] ?? null, fn (Builder $query, string $platform) => $query
+                ->where('platform', $platform))
+            ->when($filters['night_market_id'] ?? null, fn (Builder $query, int $marketId) => $query
+                ->where('night_market_id', $marketId))
+            ->when($filters['hashtag'] ?? null, fn (Builder $query, string $hashtag) => $query
+                ->where('extracted_hashtags', 'like', $this->literalLikePattern('"'.$hashtag.'"')));
+    }
+
+    private function applyPublicSort(Builder $query, ?string $sort): void
+    {
+        match ($sort) {
+            self::SORT_OLDEST => $query->oldest('posted_date')->oldest('id'),
+            self::SORT_ENGAGEMENT => $query->orderByDesc('engagement_count')->latest('posted_date'),
+            default => $query->latest('posted_date')->latest('id'),
+        };
     }
 
     private function applyKeywordSearch(Builder $query, string $search): void
