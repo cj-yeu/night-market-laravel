@@ -3,6 +3,31 @@
 @section('title', 'Social Media Highlights | Night Market Selangor')
 
 @php($activeFilters = collect($filters ?? [])->filter()->isNotEmpty())
+@php($maxRecordCount = collect($insights['recordsByPlatform'])->max() ?: 1)
+@php($maxEngagement = collect($insights['engagementByPlatform'])->max() ?: 1)
+@php($maxTopEngagement = $insights['topEngagementPosts']->max('engagement_count') ?: 1)
+
+@push('styles')
+    <style>
+        .insight-track {
+            height: .5rem;
+            background: rgba(216, 91, 31, .12);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .insight-bar {
+            height: 100%;
+            background: var(--market-orange);
+            border-radius: 999px;
+            transition: width .25s ease;
+        }
+
+        .insight-row + .insight-row {
+            margin-top: .75rem;
+        }
+    </style>
+@endpush
 
 @section('content')
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">
@@ -118,10 +143,16 @@
                 <div class="col-12 col-md-6 col-xl-3">
                     <div class="card h-100 border-0 shadow-sm">
                         <div class="card-body">
-                            <h3 class="h6 text-secondary">Records by Platform</h3>
+                            <h3 class="h6 text-secondary mb-3">Records by Platform</h3>
                             @foreach ($insights['recordsByPlatform'] as $platformName => $count)
-                                <div class="d-flex justify-content-between">
-                                    <span>{{ $platformName }}</span><strong>{{ $count }}</strong>
+                                <div class="insight-row" title="{{ $platformName }}: {{ number_format($count) }} {{ $count === 1 ? 'record' : 'records' }}">
+                                    <div class="d-flex justify-content-between align-items-baseline gap-2 mb-1">
+                                        <span class="small">{{ $platformName }}</span>
+                                        <strong class="small">{{ number_format($count) }}</strong>
+                                    </div>
+                                    <div class="insight-track" aria-hidden="true">
+                                        <div class="insight-bar" style="width: {{ round($count / $maxRecordCount * 100, 1) }}%"></div>
+                                    </div>
                                 </div>
                             @endforeach
                         </div>
@@ -130,10 +161,16 @@
                 <div class="col-12 col-md-6 col-xl-3">
                     <div class="card h-100 border-0 shadow-sm">
                         <div class="card-body">
-                            <h3 class="h6 text-secondary">Engagement by Platform</h3>
+                            <h3 class="h6 text-secondary mb-3">Engagement by Platform</h3>
                             @foreach ($insights['engagementByPlatform'] as $platformName => $engagement)
-                                <div class="d-flex justify-content-between gap-2">
-                                    <span>{{ $platformName }}</span><strong>{{ number_format($engagement) }}</strong>
+                                <div class="insight-row" title="{{ $platformName }}: {{ number_format($engagement) }} total engagement">
+                                    <div class="d-flex justify-content-between align-items-baseline gap-2 mb-1">
+                                        <span class="small">{{ $platformName }}</span>
+                                        <strong class="small">{{ number_format($engagement) }}</strong>
+                                    </div>
+                                    <div class="insight-track" aria-hidden="true">
+                                        <div class="insight-bar" style="width: {{ round($engagement / $maxEngagement * 100, 1) }}%"></div>
+                                    </div>
                                 </div>
                             @endforeach
                         </div>
@@ -173,18 +210,22 @@
 
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    <h3 class="h5 text-market">Top Engagement Posts</h3>
+                    <h3 class="h5 text-market mb-3">Top Engagement Posts</h3>
                     <div class="row g-2">
                         @foreach ($insights['topEngagementPosts'] as $topPost)
                             <div class="col-12 col-lg-6">
-                                <div class="border rounded-3 p-3 h-100">
+                                <div class="border rounded-3 p-3 h-100"
+                                    title="{{ $topPost->platform }} · {{ $topPost->nightMarket->name }}: {{ number_format($topPost->engagement_count) }} engagement">
                                     <div class="d-flex justify-content-between gap-2">
                                         <strong>{{ $topPost->platform }}</strong>
                                         <span class="badge text-bg-warning">
                                             {{ number_format($topPost->engagement_count) }} engagement
                                         </span>
                                     </div>
-                                    <div class="small text-secondary mt-1">{{ $topPost->nightMarket->name }}</div>
+                                    <div class="small text-secondary mt-1 mb-2">{{ $topPost->nightMarket->name }}</div>
+                                    <div class="insight-track" aria-hidden="true">
+                                        <div class="insight-bar" style="width: {{ round($topPost->engagement_count / $maxTopEngagement * 100, 1) }}%"></div>
+                                    </div>
                                 </div>
                             </div>
                         @endforeach
