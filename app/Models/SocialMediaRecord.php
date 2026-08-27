@@ -65,6 +65,9 @@ class SocialMediaRecord extends Model
         'extracted_food_mentions',
         'approved_by',
         'approved_at',
+        'rejection_reason',
+        'rejected_by',
+        'rejected_at',
     ];
 
     /**
@@ -105,6 +108,7 @@ class SocialMediaRecord extends Model
             'extracted_market_mentions' => 'array',
             'extracted_food_mentions' => 'array',
             'approved_at' => 'datetime',
+            'rejected_at' => 'datetime',
         ];
     }
 
@@ -121,5 +125,10 @@ class SocialMediaRecord extends Model
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
     }
 }

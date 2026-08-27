@@ -27,6 +27,13 @@ class ModerateSocialMediaRecordRequest extends FormRequest
                     SocialMediaRecord::STATUS_REJECTED,
                 ]),
             ],
+            'rejection_reason' => [
+                'exclude_unless:status,'.SocialMediaRecord::STATUS_REJECTED,
+                'required',
+                'string',
+                'min:10',
+                'max:500',
+            ],
         ];
     }
 }

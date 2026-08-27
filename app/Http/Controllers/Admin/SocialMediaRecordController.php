@@ -78,6 +78,7 @@ class SocialMediaRecordController extends Controller
             $socialMediaRecord,
             $request->user(),
             $status,
+            $request->validated('rejection_reason'),
         );
 
         return redirect()

@@ -38,7 +38,12 @@ class SocialMediaDataService
     public function records(array $filters): LengthAwarePaginator
     {
         $records = SocialMediaRecord::query()
-            ->with(['nightMarket:id,name', 'food:id,name', 'approvedBy:id,name'])
+            ->with([
+                'nightMarket:id,name',
+                'food:id,name',
+                'approvedBy:id,name',
+                'rejectedBy:id,name',
+            ])
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
                 ->applyKeywordSearch($query, $search))
             ->when($filters['night_market_id'] ?? null, fn (Builder $query, int $marketId) => $query
@@ -111,13 +116,25 @@ class SocialMediaDataService
             'status' => SocialMediaRecord::STATUS_PENDING,
             'approved_by' => null,
             'approved_at' => null,
+            'rejection_reason' => null,
+            'rejected_by' => null,
+            'rejected_at' => null,
         ]);
 
         return $socialMediaRecord->refresh();
     }
 
-    public function moderate(SocialMediaRecord $socialMediaRecord, User $admin, string $status): SocialMediaRecord
-    {
+    /**
+     * Both outcomes are recorded symmetrically: an approval names the approver
+     * and clears any earlier rejection, a rejection names the rejecting
+     * administrator and keeps the reason they gave.
+     */
+    public function moderate(
+        SocialMediaRecord $socialMediaRecord,
+        User $admin,
+        string $status,
+        ?string $rejectionReason = null,
+    ): SocialMediaRecord {
         if ($status === SocialMediaRecord::STATUS_APPROVED) {
             $this->validateEligibility([
                 'night_market_id' => $socialMediaRecord->night_market_id,
@@ -128,12 +145,18 @@ class SocialMediaDataService
                 'status' => SocialMediaRecord::STATUS_APPROVED,
                 'approved_by' => $admin->id,
                 'approved_at' => now(),
+                'rejection_reason' => null,
+                'rejected_by' => null,
+                'rejected_at' => null,
             ]);
         } else {
             $socialMediaRecord->update([
                 'status' => SocialMediaRecord::STATUS_REJECTED,
                 'approved_by' => null,
                 'approved_at' => null,
+                'rejection_reason' => $rejectionReason,
+                'rejected_by' => $admin->id,
+                'rejected_at' => now(),
             ]);
         }
 

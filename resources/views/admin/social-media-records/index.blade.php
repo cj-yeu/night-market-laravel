@@ -124,10 +124,16 @@
                                 <td>{{ $record->food?->name ?? 'None' }}</td>
                                 <td><span class="badge text-bg-warning">{{ $record->platform }}</span></td>
                                 <td>{{ ucfirst($record->extraction_status) }}</td>
-                                <td>
+                                <td style="min-width: 12rem;">
                                     <span class="badge {{ $record->status === \App\Models\SocialMediaRecord::STATUS_APPROVED ? 'text-bg-success' : ($record->status === \App\Models\SocialMediaRecord::STATUS_REJECTED ? 'text-bg-danger' : 'text-bg-secondary') }}">
                                         {{ ucfirst($record->status) }}
                                     </span>
+                                    @if ($record->status === \App\Models\SocialMediaRecord::STATUS_REJECTED && $record->rejection_reason)
+                                        <div class="small mt-1">{{ $record->rejection_reason }}</div>
+                                        <div class="small text-secondary">
+                                            &mdash; {{ $record->rejectedBy?->name ?? 'Unknown administrator' }}@if ($record->rejected_at), {{ $record->rejected_at->format('d M Y') }}@endif
+                                        </div>
+                                    @endif
                                 </td>
                                 <td>
                                     @if ($record->safe_source_url)
@@ -194,14 +200,12 @@
                                             </form>
                                         @endif
                                         @if ($record->status !== \App\Models\SocialMediaRecord::STATUS_REJECTED)
-                                            <form method="POST"
-                                                action="{{ route('admin.social-media-records.moderate', $record) }}"
-                                                onsubmit="return confirm('Reject this social media record?');">
-                                                @csrf
-                                                @method('PATCH')
-                                                <input type="hidden" name="status" value="rejected">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
-                                            </form>
+                                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                                data-bs-toggle="modal" data-bs-target="#rejectRecordModal"
+                                                data-reject-action="{{ route('admin.social-media-records.moderate', $record) }}"
+                                                data-reject-label="{{ $record->extracted_title ?: $record->original_post_url }}">
+                                                Reject
+                                            </button>
                                         @endif
                                     </div>
                                 </td>
@@ -222,4 +226,73 @@
             </nav>
         @endif
     @endif
+
+    <div class="modal fade" id="rejectRecordModal" tabindex="-1"
+        aria-labelledby="rejectRecordModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form method="POST" id="rejectRecordForm" class="modal-content">
+                @csrf
+                @method('PATCH')
+                <input type="hidden" name="status"
+                    value="{{ \App\Models\SocialMediaRecord::STATUS_REJECTED }}">
+
+                <div class="modal-header">
+                    <h2 class="modal-title h5" id="rejectRecordModalLabel">Reject Social Media Record</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <p class="text-secondary small mb-3" id="rejectRecordTarget"></p>
+
+                    <label for="rejection_reason" class="form-label">Reason for rejection</label>
+                    <textarea id="rejection_reason" name="rejection_reason" rows="4"
+                        minlength="10" maxlength="500" required
+                        class="form-control @error('rejection_reason') is-invalid @enderror"
+                        placeholder="Explain why this record is not suitable for publication."></textarea>
+                    @error('rejection_reason')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    <div class="form-text">
+                        Between 10 and 500 characters. The reason is stored with the record so the
+                        decision can be reviewed later.
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-outline-danger">Reject Record</button>
+                </div>
+            </form>
+        </div>
+    </div>
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal = document.getElementById('rejectRecordModal');
+
+            if (!modal) {
+                return;
+            }
+
+            const form = document.getElementById('rejectRecordForm');
+            const target = document.getElementById('rejectRecordTarget');
+            const reason = document.getElementById('rejection_reason');
+
+            // One modal serves every row: the button that opened it carries the
+            // record's moderation route and a label for the operator to confirm.
+            modal.addEventListener('show.bs.modal', (event) => {
+                const trigger = event.relatedTarget;
+
+                if (!trigger) {
+                    return;
+                }
+
+                form.action = trigger.dataset.rejectAction;
+                target.textContent = trigger.dataset.rejectLabel ?? '';
+                reason.value = '';
+            });
+
+            modal.addEventListener('shown.bs.modal', () => reason.focus());
+        });
+    </script>
+@endpush
