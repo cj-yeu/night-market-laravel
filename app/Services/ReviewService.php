@@ -5,15 +5,23 @@ namespace App\Services;
 use App\Models\Food;
 use App\Models\NightMarket;
 use App\Models\Review;
+use App\Models\ReviewTag;
 use App\Models\Stall;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ReviewService
 {
+    /** @return Collection<int, ReviewTag> */
+    public function tagOptions(): Collection
+    {
+        return ReviewTag::query()->whereIn('name', ReviewTag::NAMES)->orderBy('name')->get(['id', 'name']);
+    }
+
     public function findPubliclyVisibleFood(int $foodId): Food
     {
         return Food::query()
@@ -35,7 +43,13 @@ class ReviewService
         return Review::query()
             ->where('food_id', $food->id)
             ->where('user_id', $user->id)
-            ->first();
+            ->latest('review_date')->latest('id')->first();
+    }
+
+    public function reviewForClientToday(Food $food, User $user): ?Review
+    {
+        return Review::query()->where('food_id', $food->id)->where('user_id', $user->id)
+            ->where('review_date', now()->toDateString())->latest('id')->first();
     }
 
     public function marketReviewForClient(NightMarket $nightMarket, User $user): ?Review
@@ -44,55 +58,73 @@ class ReviewService
             ->where('night_market_id', $nightMarket->id)
             ->whereNull('food_id')
             ->where('user_id', $user->id)
-            ->first();
+            ->latest('review_date')->latest('id')->first();
     }
 
-    /** @param array{rating: int, comment: string} $data */
+    public function marketReviewForClientToday(NightMarket $nightMarket, User $user): ?Review
+    {
+        return Review::query()->where('night_market_id', $nightMarket->id)->whereNull('food_id')
+            ->where('user_id', $user->id)->where('review_date', now()->toDateString())->latest('id')->first();
+    }
+
+    /** @param array{rating: int, comment: string, tags?: array<int, int>} $data */
     public function createForClient(User $user, Food $food, array $data): Review
     {
-        if ($this->reviewForClient($food, $user) !== null) {
+        if ($this->hasReviewToday($user, foodId: $food->id)) {
             throw ValidationException::withMessages([
-                'comment' => 'You have already reviewed this Food. Edit your existing review instead.',
+                'comment' => $this->dailyLimitMessage(),
             ]);
         }
 
         try {
-            return Review::query()->create([
-                'user_id' => $user->id,
-                'night_market_id' => null,
-                'food_id' => $food->id,
-                'rating' => $data['rating'],
-                'comment' => $data['comment'],
-                'status' => Review::STATUS_APPROVED,
-            ]);
+            return DB::transaction(function () use ($user, $food, $data): Review {
+                $review = Review::query()->create([
+                    'user_id' => $user->id,
+                    'night_market_id' => null,
+                    'food_id' => $food->id,
+                    'rating' => $data['rating'],
+                    'comment' => $data['comment'],
+                    'status' => Review::STATUS_APPROVED,
+                    'review_date' => now()->toDateString(),
+                ]);
+                $review->tags()->sync($this->validTagIds($data['tags'] ?? []));
+
+                return $review->load('tags');
+            });
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
-                'comment' => 'You have already reviewed this Food. Edit your existing review instead.',
+                'comment' => $this->dailyLimitMessage(),
             ]);
         }
     }
 
-    /** @param array{rating: int, comment: string} $data */
+    /** @param array{rating: int, comment: string, tags?: array<int, int>} $data */
     public function createMarketForClient(User $user, NightMarket $nightMarket, array $data): Review
     {
-        if ($this->marketReviewForClient($nightMarket, $user) !== null) {
+        if ($this->hasReviewToday($user, marketId: $nightMarket->id)) {
             throw ValidationException::withMessages([
-                'comment' => 'You have already reviewed this Night Market. Edit your existing review instead.',
+                'comment' => $this->dailyLimitMessage(),
             ]);
         }
 
         try {
-            return Review::query()->create([
-                'user_id' => $user->id,
-                'night_market_id' => $nightMarket->id,
-                'food_id' => null,
-                'rating' => $data['rating'],
-                'comment' => $data['comment'],
-                'status' => Review::STATUS_APPROVED,
-            ]);
+            return DB::transaction(function () use ($user, $nightMarket, $data): Review {
+                $review = Review::query()->create([
+                    'user_id' => $user->id,
+                    'night_market_id' => $nightMarket->id,
+                    'food_id' => null,
+                    'rating' => $data['rating'],
+                    'comment' => $data['comment'],
+                    'status' => Review::STATUS_APPROVED,
+                    'review_date' => now()->toDateString(),
+                ]);
+                $review->tags()->sync($this->validTagIds($data['tags'] ?? []));
+
+                return $review->load('tags');
+            });
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
-                'comment' => 'You have already reviewed this Night Market. Edit your existing review instead.',
+                'comment' => $this->dailyLimitMessage(),
             ]);
         }
     }
@@ -108,8 +140,9 @@ class ReviewService
             'comment' => $data['comment'],
             'status' => Review::STATUS_APPROVED,
         ]);
+        $review->tags()->sync($this->validTagIds($data['tags'] ?? []));
 
-        return $review->refresh();
+        return $review->refresh()->load('tags');
     }
 
     /** @param array{rating: int, comment: string} $data */
@@ -123,8 +156,9 @@ class ReviewService
             'comment' => $data['comment'],
             'status' => Review::STATUS_APPROVED,
         ]);
+        $review->tags()->sync($this->validTagIds($data['tags'] ?? []));
 
-        return $review->refresh();
+        return $review->refresh()->load('tags');
     }
 
     /**
@@ -143,7 +177,7 @@ class ReviewService
 
         return [
             'reviews' => (clone $base)
-                ->with('user:id,name,avatar_path')
+                ->with(['user:id,name,avatar_path', 'tags:id,name'])
                 ->latest('updated_at')
                 ->latest('id')
                 ->paginate(10)
@@ -156,7 +190,7 @@ class ReviewService
                 fn (int $rating) => [$rating => (int) ($countsByRating[$rating] ?? 0)]
             )->all(),
             'viewerReview' => $viewer?->role === User::ROLE_CLIENT
-                ? $this->reviewForClient($food, $viewer)
+                ? $this->reviewForClientToday($food, $viewer)
                 : null,
         ];
     }
@@ -171,11 +205,11 @@ class ReviewService
         $countsByRating = (clone $base)->selectRaw('rating, COUNT(*) AS aggregate')->groupBy('rating')->pluck('aggregate', 'rating');
 
         return [
-            'reviews' => (clone $base)->with('user:id,name,avatar_path')->latest('updated_at')->latest('id')->paginate(10, ['*'], 'market_reviews')->withQueryString(),
+            'reviews' => (clone $base)->with(['user:id,name,avatar_path', 'tags:id,name'])->latest('updated_at')->latest('id')->paginate(10, ['*'], 'market_reviews')->withQueryString(),
             'averageRating' => (int) $statistics->review_count === 0 ? null : round((float) $statistics->average_rating, 1),
             'reviewCount' => (int) $statistics->review_count,
             'ratingDistribution' => collect(range(5, 1))->mapWithKeys(fn (int $rating) => [$rating => (int) ($countsByRating[$rating] ?? 0)])->all(),
-            'viewerReview' => $viewer?->role === User::ROLE_CLIENT ? $this->marketReviewForClient($nightMarket, $viewer) : null,
+            'viewerReview' => $viewer?->role === User::ROLE_CLIENT ? $this->marketReviewForClientToday($nightMarket, $viewer) : null,
         ];
     }
 
@@ -229,6 +263,35 @@ class ReviewService
     public function delete(Review $review): void
     {
         $review->delete();
+    }
+
+    /** @return array{marketReviews: Collection<int, Review>, foodReviews: Collection<int, Review>} */
+    public function reviewsForProfile(User $user): array
+    {
+        $base = Review::query()->where('user_id', $user->id)->with('tags:id,name')->latest('created_at')->latest('id');
+
+        return [
+            'marketReviews' => (clone $base)->whereNotNull('night_market_id')->whereNull('food_id')->with('nightMarket:id,name')->get(),
+            'foodReviews' => (clone $base)->whereNotNull('food_id')->with(['food:id,stall_id,name', 'food.stall:id,night_market_id,name', 'food.stall.nightMarket:id,name'])->get(),
+        ];
+    }
+
+    protected function hasReviewToday(User $user, ?int $marketId = null, ?int $foodId = null): bool
+    {
+        return Review::query()->where('user_id', $user->id)->where('review_date', now()->toDateString())
+            ->when($marketId !== null, fn ($query) => $query->where('night_market_id', $marketId)->whereNull('food_id'))
+            ->when($foodId !== null, fn ($query) => $query->where('food_id', $foodId))->exists();
+    }
+
+    /** @param array<int, int|string> $tagIds */
+    private function validTagIds(array $tagIds): array
+    {
+        return ReviewTag::query()->whereIn('id', $tagIds)->whereIn('name', ReviewTag::NAMES)->pluck('id')->all();
+    }
+
+    private function dailyLimitMessage(): string
+    {
+        return 'You have already submitted a review for this item today. Please try again tomorrow.';
     }
 
     private function literalLikePattern(?string $value): ?string

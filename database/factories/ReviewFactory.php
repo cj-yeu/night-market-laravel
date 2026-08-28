@@ -26,6 +26,7 @@ class ReviewFactory extends Factory
             'rating' => fake()->numberBetween(1, 5),
             'comment' => fake()->sentence(12),
             'status' => Review::STATUS_PENDING,
+            'review_date' => now()->toDateString(),
         ];
     }
 
@@ -43,7 +44,7 @@ class ReviewFactory extends Factory
     {
         return $this->state(fn () => [
             'food_id' => $food->id,
-            'night_market_id' => $food->stall->night_market_id,
+            'night_market_id' => null,
         ]);
     }
 }

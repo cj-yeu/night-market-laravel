@@ -132,6 +132,23 @@
                     </form>
 
                     @if ($user->role === \App\Models\User::ROLE_CLIENT)
+                        <section class="border rounded-3 bg-light p-3 p-md-4 mt-4" aria-labelledby="my-reviews-heading">
+                            <h2 id="my-reviews-heading" class="h5 fw-bold mb-1">My Reviews</h2>
+                            <p class="text-secondary small mb-3">Your published market and food reviews, newest first.</p>
+                            <div class="row g-3">
+                                <div class="col-12 col-lg-6"><h3 class="h6 fw-bold">Market Reviews</h3>
+                                    @forelse ($marketReviews as $review)
+                                        <article class="border rounded-3 bg-white p-3 mb-2"><div class="d-flex justify-content-between gap-2"><strong>{{ str_repeat('★', $review->rating) }}{{ str_repeat('☆', 5 - $review->rating) }} <span class="visually-hidden">{{ $review->rating }} out of 5 stars</span></strong><small class="text-secondary">{{ $review->created_at->format('M j, Y') }}</small></div><p class="mb-2">{{ $review->comment }}</p><a href="{{ route('night-markets.show', $review->nightMarket) }}" class="small fw-semibold">{{ $review->nightMarket->name }} details</a>@if ($review->tags->isNotEmpty())<div class="d-flex flex-wrap gap-1 mt-2">@foreach($review->tags as $tag)<span class="badge text-bg-light border text-dark">{{ $tag->name }}</span>@endforeach</div>@endif</article>
+                                    @empty <p class="text-secondary small mb-0">You have not written any reviews yet.</p>@endforelse
+                                </div>
+                                <div class="col-12 col-lg-6"><h3 class="h6 fw-bold">Food Reviews</h3>
+                                    @forelse ($foodReviews as $review)
+                                        <article class="border rounded-3 bg-white p-3 mb-2"><div class="d-flex justify-content-between gap-2"><strong>{{ str_repeat('★', $review->rating) }}{{ str_repeat('☆', 5 - $review->rating) }} <span class="visually-hidden">{{ $review->rating }} out of 5 stars</span></strong><small class="text-secondary">{{ $review->created_at->format('M j, Y') }}</small></div><p class="mb-2">{{ $review->comment }}</p><a href="{{ route('foods.show', $review->food) }}" class="small fw-semibold">{{ $review->food->name }} details</a><span class="small text-secondary"> · {{ $review->food->stall->nightMarket->name }}</span>@if ($review->tags->isNotEmpty())<div class="d-flex flex-wrap gap-1 mt-2">@foreach($review->tags as $tag)<span class="badge text-bg-light border text-dark">{{ $tag->name }}</span>@endforeach</div>@endif</article>
+                                    @empty <p class="text-secondary small mb-0">You have not written any reviews yet.</p>@endforelse
+                                </div>
+                            </div>
+                        </section>
+
                         <section class="border rounded-3 bg-light p-3 p-md-4 mt-4"
                             aria-labelledby="connected-accounts-heading">
                             <div class="d-flex flex-column flex-sm-row justify-content-between gap-2 mb-3">

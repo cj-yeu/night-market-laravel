@@ -5,6 +5,8 @@ namespace App\Http\Controllers\UserAccount;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UserAccount\ChangePasswordRequest;
 use App\Http\Requests\UserAccount\UpdateProfileRequest;
+use App\Models\User;
+use App\Services\ReviewService;
 use App\Services\UserAccountService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,12 +14,18 @@ use Illuminate\View\View;
 
 class ProfileController extends Controller
 {
-    public function __construct(private readonly UserAccountService $userAccountService) {}
+    public function __construct(
+        private readonly UserAccountService $userAccountService,
+        private readonly ReviewService $reviewService,
+    ) {}
 
     public function edit(Request $request): View
     {
+        $user = $request->user()->load('googleAccount');
+
         return view('profile.edit', [
-            'user' => $request->user()->load('googleAccount'),
+            'user' => $user,
+            ...($user->role === User::ROLE_CLIENT ? $this->reviewService->reviewsForProfile($user) : ['marketReviews' => collect(), 'foodReviews' => collect()]),
         ]);
     }
 

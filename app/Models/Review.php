@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Review extends Model
@@ -31,6 +32,7 @@ class Review extends Model
         'rating',
         'comment',
         'status',
+        'review_date',
     ];
 
     public function scopePubliclyVisible(Builder $query): Builder
@@ -52,6 +54,7 @@ class Review extends Model
     {
         return [
             'rating' => 'integer',
+            'review_date' => 'date',
         ];
     }
 
@@ -73,5 +76,10 @@ class Review extends Model
     public function images(): HasMany
     {
         return $this->hasMany(ReviewImage::class);
+    }
+
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(ReviewTag::class)->orderBy('name');
     }
 }
