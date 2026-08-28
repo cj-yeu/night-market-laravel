@@ -130,6 +130,7 @@ class SocialMediaRecordTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('admin.social-media-records.store'), $this->validPayload([
+                'original_post_url' => 'https://www.instagram.com/p/another-post',
                 'content_summary' => 'Plain public text without any recognizable tags or names.',
             ]))
             ->assertRedirect(route('admin.social-media-records.index'));
@@ -294,10 +295,18 @@ class SocialMediaRecordTest extends TestCase
         $this->actingAs($this->admin)
             ->patch(route('admin.social-media-records.moderate', $rejectedRecord), [
                 'status' => SocialMediaRecord::STATUS_REJECTED,
+                'rejection_reason' => 'The caption does not mention any Selangor night market.',
             ])
             ->assertRedirect(route('admin.social-media-records.index'));
 
-        $this->assertSame(SocialMediaRecord::STATUS_REJECTED, $rejectedRecord->refresh()->status);
+        $rejectedRecord->refresh();
+        $this->assertSame(SocialMediaRecord::STATUS_REJECTED, $rejectedRecord->status);
+        $this->assertSame(
+            'The caption does not mention any Selangor night market.',
+            $rejectedRecord->rejection_reason,
+        );
+        $this->assertSame($this->admin->id, $rejectedRecord->rejected_by);
+        $this->assertNotNull($rejectedRecord->rejected_at);
     }
 
     public function test_relationless_record_cannot_be_approved(): void
@@ -438,7 +447,7 @@ class SocialMediaRecordTest extends TestCase
             ->assertSee($matching->content_summary)
             ->assertDontSee($other->content_summary)
             ->assertSee('value="#lanterns"', false)
-            ->assertSee('Reset Search');
+            ->assertSee('Reset Filters');
 
         $this->actingAs($client)
             ->get(route('social-media-highlights.index'))
