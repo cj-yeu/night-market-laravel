@@ -6,8 +6,10 @@ use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Auth\Passwords\PasswordBrokerManager;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class PasswordResetService
 {
@@ -18,9 +20,37 @@ class PasswordResetService
      *
      * @param  array{email: string}  $credentials
      */
-    public function sendResetLink(array $credentials): void
+    public function sendResetLink(array $credentials): bool
     {
-        $this->passwords->broker()->sendResetLink($credentials);
+        if (app()->environment('production') && config('mail.default') === 'log') {
+            Log::warning('Production password reset delivery is unavailable because the log mailer is configured.');
+
+            return false;
+        }
+
+        $broker = $this->passwords->broker();
+
+        try {
+            $broker->sendResetLink($credentials);
+
+            return true;
+        } catch (Throwable $exception) {
+            try {
+                $user = $broker->getUser($credentials);
+
+                if ($user !== null) {
+                    $broker->deleteToken($user);
+                }
+            } catch (Throwable) {
+                // Preserve the original delivery failure and avoid logging credentials.
+            }
+
+            Log::warning('Password reset email delivery failed.', [
+                'exception_class' => $exception::class,
+            ]);
+
+            return false;
+        }
     }
 
     /**

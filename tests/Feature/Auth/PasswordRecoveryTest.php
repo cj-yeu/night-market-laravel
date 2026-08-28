@@ -52,6 +52,28 @@ class PasswordRecoveryTest extends TestCase
         Notification::assertNothingSent();
     }
 
+    public function test_production_log_mailer_does_not_claim_password_reset_delivery(): void
+    {
+        Notification::fake();
+        $this->app['session']->start();
+        $csrfToken = $this->app['session']->token();
+        $this->app->detectEnvironment(fn () => 'production');
+        config()->set('mail.default', 'log');
+        $user = User::factory()->create();
+
+        $this->withSession(['_token' => $csrfToken])->post(route('password.email'), [
+            '_token' => $csrfToken,
+            'email' => $user->email,
+        ])
+            ->assertRedirect()
+            ->assertSessionHas(
+                'error',
+                'The password reset email could not be sent. Please try again later.',
+            );
+
+        Notification::assertNothingSent();
+    }
+
     public function test_valid_token_resets_password_and_redirects_to_login(): void
     {
         $user = User::factory()->create(['password' => 'old-password']);

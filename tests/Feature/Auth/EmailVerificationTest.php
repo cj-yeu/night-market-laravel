@@ -8,8 +8,11 @@ use App\Models\SocialAccount;
 use App\Models\User;
 use App\Models\VisitPlan;
 use App\Models\VisitPlanItem;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\URL;
@@ -22,10 +25,14 @@ class EmailVerificationTest extends TestCase
     public function test_password_registration_creates_only_an_unverified_client_and_sends_verification(): void
     {
         Notification::fake();
+        $registeredUserId = null;
+        Event::listen(Registered::class, function (Registered $event) use (&$registeredUserId): void {
+            $registeredUserId = $event->user->id;
+        });
 
         $this->post(route('register.store'), [
-            'name' => 'New Verification Client',
-            'email' => 'new-verification@example.test',
+            'name' => '  New Verification Client  ',
+            'email' => '  NEW-VERIFICATION@EXAMPLE.TEST  ',
             'password' => 'Password123!',
             'password_confirmation' => 'Password123!',
             'role' => User::ROLE_ADMIN,
@@ -38,7 +45,52 @@ class EmailVerificationTest extends TestCase
         $this->assertSame(User::ROLE_CLIENT, $user->role);
         $this->assertTrue($user->is_active);
         $this->assertFalse($user->hasVerifiedEmail());
+        $this->assertSame('New Verification Client', $user->name);
+        $this->assertTrue(Hash::check('Password123!', $user->password));
+        $this->assertSame($user->id, $registeredUserId);
         Notification::assertSentTo($user, VerifyEmail::class);
+    }
+
+    public function test_production_log_mailer_does_not_claim_verification_delivery(): void
+    {
+        Notification::fake();
+        $this->app['session']->start();
+        $csrfToken = $this->app['session']->token();
+        $this->app->detectEnvironment(fn () => 'production');
+        config()->set('mail.default', 'log');
+
+        $this->withSession(['_token' => $csrfToken])->post(route('register.store'), [
+            '_token' => $csrfToken,
+            'name' => 'Production Mail Client',
+            'email' => 'production-log-mailer@example.test',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+        ])->assertRedirect(route('verification.notice'))
+            ->assertSessionHas(
+                'error',
+                'Your client account has been created, but the verification email could not be sent. Please resend it.',
+            );
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_registration_rejects_a_normalized_duplicate_email(): void
+    {
+        Notification::fake();
+        User::factory()->create(['email' => 'duplicate-registration@example.test']);
+
+        $this->post(route('register.store'), [
+            'name' => 'Duplicate Registration',
+            'email' => '  DUPLICATE-REGISTRATION@EXAMPLE.TEST  ',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+        ])->assertSessionHasErrors('email');
+
+        $this->assertSame(
+            1,
+            User::query()->where('email', 'duplicate-registration@example.test')->count(),
+        );
+        Notification::assertNothingSent();
     }
 
     public function test_verification_notice_is_authenticated_and_shows_safe_account_controls(): void

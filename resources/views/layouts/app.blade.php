@@ -818,6 +818,17 @@
         ></script>
 
         <script>
+            document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const input = document.getElementById(button.dataset.passwordToggle);
+                    if (!input) return;
+                    const showing = input.type === 'text';
+                    input.type = showing ? 'password' : 'text';
+                    button.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+                    button.querySelector('i').className = showing ? 'bi bi-eye' : 'bi bi-eye-slash';
+                });
+            });
+
             document.querySelectorAll('.is-invalid').forEach((field, index) => {
                 const feedback = field.parentElement.querySelector('.invalid-feedback');
                 if (!feedback) return;

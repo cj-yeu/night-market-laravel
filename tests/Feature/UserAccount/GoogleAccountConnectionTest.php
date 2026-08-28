@@ -89,7 +89,8 @@ class GoogleAccountConnectionTest extends TestCase
 
     public function test_client_can_link_one_matching_google_identity(): void
     {
-        $client = $this->client();
+        $client = $this->client(['email_verified_at' => null]);
+        $this->assertFalse($client->hasVerifiedEmail());
         $this->fakeGoogle($client->email, 'google-link-client');
 
         $this->linkCallback($client)
@@ -102,6 +103,7 @@ class GoogleAccountConnectionTest extends TestCase
             'provider_user_id' => 'google-link-client',
             'provider_email' => $client->email,
         ]);
+        $this->assertTrue($client->refresh()->hasVerifiedEmail());
     }
 
     public function test_google_identity_linked_to_another_user_is_rejected(): void

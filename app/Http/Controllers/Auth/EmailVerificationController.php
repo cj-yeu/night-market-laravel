@@ -24,7 +24,7 @@ class EmailVerificationController extends Controller
         abort_unless($user->is_active, 403);
 
         if ($user->hasVerifiedEmail()) {
-            return redirect()->intended(route($this->authService->homeRouteFor($user)));
+            return redirect()->to($this->authService->postAuthenticationUrl($request, $user));
         }
 
         return view('auth.verify-email', ['user' => $user]);
@@ -37,7 +37,7 @@ class EmailVerificationController extends Controller
         $request->fulfill();
 
         return redirect()
-            ->intended(route($this->authService->homeRouteFor($request->user())))
+            ->to($this->authService->postAuthenticationUrl($request, $request->user()))
             ->with('status', 'Your email address has been verified successfully.');
     }
 
