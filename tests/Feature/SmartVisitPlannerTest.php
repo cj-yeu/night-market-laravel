@@ -5,10 +5,13 @@ namespace Tests\Feature;
 use App\Models\Food;
 use App\Models\MarketOperatingDay;
 use App\Models\NightMarket;
+use App\Models\Review;
+use App\Models\ReviewTag;
 use App\Models\Stall;
 use App\Models\User;
 use App\Models\VisitPlan;
 use App\Services\SmartVisitPlannerService;
+use App\Support\SmartPlannerTemplate;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
@@ -564,6 +567,222 @@ class SmartVisitPlannerTest extends TestCase
         $this->actingAs($this->client)->get(route('client.visit-plans.smart-planner.index'))
             ->assertOk()
             ->assertSee('No markets currently have enough schedule, stall, and food data for planning.');
+    }
+
+    public function test_template_keys_are_whitelisted_and_a_tampered_key_is_rejected(): void
+    {
+        $this->assertSame([
+            'quick_visit',
+            'food_hunting',
+            'family_friendly',
+            'budget',
+        ], SmartPlannerTemplate::KEYS);
+
+        $this->marketWithFood('Template Market');
+
+        $this->actingAs($this->client)
+            ->get(route('client.visit-plans.smart-planner.index'))
+            ->assertOk()
+            ->assertSee('1-Hour Quick Visit')
+            ->assertSee('Food Hunting Plan')
+            ->assertSee('Family-Friendly Plan')
+            ->assertSee('Budget Visit Plan');
+        $this->actingAs($this->client)
+            ->get(route('client.visit-plans.smart-planner.index', [
+                'template' => SmartPlannerTemplate::BUDGET,
+            ]))
+            ->assertOk()
+            ->assertSee('Template Active')
+            ->assertSee('Budget Limit (RM)');
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'template' => 'untrusted-template',
+            ]))
+            ->assertSessionHasErrors('template');
+    }
+
+    public function test_quick_visit_template_limits_food_stops_and_creates_an_editable_plan(): void
+    {
+        [$market, $stall] = $this->marketWithFood('Quick Visit Market', food: [
+            'name' => 'Quick First Food',
+        ]);
+        Food::factory()->count(3)->create(['stall_id' => $stall->id]);
+
+        $preferences = $this->preferences([
+            'template' => SmartPlannerTemplate::QUICK_VISIT,
+            'night_market_id' => $market->id,
+        ]);
+        $response = $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $preferences);
+
+        $response->assertOk()
+            ->assertSee('1-Hour Quick Visit')
+            ->assertSee('about 20 minutes per stop')
+            ->assertSee('one hour is not guaranteed')
+            ->assertViewHas('recommendations', function (array $recommendations) use ($market): bool {
+                $recommendation = $recommendations[0] ?? null;
+
+                return $recommendation !== null
+                    && $recommendation['market']->id === $market->id
+                    && count($recommendation['foods']) <= 3
+                    && $recommendation['stalls'] === [];
+            });
+
+        $recommendation = $response->viewData('recommendations')[0];
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.store'), [
+                ...$preferences,
+                'requested_date' => $this->visitDate->toDateString(),
+                'visit_date' => $this->visitDate->toDateString(),
+                'title' => 'Quick Visit Plan',
+                'food_ids' => collect($recommendation['foods'])->pluck('food.id')->all(),
+            ])
+            ->assertRedirect();
+
+        $plan = VisitPlan::query()->where('title', 'Quick Visit Plan')->firstOrFail();
+        $this->assertSame(count($recommendation['foods']), $plan->items()->whereNotNull('food_id')->count());
+        $this->actingAs($this->client)
+            ->patch(route('client.visit-plans.update', $plan), [
+                'title' => 'Quick Visit Plan Updated',
+                'night_market_id' => $market->id,
+                'visit_date' => $this->visitDate->toDateString(),
+                'notes' => 'This ordinary visit plan remains editable.',
+            ])
+            ->assertRedirect(route('client.visit-plans.show', $plan));
+        $this->assertSame('Quick Visit Plan Updated', $plan->fresh()->title);
+    }
+
+    public function test_food_hunting_template_prioritises_must_try_and_explains_active_food_fallback(): void
+    {
+        [$market, $firstStall, $mustTryFood] = $this->marketWithFood('Food Hunting Market', food: [
+            'name' => 'Only Must Try Food',
+            'category' => 'Snacks',
+            'is_must_try' => true,
+        ]);
+        $secondStall = Stall::factory()->create(['night_market_id' => $market->id]);
+        $thirdStall = Stall::factory()->create(['night_market_id' => $market->id]);
+        Food::factory()->create(['stall_id' => $secondStall->id, 'category' => 'Drinks', 'is_must_try' => false]);
+        Food::factory()->create(['stall_id' => $thirdStall->id, 'category' => 'Dessert', 'is_must_try' => false]);
+        Food::factory()->create(['stall_id' => $firstStall->id, 'category' => 'Grilled', 'is_must_try' => false]);
+
+        $response = $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'template' => SmartPlannerTemplate::FOOD_HUNTING,
+                'night_market_id' => $market->id,
+            ]));
+
+        $response->assertOk()
+            ->assertSee('Food Hunting Plan')
+            ->assertSee('Only 1 Must-Try Food was available, so')
+            ->assertViewHas('recommendations', function (array $recommendations) use ($mustTryFood): bool {
+                $foods = $recommendations[0]['foods'] ?? [];
+                $foodIds = collect($foods)->pluck('food.id');
+                $stallIds = collect($foods)->pluck('stall.id')->unique();
+                $categories = collect($foods)->pluck('food.category')->filter()->unique();
+
+                return count($foods) <= 5
+                    && $foodIds->contains($mustTryFood->id)
+                    && $stallIds->count() >= 3
+                    && $categories->count() >= 3;
+            });
+    }
+
+    public function test_family_friendly_template_uses_review_tag_signals_and_transparent_fallback(): void
+    {
+        [$taggedMarket, , $taggedFood] = $this->marketWithFood('Tagged Family Market', food: [
+            'name' => 'Tagged Family Food',
+        ]);
+        $familyTag = ReviewTag::query()->where('name', 'Family-Friendly')->firstOrFail();
+        $review = Review::factory()->approved()->forFood($taggedFood)->create(['rating' => 5]);
+        $review->tags()->sync([$familyTag->id]);
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'template' => SmartPlannerTemplate::FAMILY_FRIENDLY,
+                'night_market_id' => $taggedMarket->id,
+            ]))
+            ->assertOk()
+            ->assertSee('Public Family-Friendly review tags informed this short, varied plan.')
+            ->assertSee('do not verify children’s facilities, safety, or accessibility.');
+
+        [$fallbackMarket] = $this->marketWithFood('Fallback Family Market');
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'template' => SmartPlannerTemplate::FAMILY_FRIENDLY,
+                'night_market_id' => $fallbackMarket->id,
+            ]))
+            ->assertOk()
+            ->assertSee('No verified family-friendly tag data was available; this is a general short and varied plan.');
+    }
+
+    public function test_budget_template_uses_numeric_price_maximums_only_and_never_exceeds_budget(): void
+    {
+        [$market, $stall] = $this->marketWithFood('Budget Template Market', food: [
+            'name' => 'Budget Food One',
+            'price_min' => 5,
+            'price_max' => 10,
+        ]);
+        Food::factory()->create([
+            'stall_id' => $stall->id,
+            'name' => 'Budget Food Two',
+            'price_min' => 8,
+            'price_max' => 15,
+        ]);
+        Food::factory()->create([
+            'stall_id' => $stall->id,
+            'name' => 'Display Price Only Food',
+            'price_min' => null,
+            'price_max' => null,
+            'price_display' => 'RM1 perhaps',
+        ]);
+
+        $response = $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'template' => SmartPlannerTemplate::BUDGET,
+                'night_market_id' => $market->id,
+                'budget_min' => 0,
+                'budget_max' => 20,
+            ]));
+
+        $response->assertOk()
+            ->assertSee('Budget Visit Plan')
+            ->assertSee('price display text was not used to estimate costs.')
+            ->assertDontSee('Display Price Only Food')
+            ->assertViewHas('recommendations', function (array $recommendations): bool {
+                $foods = $recommendations[0]['foods'] ?? [];
+                $total = collect($foods)->sum(fn (array $food) => (float) $food['food']->price_max);
+
+                return $foods !== []
+                    && $total <= 20
+                    && collect($foods)->every(fn (array $food) => $food['food']->price_max !== null);
+            });
+
+        $tooSmall = $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'template' => SmartPlannerTemplate::BUDGET,
+                'night_market_id' => $market->id,
+                'budget_min' => 0,
+                'budget_max' => 1,
+            ]));
+        $tooSmall->assertOk()->assertSee('No active Foods with a numeric price maximum fit the selected budget.');
+    }
+
+    public function test_templates_reject_an_ineligible_market_parent_chain(): void
+    {
+        $market = NightMarket::factory()->create(['name' => 'Incomplete Template Market']);
+        MarketOperatingDay::factory()->create([
+            'night_market_id' => $market->id,
+            'day_of_week' => $this->visitDate->englishDayOfWeek,
+        ]);
+        Stall::factory()->create(['night_market_id' => $market->id]);
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+                'template' => SmartPlannerTemplate::QUICK_VISIT,
+                'night_market_id' => $market->id,
+            ]))
+            ->assertSessionHasErrors('night_market_id');
     }
 
     /** @return array{NightMarket, Stall, Food} */
