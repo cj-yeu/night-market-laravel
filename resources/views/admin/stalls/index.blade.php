@@ -8,6 +8,10 @@
         <a href="{{ route('admin.stalls.create') }}" class="btn btn-market align-self-start">Create Stall</a>
     </div>
 
+    @error('status')
+        <div class="alert alert-danger" role="alert">{{ $message }}</div>
+    @enderror
+
     <div class="card market-card mb-4"><div class="card-body p-4">
         <form method="GET" action="{{ route('admin.stalls.index') }}" class="row g-3 align-items-end">
             <div class="col-12 col-lg-4"><label for="search" class="form-label">Stall name or description</label><input id="search" name="search" type="search" value="{{ $filters['search'] ?? '' }}" class="form-control @error('search') is-invalid @enderror">@error('search')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
@@ -23,7 +27,7 @@
         <div class="alert alert-info">No stalls match the current filters.</div>
     @else
         <div class="card market-card"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
-            <thead><tr><th>Image</th><th>Stall</th><th>Night Market</th><th>Category</th><th>Halal classification</th><th>Foods</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+            <thead><tr><th>Image</th><th>Stall</th><th>Night Market</th><th>Category</th><th>Halal classification</th><th>Foods</th><th>Own Status</th><th>Public Visibility</th><th class="text-end">Actions</th></tr></thead>
             <tbody>
                 @foreach ($stalls as $stall)
                     <tr>
@@ -34,6 +38,7 @@
                         <td><span class="badge {{ $stall->halalBadgeClass() }}">{{ $stall->halalStatusLabel() }}</span></td>
                         <td>{{ $stall->foods_count }}</td>
                         <td><span class="badge {{ $stall->status === 'active' ? 'text-bg-success' : 'text-bg-secondary' }}">{{ ucfirst($stall->status) }}</span></td>
+                        <td><span class="badge {{ $stall->public_visibility === 'Visible' ? 'text-bg-success' : 'text-bg-secondary' }}">{{ $stall->public_visibility }}</span>@if ($stall->public_visibility_reason)<div class="small text-secondary mt-1">{{ $stall->public_visibility_reason }}</div>@endif</td>
                         <td><div class="d-flex justify-content-end flex-wrap gap-2">
                             <a href="{{ route('admin.stalls.show', $stall) }}" class="btn btn-sm btn-outline-secondary">View</a>
                             <a href="{{ route('admin.stalls.edit', $stall) }}" class="btn btn-sm btn-outline-primary">Edit</a>

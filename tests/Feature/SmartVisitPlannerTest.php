@@ -522,6 +522,50 @@ class SmartVisitPlannerTest extends TestCase
         $this->assertSame($singleFallbackQueries, $manyFallbackQueries);
     }
 
+    public function test_market_options_require_complete_active_schedule_stall_and_food_chain(): void
+    {
+        [$eligibleMarket] = $this->marketWithFood('Eligible Planning Market');
+
+        $noScheduleMarket = NightMarket::factory()->create(['name' => 'No Schedule Planning Market']);
+        $noScheduleStall = Stall::factory()->create(['night_market_id' => $noScheduleMarket->id]);
+        Food::factory()->create(['stall_id' => $noScheduleStall->id]);
+
+        $noFoodMarket = NightMarket::factory()->create(['name' => 'No Food Planning Market']);
+        MarketOperatingDay::factory()->create([
+            'night_market_id' => $noFoodMarket->id,
+            'day_of_week' => $this->visitDate->englishDayOfWeek,
+        ]);
+        Stall::factory()->create(['night_market_id' => $noFoodMarket->id]);
+
+        $inactiveStallMarket = NightMarket::factory()->create(['name' => 'Inactive Stall Planning Market']);
+        MarketOperatingDay::factory()->create([
+            'night_market_id' => $inactiveStallMarket->id,
+            'day_of_week' => $this->visitDate->englishDayOfWeek,
+        ]);
+        $inactiveStall = Stall::factory()->inactive()->create(['night_market_id' => $inactiveStallMarket->id]);
+        Food::factory()->create(['stall_id' => $inactiveStall->id]);
+
+        $this->actingAs($this->client)->get(route('client.visit-plans.smart-planner.index'))
+            ->assertOk()
+            ->assertSee($eligibleMarket->name)
+            ->assertDontSee($noScheduleMarket->name)
+            ->assertDontSee($noFoodMarket->name)
+            ->assertDontSee($inactiveStallMarket->name);
+
+        $this->actingAs($this->client)->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences([
+            'night_market_id' => $noFoodMarket->id,
+        ]))->assertSessionHasErrors([
+            'night_market_id' => 'The selected Night Market no longer has enough schedule, stall, and food data for planning.',
+        ]);
+    }
+
+    public function test_empty_planner_uses_the_catalog_data_empty_state(): void
+    {
+        $this->actingAs($this->client)->get(route('client.visit-plans.smart-planner.index'))
+            ->assertOk()
+            ->assertSee('No markets currently have enough schedule, stall, and food data for planning.');
+    }
+
     /** @return array{NightMarket, Stall, Food} */
     private function marketWithFood(
         string $name,

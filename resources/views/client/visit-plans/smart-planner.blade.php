@@ -16,6 +16,9 @@
             <h2 id="planner-preferences-heading" class="h4 fw-bold text-market">Planning Preferences</h2>
             <p class="text-secondary">Only public active Selangor catalog records are considered. No external AI or live data is used.</p>
 
+            @if ($markets->isEmpty())
+                <div class="alert alert-info mb-0">No markets currently have enough schedule, stall, and food data for planning.</div>
+            @else
             <form method="POST" action="{{ route('client.visit-plans.smart-planner.recommend') }}" novalidate>
                 @csrf
                 <div class="row g-3">
@@ -120,6 +123,7 @@
 
                 <button type="submit" class="btn btn-market mt-4">Generate Recommendations</button>
             </form>
+            @endif
         </div>
     </section>
 

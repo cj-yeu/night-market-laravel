@@ -72,7 +72,7 @@ class StallController extends Controller
     {
         return view('admin.stalls.edit', [
             'stall' => $this->stallFoodService->adminStallDetails($stall),
-            'nightMarkets' => $this->nightMarketService->adminMarketOptions(),
+            'nightMarkets' => $this->stallFoodService->activeNightMarkets(),
             'halalStatuses' => Stall::halalStatusOptions(),
             'returnTo' => $this->adminReturnUrlService->catalogQualityUrl($request),
         ]);

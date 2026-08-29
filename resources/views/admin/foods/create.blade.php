@@ -8,11 +8,11 @@
             <div class="card market-card">
                 <div class="card-body p-4 p-md-5">
                     <h1 class="h3 fw-bold text-market">Add Food</h1>
-                    <p class="text-secondary mb-4">Add a food item to an active stall.</p>
+                    <p class="text-secondary mb-4">Add a food item to an active stall at an active Night Market in Selangor.</p>
 
                     @if ($stalls->isEmpty())
                         <div class="alert alert-warning mb-0">
-                            No active stalls are available. Add or activate a stall first.
+                            No eligible Stalls are available. <a href="{{ route('admin.stalls.index') }}" class="alert-link">Manage Stalls</a> to add or activate one at an eligible Night Market first.
                         </div>
                     @else
                         <form method="POST" action="{{ route('admin.foods.store') }}" novalidate>

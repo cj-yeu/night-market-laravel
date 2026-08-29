@@ -3,6 +3,7 @@
 @section('title', $visitPlan->title.' | Night Market Selangor')
 
 @section('content')
+    @php($planIsPast = $visitPlan->visit_status === 'Past')
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-4">
         <div>
             <a href="{{ route('client.visit-plans.index') }}"
@@ -66,12 +67,14 @@
                                             <div class="small text-secondary">{{ $item->notes }}</div>
                                         @endif
                                     </div>
-                                    <form method="POST"
-                                        action="{{ route('client.visit-plans.items.destroy', [$visitPlan, $item]) }}">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
-                                    </form>
+                                    @if ($canChangeItems)
+                                        <form method="POST"
+                                            action="{{ route('client.visit-plans.items.destroy', [$visitPlan, $item]) }}">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                                        </form>
+                                    @endif
                                 </div>
                             @endforeach
                         </div>
@@ -83,23 +86,35 @@
                 <div class="card-body p-4">
                     <h2 class="h4 fw-bold text-market mb-3">Selected Foods</h2>
                     @if ($selectedFoods->isEmpty())
-                        <div class="alert alert-info mb-0">No must-try foods have been added yet.</div>
+                        <div class="alert alert-info mb-0">No foods have been added yet.</div>
                     @else
                         <div class="list-group list-group-flush">
                             @foreach ($selectedFoods as $item)
                                 <div class="list-group-item px-0 d-flex justify-content-between gap-3">
                                     <div>
                                         <div class="fw-semibold">{{ $item->display_name }}</div>
+                                        @if ($item->is_available && $item->food)
+                                            <div class="small text-secondary">
+                                                {{ $item->food->stall?->name ?: 'Stall unavailable' }}
+                                                @if ($item->food->category) · {{ $item->food->category }} @endif
+                                            </div>
+                                            <div class="small text-secondary">
+                                                <x-food-price :food="$item->food" />
+                                                @if ($item->food->is_must_try) · <span class="badge text-bg-warning">Must-Try</span> @endif
+                                            </div>
+                                        @endif
                                         @if ($item->notes)
                                             <div class="small text-secondary">{{ $item->notes }}</div>
                                         @endif
                                     </div>
-                                    <form method="POST"
-                                        action="{{ route('client.visit-plans.items.destroy', [$visitPlan, $item]) }}">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
-                                    </form>
+                                    @if ($canChangeItems)
+                                        <form method="POST"
+                                            action="{{ route('client.visit-plans.items.destroy', [$visitPlan, $item]) }}">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                                        </form>
+                                    @endif
                                 </div>
                             @endforeach
                         </div>
@@ -132,7 +147,9 @@
             <div class="card market-card">
                 <div class="card-body p-4">
                     <h2 class="h4 fw-bold text-market">Add a Plan Item</h2>
-                    @if ($eligibleStalls->isEmpty() && $eligibleFoods->isEmpty())
+                    @if ($planIsPast)
+                        <div class="alert alert-secondary mb-0">Past visit plans cannot change items. You can still update the title or notes.</div>
+                    @elseif ($eligibleStalls->isEmpty() && $eligibleFoods->isEmpty())
                         <div class="alert alert-secondary mb-0">No active stalls or foods are available for this market.</div>
                     @else
                         <form method="POST" action="{{ route('client.visit-plans.items.store', $visitPlan) }}" novalidate>

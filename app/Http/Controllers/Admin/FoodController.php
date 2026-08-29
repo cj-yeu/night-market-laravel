@@ -71,7 +71,7 @@ class FoodController extends Controller
     {
         return view('admin.foods.edit', [
             'food' => $this->stallFoodService->adminFoodDetails($food),
-            'stalls' => $this->stallFoodService->adminStallOptions(),
+            'stalls' => $this->stallFoodService->activeStalls(),
             'returnTo' => $this->adminReturnUrlService->catalogQualityUrl($request),
         ]);
     }

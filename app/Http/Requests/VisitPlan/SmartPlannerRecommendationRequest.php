@@ -28,15 +28,13 @@ class SmartPlannerRecommendationRequest extends FormRequest
                 'string',
                 'max:100',
                 Rule::exists('night_markets', 'city')->where(fn (Builder $query) => $query
-                    ->where('status', NightMarket::STATUS_ACTIVE)
-                    ->where('state', 'Selangor')),
+                    ->whereIn('id', NightMarket::query()->eligibleForPlanning()->select('id'))),
             ],
             'night_market_id' => [
                 'nullable',
                 'integer',
                 Rule::exists('night_markets', 'id')->where(fn (Builder $query) => $query
-                    ->where('status', NightMarket::STATUS_ACTIVE)
-                    ->where('state', 'Selangor')),
+                    ->whereIn('id', NightMarket::query()->eligibleForPlanning()->select('id'))),
             ],
             'budget_min' => ['nullable', 'required_with:budget_max', 'numeric', 'min:0', 'max:10000', 'lte:budget_max'],
             'budget_max' => ['nullable', 'required_with:budget_min', 'numeric', 'min:0', 'max:10000', 'gte:budget_min'],
@@ -63,6 +61,14 @@ class SmartPlannerRecommendationRequest extends FormRequest
             'must_try' => ['required', 'boolean'],
             'max_markets' => ['required', 'integer', 'between:1,3'],
             'preference_notes' => ['nullable', 'string', 'max:1000'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'city.exists' => 'The selected city no longer has a Market with schedule, stall, and food data for planning.',
+            'night_market_id.exists' => 'The selected Night Market no longer has enough schedule, stall, and food data for planning.',
         ];
     }
 

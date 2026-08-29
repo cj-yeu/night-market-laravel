@@ -7,6 +7,8 @@ use App\Models\NightMarket;
 use App\Models\Stall;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class StallFoodService
 {
@@ -134,8 +136,8 @@ class StallFoodService
     {
         $search = $this->literalLikePattern($filters['search'] ?? null);
 
-        return Stall::query()
-            ->with('nightMarket:id,name,city,status')
+        $stalls = Stall::query()
+            ->with('nightMarket:id,name,city,state,status')
             ->withCount('foods')
             ->when($search, fn ($query, string $pattern) => $query->where(function ($query) use ($pattern) {
                 $query->where('name', 'like', $pattern)
@@ -151,6 +153,10 @@ class StallFoodService
             ->orderBy('id')
             ->paginate(15)
             ->withQueryString();
+
+        $stalls->getCollection()->each(fn (Stall $stall) => $this->setStallPublicVisibility($stall));
+
+        return $stalls;
     }
 
     /**
@@ -161,8 +167,8 @@ class StallFoodService
     {
         $search = $this->literalLikePattern($filters['search'] ?? null);
 
-        return Food::query()
-            ->with(['stall:id,night_market_id,name,status', 'stall.nightMarket:id,name,city,status'])
+        $foods = Food::query()
+            ->with(['stall:id,night_market_id,name,status', 'stall.nightMarket:id,name,city,state,status'])
             ->when($search, fn ($query, string $pattern) => $query->where(function ($query) use ($pattern) {
                 $query->where('name', 'like', $pattern)
                     ->orWhere('description', 'like', $pattern);
@@ -178,6 +184,10 @@ class StallFoodService
             ->orderBy('id')
             ->paginate(15)
             ->withQueryString();
+
+        $foods->getCollection()->each(fn (Food $food) => $this->setFoodPublicVisibility($food));
+
+        return $foods;
     }
 
     public function adminStallDetails(Stall $stall): Stall
@@ -342,7 +352,7 @@ class StallFoodService
      */
     public function activeNightMarkets(): Collection
     {
-        return NightMarket::where('status', NightMarket::STATUS_ACTIVE)
+        return NightMarket::query()->publiclyVisible()
             ->orderBy('name')
             ->get();
     }
@@ -352,8 +362,8 @@ class StallFoodService
      */
     public function activeStalls(): Collection
     {
-        return Stall::with('nightMarket')
-            ->where('status', Stall::STATUS_ACTIVE)
+        return Stall::query()->publiclyVisible()
+            ->with('nightMarket')
             ->orderBy('name')
             ->get();
     }
@@ -363,7 +373,11 @@ class StallFoodService
      */
     public function createStall(array $data): Stall
     {
-        return Stall::create($this->stallAttributes($data, includeStatus: true));
+        return DB::transaction(function () use ($data): Stall {
+            $this->eligibleNightMarketForCatalog((int) $data['night_market_id']);
+
+            return Stall::create($this->stallAttributes($data, includeStatus: true));
+        });
     }
 
     /**
@@ -371,7 +385,11 @@ class StallFoodService
      */
     public function createFood(array $data): Food
     {
-        return Food::create($this->foodAttributes($data, includeStatus: true));
+        return DB::transaction(function () use ($data): Food {
+            $this->eligibleStallForCatalog((int) $data['stall_id']);
+
+            return Food::create($this->foodAttributes($data, includeStatus: true));
+        });
     }
 
     /**
@@ -379,9 +397,14 @@ class StallFoodService
      */
     public function updateStall(Stall $stall, array $data): Stall
     {
-        $stall->update($this->stallAttributes($data));
+        return DB::transaction(function () use ($stall, $data): Stall {
+            $lockedStall = Stall::query()->lockForUpdate()->findOrFail($stall->id);
+            $this->eligibleNightMarketForCatalog((int) $data['night_market_id']);
 
-        return $stall->refresh();
+            $lockedStall->update($this->stallAttributes($data));
+
+            return $lockedStall->refresh();
+        });
     }
 
     /**
@@ -389,27 +412,109 @@ class StallFoodService
      */
     public function updateFood(Food $food, array $data): Food
     {
-        $food->update($this->foodAttributes($data));
+        return DB::transaction(function () use ($food, $data): Food {
+            $lockedFood = Food::query()->lockForUpdate()->findOrFail($food->id);
+            $this->eligibleStallForCatalog((int) $data['stall_id']);
 
-        return $food->refresh();
+            $lockedFood->update($this->foodAttributes($data));
+
+            return $lockedFood->refresh();
+        });
     }
 
     public function setStallStatus(Stall $stall, string $status): Stall
     {
-        if ($stall->status !== $status) {
-            $stall->forceFill(['status' => $status])->save();
-        }
+        return DB::transaction(function () use ($stall, $status): Stall {
+            $lockedStall = Stall::query()->lockForUpdate()->findOrFail($stall->id);
 
-        return $stall->refresh();
+            if ($status === Stall::STATUS_ACTIVE) {
+                $this->eligibleNightMarketForCatalog($lockedStall->night_market_id);
+            }
+
+            if ($lockedStall->status !== $status) {
+                $lockedStall->forceFill(['status' => $status])->save();
+            }
+
+            return $lockedStall->refresh();
+        });
     }
 
     public function setFoodStatus(Food $food, string $status): Food
     {
-        if ($food->status !== $status) {
-            $food->forceFill(['status' => $status])->save();
+        return DB::transaction(function () use ($food, $status): Food {
+            $lockedFood = Food::query()->lockForUpdate()->findOrFail($food->id);
+
+            if ($status === Food::STATUS_ACTIVE) {
+                $this->eligibleStallForCatalog($lockedFood->stall_id);
+            }
+
+            if ($lockedFood->status !== $status) {
+                $lockedFood->forceFill(['status' => $status])->save();
+            }
+
+            return $lockedFood->refresh();
+        });
+    }
+
+    private function eligibleNightMarketForCatalog(int $nightMarketId): NightMarket
+    {
+        $nightMarket = NightMarket::query()
+            ->publiclyVisible()
+            ->lockForUpdate()
+            ->find($nightMarketId);
+
+        if (! $nightMarket) {
+            throw ValidationException::withMessages([
+                'night_market_id' => 'The selected Night Market must be active and located in Selangor.',
+            ]);
         }
 
-        return $food->refresh();
+        return $nightMarket;
+    }
+
+    private function eligibleStallForCatalog(int $stallId): Stall
+    {
+        $stall = Stall::query()
+            ->where('status', Stall::STATUS_ACTIVE)
+            ->lockForUpdate()
+            ->find($stallId);
+
+        if (! $stall) {
+            throw ValidationException::withMessages([
+                'stall_id' => 'The selected Stall must be active and belong to an active Night Market in Selangor.',
+            ]);
+        }
+
+        $this->eligibleNightMarketForCatalog($stall->night_market_id);
+
+        return $stall;
+    }
+
+    private function setStallPublicVisibility(Stall $stall): void
+    {
+        $reason = match (true) {
+            $stall->status !== Stall::STATUS_ACTIVE => 'This item is inactive',
+            $stall->nightMarket?->status !== NightMarket::STATUS_ACTIVE => 'Parent market is inactive',
+            $stall->nightMarket?->state !== 'Selangor' => 'Parent market is outside Selangor',
+            default => null,
+        };
+
+        $stall->setAttribute('public_visibility', $reason === null ? 'Visible' : 'Hidden');
+        $stall->setAttribute('public_visibility_reason', $reason);
+    }
+
+    private function setFoodPublicVisibility(Food $food): void
+    {
+        $reason = match (true) {
+            $food->status !== Food::STATUS_ACTIVE => 'This item is inactive',
+            $food->stall?->status !== Stall::STATUS_ACTIVE => 'Parent stall is inactive',
+            $food->stall?->nightMarket?->status !== NightMarket::STATUS_ACTIVE => 'Parent market is inactive',
+            $food->stall?->nightMarket?->state !== 'Selangor' => 'Parent market is outside Selangor',
+            default => null,
+        };
+
+        $food->setAttribute('public_visibility', $reason === null ? 'Visible' : 'Hidden');
+        $food->setAttribute('public_visibility_reason', $reason);
     }
 
     /**

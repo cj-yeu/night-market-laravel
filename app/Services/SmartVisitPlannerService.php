@@ -28,7 +28,7 @@ class SmartVisitPlannerService
     {
         return [
             'cities' => NightMarket::query()
-                ->publiclyVisible()
+                ->eligibleForPlanning()
                 ->select('city')
                 ->whereNotNull('city')
                 ->where('city', '<>', '')
@@ -36,7 +36,7 @@ class SmartVisitPlannerService
                 ->orderBy('city')
                 ->get(),
             'markets' => NightMarket::query()
-                ->publiclyVisible()
+                ->eligibleForPlanning()
                 ->select(['id', 'name', 'city'])
                 ->orderBy('name')
                 ->orderBy('id')
@@ -62,8 +62,7 @@ class SmartVisitPlannerService
     public function defaultVisitDate(): string
     {
         $operatingDays = NightMarket::query()
-            ->publiclyVisible()
-            ->whereHas('operatingDays')
+            ->eligibleForPlanning()
             ->with('operatingDays:id,night_market_id,day_of_week')
             ->get(['id'])
             ->flatMap->operatingDays
@@ -233,7 +232,7 @@ class SmartVisitPlannerService
         $budgetMax = $hasBudget ? (float) $preferences['budget_max'] : null;
 
         $operatingMarkets = NightMarket::query()
-            ->publiclyVisible()
+            ->eligibleForPlanning()
             ->select(['id', 'name', 'city', 'state'])
             ->whereHas('operatingDays', fn (Builder $query) => $query->where('day_of_week', $dayOfWeek))
             ->with([

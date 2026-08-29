@@ -361,6 +361,83 @@ class AdminMarketCatalogManagementTest extends TestCase
         $this->assertLessThanOrEqual(10, $queryCount);
     }
 
+    public function test_stall_and_food_parent_eligibility_is_enforced_and_visibility_reasons_are_explicit(): void
+    {
+        $admin = $this->admin();
+        $eligibleMarket = $this->marketWithSchedule(['name' => 'Eligible Selangor Market']);
+        $inactiveMarket = $this->marketWithSchedule([
+            'name' => 'Inactive Parent Market',
+            'status' => NightMarket::STATUS_INACTIVE,
+        ]);
+        $outsideMarket = $this->marketWithSchedule([
+            'name' => 'Outside Parent Market',
+            'state' => 'Kuala Lumpur',
+        ]);
+        $eligibleStall = Stall::factory()->create(['night_market_id' => $eligibleMarket->id, 'name' => 'Eligible Stall']);
+        $inactiveStall = Stall::factory()->inactive()->create([
+            'night_market_id' => $eligibleMarket->id,
+            'name' => 'Inactive Parent Stall',
+        ]);
+        $inactiveParentStall = Stall::factory()->inactive()->create([
+            'night_market_id' => $inactiveMarket->id,
+            'name' => 'Stall At Inactive Market',
+        ]);
+        Stall::factory()->create([
+            'night_market_id' => $inactiveMarket->id,
+            'name' => 'Visible Status Stall At Inactive Market',
+        ]);
+        $hiddenFood = Food::factory()->inactive()->create([
+            'stall_id' => $inactiveStall->id,
+            'name' => 'Hidden Parent Food',
+        ]);
+
+        $this->actingAs($admin)->get(route('admin.stalls.create'))
+            ->assertOk()
+            ->assertSee($eligibleMarket->name)
+            ->assertDontSee($inactiveMarket->name)
+            ->assertDontSee($outsideMarket->name);
+        $this->actingAs($admin)->get(route('admin.foods.create'))
+            ->assertOk()
+            ->assertSee($eligibleStall->name)
+            ->assertDontSee($inactiveStall->name)
+            ->assertDontSee($inactiveParentStall->name);
+
+        $this->actingAs($admin)->post(route('admin.stalls.store'), [
+            'night_market_id' => $inactiveMarket->id,
+            'name' => 'Blocked Stall',
+            'status' => Stall::STATUS_ACTIVE,
+        ])->assertSessionHasErrors([
+            'night_market_id' => 'The selected Night Market must be active and located in Selangor.',
+        ]);
+        $this->actingAs($admin)->post(route('admin.foods.store'), [
+            'stall_id' => $inactiveStall->id,
+            'name' => 'Blocked Food',
+            'is_must_try' => false,
+            'status' => Food::STATUS_ACTIVE,
+        ])->assertSessionHasErrors([
+            'stall_id' => 'The selected Stall must be active and belong to an active Night Market in Selangor.',
+        ]);
+
+        $this->actingAs($admin)->patch(route('admin.stalls.activate', $inactiveParentStall))
+            ->assertSessionHasErrors('night_market_id');
+        $this->assertSame(Stall::STATUS_INACTIVE, $inactiveParentStall->fresh()->status);
+
+        $this->actingAs($admin)->patch(route('admin.foods.activate', $hiddenFood))
+            ->assertSessionHasErrors('stall_id');
+        $this->assertSame(Food::STATUS_INACTIVE, $hiddenFood->fresh()->status);
+
+        $this->actingAs($admin)->get(route('admin.stalls.index'))
+            ->assertOk()
+            ->assertSee('Own Status')
+            ->assertSee('Public Visibility')
+            ->assertSee('Parent market is inactive');
+        $this->actingAs($admin)->get(route('admin.foods.index'))
+            ->assertOk()
+            ->assertSee('Own Status')
+            ->assertSee('Public Visibility')
+            ->assertSee('This item is inactive');
+    }
+
     private function admin(): User
     {
         return User::factory()->create(['role' => User::ROLE_ADMIN]);

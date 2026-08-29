@@ -55,6 +55,7 @@ class VisitPlanService
     {
         return NightMarket::query()
             ->publiclyVisible()
+            ->whereHas('operatingDays')
             ->select(['id', 'name', 'city'])
             ->with(['operatingDays' => fn ($query) => $query
                 ->select(['id', 'night_market_id', 'day_of_week', 'opening_time', 'closing_time'])
@@ -123,6 +124,7 @@ class VisitPlanService
         $plans = $user->visitPlans()
             ->select(['id', 'user_id', 'night_market_id', 'title', 'visit_date'])
             ->where('night_market_id', $target['night_market_id'])
+            ->whereDate('visit_date', '>=', now()->toDateString())
             ->withExists(['items as has_target' => fn ($query) => $query->where($foreignKey, $target['id'])])
             ->orderBy('visit_date')
             ->orderBy('id')
@@ -164,8 +166,8 @@ class VisitPlanService
                 'nightMarket.operatingDays:id,night_market_id,day_of_week,opening_time,closing_time',
                 'items.stall:id,night_market_id,name,status',
                 'items.stall.nightMarket:id,state,status',
-                'items.food:id,stall_id,name,status,is_must_try',
-                'items.food.stall:id,night_market_id,status',
+                'items.food:id,stall_id,name,category,price_min,price_max,price_display,status,is_must_try',
+                'items.food.stall:id,night_market_id,name,status',
                 'items.food.stall.nightMarket:id,state,status',
             ])
             ->findOrFail($visitPlanId);
@@ -180,19 +182,55 @@ class VisitPlanService
     public function updateForClient(User $user, int $visitPlanId, array $data): VisitPlan
     {
         $visitPlan = $this->findForClient($user, $visitPlanId);
-        $nightMarket = $this->eligibleMarket((int) $data['night_market_id']);
-        $this->validateOperatingDate($nightMarket, $data['visit_date']);
+        $requestedMarketId = (int) $data['night_market_id'];
+        $requestedVisitDate = Carbon::parse($data['visit_date'])->toDateString();
+        $marketChanged = $visitPlan->night_market_id !== $requestedMarketId;
+        $dateChanged = $visitPlan->visit_date->toDateString() !== $requestedVisitDate;
 
-        if ($visitPlan->night_market_id !== $nightMarket->id && $visitPlan->items()->exists()) {
+        if ($this->isPastVisitPlan($visitPlan)) {
+            $errors = [];
+
+            if ($marketChanged) {
+                $errors['night_market_id'] = 'Past visit plans cannot change the Night Market. You can still update the title or notes.';
+            }
+
+            if ($dateChanged) {
+                $errors['visit_date'] = 'Past visit plans cannot change the visit date. You can still update the title or notes.';
+            }
+
+            if ($errors) {
+                throw ValidationException::withMessages($errors);
+            }
+
+            $visitPlan->update([
+                'title' => $data['title'],
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            return $visitPlan->refresh();
+        }
+
+        if (Carbon::parse($requestedVisitDate)->lt(now()->startOfDay())) {
+            throw ValidationException::withMessages([
+                'visit_date' => 'Visit plans must use today or a future date.',
+            ]);
+        }
+
+        if ($marketChanged || $dateChanged) {
+            $nightMarket = $this->eligibleMarket($requestedMarketId);
+            $this->validateOperatingDate($nightMarket, $requestedVisitDate);
+        }
+
+        if ($marketChanged && $visitPlan->items()->exists()) {
             throw ValidationException::withMessages([
                 'night_market_id' => 'Remove all plan items before changing the night market.',
             ]);
         }
 
         $visitPlan->update([
-            'night_market_id' => $nightMarket->id,
+            'night_market_id' => $requestedMarketId,
             'title' => $data['title'],
-            'visit_date' => $data['visit_date'],
+            'visit_date' => $requestedVisitDate,
             'notes' => $data['notes'] ?? null,
         ]);
 
@@ -208,6 +246,7 @@ class VisitPlanService
     public function addItemForClient(User $user, int $visitPlanId, array $data): VisitPlanItem
     {
         $visitPlan = $this->findForClient($user, $visitPlanId);
+        $this->ensureItemsCanBeChanged($visitPlan);
         $item = $this->eligibleItem($visitPlan, $data['item_type'], (int) $data['item_id']);
         $foreignKey = $data['item_type'] === 'stall' ? 'stall_id' : 'food_id';
 
@@ -232,7 +271,29 @@ class VisitPlanService
     public function removeItemForClient(User $user, int $visitPlanId, int $visitPlanItemId): void
     {
         $visitPlan = $this->findForClient($user, $visitPlanId);
+        $this->ensureItemsCanBeChanged($visitPlan);
         $visitPlan->items()->findOrFail($visitPlanItemId)->delete();
+    }
+
+    /** @return Collection<int, NightMarket> */
+    public function editableNightMarketsForPlan(VisitPlan $visitPlan): Collection
+    {
+        $nightMarkets = $this->activeNightMarkets();
+
+        if (! $nightMarkets->contains('id', $visitPlan->night_market_id)) {
+            $currentMarket = NightMarket::query()
+                ->select(['id', 'name', 'city'])
+                ->with(['operatingDays' => fn ($query) => $query
+                    ->select(['id', 'night_market_id', 'day_of_week', 'opening_time', 'closing_time'])
+                    ->orderBy('id')])
+                ->find($visitPlan->night_market_id);
+
+            if ($currentMarket) {
+                $nightMarkets->push($currentMarket);
+            }
+        }
+
+        return $nightMarkets->sortBy('name')->values();
     }
 
     /** @return Collection<int, Stall> */
@@ -274,6 +335,20 @@ class VisitPlanService
         }
 
         return $nightMarket;
+    }
+
+    private function ensureItemsCanBeChanged(VisitPlan $visitPlan): void
+    {
+        if ($this->isPastVisitPlan($visitPlan)) {
+            throw ValidationException::withMessages([
+                'item_id' => 'Past visit plans cannot be changed. You can still update the title or notes.',
+            ]);
+        }
+    }
+
+    private function isPastVisitPlan(VisitPlan $visitPlan): bool
+    {
+        return $visitPlan->visit_date->lt(now()->startOfDay());
     }
 
     private function validateOperatingDate(NightMarket $nightMarket, string $visitDate): void

@@ -19,6 +19,7 @@
             <div class="card-body p-4">
                 <h2 id="planning-target-heading" class="h5 fw-bold text-market">Add {{ $planningTarget['name'] }} to a plan</h2>
                 <p class="text-secondary">{{ ucfirst($planningTarget['type']) }} · {{ $planningTarget['context'] }}</p>
+                @error('item_id')<div class="alert alert-danger" role="alert">{{ $message }}</div>@enderror
 
                 @if ($compatiblePlans->isEmpty())
                     <div class="alert alert-info mb-3">You do not have a plan for this Night Market yet.</div>

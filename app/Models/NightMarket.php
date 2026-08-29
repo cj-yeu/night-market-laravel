@@ -40,6 +40,17 @@ class NightMarket extends Model
             ->where('state', 'Selangor');
     }
 
+    public function scopeEligibleForPlanning(Builder $query): Builder
+    {
+        return $query
+            ->publiclyVisible()
+            ->whereHas('operatingDays')
+            ->whereHas('stalls', fn (Builder $stallQuery) => $stallQuery
+                ->where('status', Stall::STATUS_ACTIVE)
+                ->whereHas('foods', fn (Builder $foodQuery) => $foodQuery
+                    ->where('status', Food::STATUS_ACTIVE)));
+    }
+
     public static function isOwnedImagePath(?string $path): bool
     {
         if ($path === null) {

@@ -8,11 +8,11 @@
             <div class="card market-card">
                 <div class="card-body p-4 p-md-5">
                     <h1 class="h3 fw-bold text-market">Create Visit Plan</h1>
-                    <p class="text-secondary mb-4">Plan an upcoming visit to an active night market.</p>
+                    <p class="text-secondary mb-4">Plan an upcoming visit to an active Night Market with an operating schedule.</p>
 
                     @if ($nightMarkets->isEmpty())
                         <div class="alert alert-warning mb-0">
-                            No active night markets are currently available for planning.
+                            No active Night Markets with an operating schedule are currently available for planning.
                         </div>
                     @else
                         <form method="POST" action="{{ route('client.visit-plans.store') }}" novalidate>
