@@ -42,6 +42,11 @@ return [
         'redirect' => env('GOOGLE_CALENDAR_REDIRECT_URI'),
     ],
 
+    'youtube' => [
+        'data_api_key' => env('YOUTUBE_DATA_API_KEY'),
+        'base_url' => 'https://www.googleapis.com/youtube/v3',
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

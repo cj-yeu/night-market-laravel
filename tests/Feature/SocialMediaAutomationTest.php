@@ -26,6 +26,7 @@ class SocialMediaAutomationTest extends TestCase
         parent::setUp();
 
         Http::preventStrayRequests();
+        config(['services.youtube.data_api_key' => null]);
         $this->admin = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_active' => true]);
     }
 
@@ -141,7 +142,8 @@ class SocialMediaAutomationTest extends TestCase
         $this->assertDatabaseHas('social_media_sources', [
             'canonical_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
             'external_content_id' => 'dQw4w9WgXcQ',
-            'metadata_status' => SocialMediaSource::METADATA_PENDING,
+            'metadata_status' => SocialMediaSource::METADATA_FAILED,
+            'failure_code' => 'youtube_config_missing',
         ]);
         Http::assertNothingSent();
     }
@@ -231,7 +233,7 @@ class SocialMediaAutomationTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('admin.social-media.automation.show', $proposal))
             ->assertOk()
-            ->assertSee('Metadata has not been fetched yet.')
+            ->assertSee('Metadata retrieval needs attention.')
             ->assertSee('No Night Market, Stall, or Food record has been created.');
 
         $this->assertSame($counts['markets'], NightMarket::query()->count());

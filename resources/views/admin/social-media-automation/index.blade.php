@@ -92,6 +92,9 @@
                                         <div class="fw-semibold">{{ ucfirst($proposal->socialMediaSource->platform) }}</div>
                                         <a href="{{ $proposal->socialMediaSource->canonical_url }}" target="_blank"
                                             rel="noopener noreferrer" class="small text-break">View video source</a>
+                                        <div class="mt-1">
+                                            <span class="badge text-bg-light border text-secondary">Metadata: {{ ucfirst($proposal->socialMediaSource->metadata_status) }}</span>
+                                        </div>
                                     </td>
                                     <td>
                                         @if ($proposal->target_type === \App\Models\CatalogImportProposal::TARGET_EXISTING_MARKET)
