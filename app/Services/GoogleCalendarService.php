@@ -53,7 +53,10 @@ class GoogleCalendarService
         $plan = $this->planForClient($user, $visitPlanId);
 
         if ($this->isPastPlan($plan) && $plan->googleCalendarEvent === null) {
-            throw new GoogleCalendarIntegrationException('Past visit plans cannot be added to Google Calendar.');
+            throw new GoogleCalendarIntegrationException(
+                'Past visit plans cannot be added to Google Calendar.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+            );
         }
 
         return $plan;
@@ -62,58 +65,70 @@ class GoogleCalendarService
     public function syncForClient(User $user, int $visitPlanId): GoogleCalendarEvent
     {
         $this->oauthService->assertEligibleClient($user);
+        $plan = $this->calendarPlanForClient($user, $visitPlanId);
+        $event = GoogleCalendarEvent::query()
+            ->where('user_id', $user->id)
+            ->where('visit_plan_id', $plan->id)
+            ->first();
 
         try {
-            return DB::transaction(function () use ($user, $visitPlanId): GoogleCalendarEvent {
-                $plan = $this->calendarPlanForClient($user, $visitPlanId, true);
-                $event = GoogleCalendarEvent::query()
-                    ->where('user_id', $user->id)
-                    ->where('visit_plan_id', $plan->id)
-                    ->lockForUpdate()
-                    ->first();
+            if ($this->isPastPlan($plan) && $event === null) {
+                throw new GoogleCalendarIntegrationException(
+                    'Past visit plans cannot be added to Google Calendar.',
+                    GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+                );
+            }
 
-                if ($this->isPastPlan($plan) && $event === null) {
-                    throw new GoogleCalendarIntegrationException('Past visit plans cannot be added to Google Calendar.');
-                }
+            $connection = GoogleCalendarConnection::query()
+                ->where('user_id', $user->id)
+                ->first();
 
-                $connection = GoogleCalendarConnection::query()
-                    ->where('user_id', $user->id)
-                    ->lockForUpdate()
-                    ->first();
+            if (! $connection) {
+                throw new GoogleCalendarIntegrationException(
+                    'Connect your Google Calendar before adding this visit plan.',
+                    GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+                );
+            }
 
-                if (! $connection) {
-                    throw new GoogleCalendarIntegrationException('Connect your Google Calendar before adding this visit plan.');
-                }
+            $this->assertEventWriteScope($connection);
 
-                $payload = $this->eventPayload($plan, $user);
-                $payloadHash = $this->payloadHash($payload);
+            $payload = $this->eventPayload($plan, $user);
+            $payloadHash = $this->payloadHash($payload);
 
-                if ($event) {
-                    $response = $this->updateRemoteEvent($connection, $event->google_event_id, $payload);
-                    $event->update([
-                        'google_event_url' => $this->eventUrl($response) ?? $event->google_event_url,
-                        'payload_hash' => $payloadHash,
-                        'last_synced_at' => now(),
-                    ]);
+            if ($event) {
+                $response = $this->updateRemoteEvent($connection, $event->google_event_id, $payload);
 
-                    return $event->refresh();
-                }
+                return $this->persistEventMapping(
+                    $user,
+                    $plan,
+                    $event->google_event_id,
+                    $this->eventUrl($response),
+                    $payloadHash,
+                );
+            }
 
-                $eventId = $this->stableEventId($user, $plan);
-                $response = $this->createRemoteEvent($connection, $eventId, $payload);
+            // The OAuth connection is persisted before this call. If Google or the
+            // local event mapping fails, the next Add action retries this stable ID
+            // without sending the user through OAuth again.
+            $eventId = $this->stableEventId($user, $plan);
+            $response = $this->createRemoteEvent($connection, $eventId, $payload);
 
-                return $user->googleCalendarEvents()->create([
-                    'visit_plan_id' => $plan->id,
-                    'google_event_id' => $eventId,
-                    'google_event_url' => $this->eventUrl($response),
-                    'payload_hash' => $payloadHash,
-                    'last_synced_at' => now(),
-                ]);
-            }, 3);
+            return $this->persistEventMapping(
+                $user,
+                $plan,
+                $eventId,
+                $this->eventUrl($response),
+                $payloadHash,
+            );
         } catch (GoogleCalendarIntegrationException $exception) {
             $this->disconnectWhenRequired($user, $exception);
 
             throw $exception;
+        } catch (Throwable) {
+            throw new GoogleCalendarIntegrationException(
+                'Google Calendar could not add this visit event. Please try again.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+            );
         }
     }
 
@@ -131,7 +146,10 @@ class GoogleCalendarService
                     ->first();
 
                 if (! $event) {
-                    throw new GoogleCalendarIntegrationException('No Google Calendar event is connected to this visit plan.');
+                    throw new GoogleCalendarIntegrationException(
+                        'No Google Calendar event is connected to this visit plan.',
+                        GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+                    );
                 }
 
                 $connection = GoogleCalendarConnection::query()
@@ -140,7 +158,10 @@ class GoogleCalendarService
                     ->first();
 
                 if (! $connection) {
-                    throw new GoogleCalendarIntegrationException('Reconnect your Google Calendar before removing this event.');
+                    throw new GoogleCalendarIntegrationException(
+                        'Reconnect your Google Calendar before removing this event.',
+                        GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+                    );
                 }
 
                 $this->deleteRemoteEvent($connection, $event->google_event_id);
@@ -150,6 +171,58 @@ class GoogleCalendarService
             $this->disconnectWhenRequired($user, $exception);
 
             throw $exception;
+        }
+    }
+
+    private function assertEventWriteScope(GoogleCalendarConnection $connection): void
+    {
+        $scopes = is_array($connection->scopes) ? $connection->scopes : [];
+
+        if (! in_array(GoogleCalendarOAuthService::SCOPE_EVENTS_OWNED, $scopes, true)) {
+            throw new GoogleCalendarIntegrationException(
+                'Google Calendar did not authorize event changes. Please reconnect and approve Calendar access again.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FORBIDDEN,
+            );
+        }
+    }
+
+    private function persistEventMapping(
+        User $user,
+        VisitPlan $plan,
+        string $eventId,
+        ?string $eventUrl,
+        string $payloadHash,
+    ): GoogleCalendarEvent {
+        try {
+            return DB::transaction(function () use ($user, $plan, $eventId, $eventUrl, $payloadHash): GoogleCalendarEvent {
+                $event = GoogleCalendarEvent::query()
+                    ->where('visit_plan_id', $plan->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $event) {
+                    $event = new GoogleCalendarEvent;
+                    $event->user()->associate($user);
+                    $event->visitPlan()->associate($plan);
+                }
+
+                $event->fill([
+                    'google_event_id' => $eventId,
+                    'google_event_url' => $eventUrl ?? $event->google_event_url,
+                    'payload_hash' => $payloadHash,
+                    'last_synced_at' => now(),
+                ]);
+                $event->save();
+
+                return $event->refresh();
+            }, 3);
+        } catch (GoogleCalendarIntegrationException $exception) {
+            throw $exception;
+        } catch (Throwable) {
+            throw new GoogleCalendarIntegrationException(
+                'Google Calendar could not add this visit event. Please try again.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+            );
         }
     }
 
@@ -275,9 +348,12 @@ class GoogleCalendarService
         string $url,
         ?array $payload = null,
     ): Response {
+        $refreshedForThisRequest = false;
+
         if ($connection->token_expires_at === null || $connection->token_expires_at->lte(now()->addSeconds(30))) {
             $this->oauthService->refreshAccessToken($connection);
             $connection->refresh();
+            $refreshedForThisRequest = true;
         }
 
         $response = $this->sendCalendarRequest($connection, $method, $url, $payload);
@@ -286,11 +362,27 @@ class GoogleCalendarService
             return $response;
         }
 
+        // A request receives at most one refresh-and-retry cycle. If a newly
+        // refreshed token is already rejected, reconnecting is safer than looping.
+        if ($refreshedForThisRequest) {
+            throw new GoogleCalendarIntegrationException(
+                'Your Google Calendar connection has expired. Please reconnect it before syncing this plan.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_UNAUTHORIZED,
+                true,
+                401,
+            );
+        }
+
         $this->oauthService->refreshAccessToken($connection);
 
         $retry = $this->sendCalendarRequest($connection->refresh(), $method, $url, $payload);
         if ($retry->status() === 401) {
-            throw new GoogleCalendarIntegrationException('Your Google Calendar connection has expired. Please reconnect it before syncing this plan.', true);
+            throw new GoogleCalendarIntegrationException(
+                'Your Google Calendar connection has expired. Please reconnect it before syncing this plan.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_UNAUTHORIZED,
+                true,
+                401,
+            );
         }
 
         return $retry;
@@ -304,13 +396,20 @@ class GoogleCalendarService
     ): Response {
         try {
             return Http::acceptJson()
+                ->asJson()
                 ->withToken((string) $connection->access_token)
                 ->timeout(10)
                 ->send($method, $url, $payload === null ? [] : ['json' => $payload]);
         } catch (ConnectionException) {
-            throw new GoogleCalendarIntegrationException('Google Calendar is temporarily unavailable. Please try again later.');
+            throw new GoogleCalendarIntegrationException(
+                'Google Calendar is temporarily unavailable. Please try again later.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+            );
         } catch (Throwable) {
-            throw new GoogleCalendarIntegrationException('Google Calendar could not complete this action. Please try again later.');
+            throw new GoogleCalendarIntegrationException(
+                'Google Calendar could not complete this action. Please try again later.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+            );
         }
     }
 
@@ -328,10 +427,39 @@ class GoogleCalendarService
 
     private function safeApiFailure(Response $response): GoogleCalendarIntegrationException
     {
+        $reason = $response->json('error.errors.0.reason');
+
         return match (true) {
-            $response->status() === 429 => new GoogleCalendarIntegrationException('Google Calendar is rate limiting requests. Please try again shortly.'),
-            $response->status() >= 500 => new GoogleCalendarIntegrationException('Google Calendar is temporarily unavailable. Please try again later.'),
-            default => new GoogleCalendarIntegrationException('Google Calendar could not complete this action. Please reconnect and try again.'),
+            $response->status() === 403 && in_array($reason, ['accessNotConfigured', 'serviceDisabled'], true) => new GoogleCalendarIntegrationException(
+                'Google Calendar is currently unavailable. Please try again later.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_API_DISABLED,
+                false,
+                403,
+            ),
+            $response->status() === 403 => new GoogleCalendarIntegrationException(
+                'Google Calendar did not authorize event changes. Please reconnect and approve Calendar access again.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FORBIDDEN,
+                false,
+                403,
+            ),
+            $response->status() === 429 => new GoogleCalendarIntegrationException(
+                'Google Calendar is rate limiting requests. Please try again shortly.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+                false,
+                429,
+            ),
+            $response->status() >= 500 => new GoogleCalendarIntegrationException(
+                'Google Calendar is temporarily unavailable. Please try again later.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+                false,
+                $response->status(),
+            ),
+            default => new GoogleCalendarIntegrationException(
+                'Google Calendar could not complete this action. Please reconnect and try again.',
+                GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+                false,
+                $response->status(),
+            ),
         };
     }
 

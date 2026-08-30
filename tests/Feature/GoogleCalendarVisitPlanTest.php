@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\GoogleCalendarIntegrationException;
+use App\Models\GoogleCalendarConnection;
 use App\Models\GoogleCalendarEvent;
 use App\Models\MarketOperatingDay;
 use App\Models\NightMarket;
@@ -16,6 +18,7 @@ use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use ReflectionMethod;
 use Tests\TestCase;
 
@@ -92,6 +95,8 @@ class GoogleCalendarVisitPlanTest extends TestCase
         $this->assertSame('true', $query['include_granted_scopes']);
         $this->assertSame('consent', $query['prompt']);
         $this->assertArrayHasKey('state', $query);
+        $this->assertSame('calendar-test-client-id', $query['client_id']);
+        $this->assertSame(config('services.google_calendar.redirect'), $query['redirect_uri']);
         $response->assertSessionHas(GoogleCalendarOAuthService::SESSION_INTENT, function (array $intent) use ($plan, $query): bool {
             return $intent['user_id'] === $this->client->id
                 && $intent['visit_plan_id'] === $plan->id
@@ -163,6 +168,149 @@ class GoogleCalendarVisitPlanTest extends TestCase
                 && ($data['start']['timeZone'] ?? null) === 'Asia/Kuala_Lumpur'
                 && ($data['end']['timeZone'] ?? null) === 'Asia/Kuala_Lumpur';
         });
+        Http::assertSent(function (ClientRequest $request): bool {
+            $data = $request->data();
+
+            return $request->method() === 'POST'
+                && $request->url() === 'https://oauth2.googleapis.com/token'
+                && str_starts_with(implode(',', (array) $request->header('Content-Type')), 'application/x-www-form-urlencoded')
+                && ($data['grant_type'] ?? null) === 'authorization_code'
+                && ($data['redirect_uri'] ?? null) === config('services.google_calendar.redirect')
+                && ($data['client_id'] ?? null) === config('services.google_calendar.client_id');
+        });
+    }
+
+    public function test_production_shaped_token_response_persists_a_nullable_encrypted_refresh_token(): void
+    {
+        [$plan] = $this->planFor($this->client);
+        $state = $this->startOauth($plan);
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response([
+                'access_token' => 'production-shaped-access-token',
+                'expires_in' => 3599,
+                'scope' => GoogleCalendarOAuthService::SCOPE_EVENTS_OWNED,
+                'token_type' => 'Bearer',
+            ], 200),
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events*' => Http::response([
+                'id' => 'production-shaped-event',
+                'htmlLink' => 'https://calendar.google.com/calendar/event?eid=production-shaped',
+            ], 201),
+        ]);
+
+        $this->actingAs($this->client)
+            ->get(route('client.google-calendar.callback', ['state' => $state, 'code' => 'authorization-code-not-logged']))
+            ->assertRedirect(route('client.visit-plans.show', $plan))
+            ->assertSessionHas('status', 'Your visit plan was added to Google Calendar.');
+
+        $connection = GoogleCalendarConnection::query()->where('user_id', $this->client->id)->firstOrFail();
+        $this->assertSame('production-shaped-access-token', $connection->access_token);
+        $this->assertNull($connection->refresh_token);
+        $this->assertNotNull($connection->token_expires_at);
+        $this->assertNotNull($connection->connected_at);
+        $this->assertSame([GoogleCalendarOAuthService::SCOPE_EVENTS_OWNED], $connection->scopes);
+        $this->assertNull(DB::table('google_calendar_connections')->where('id', $connection->id)->value('refresh_token'));
+    }
+
+    public function test_event_insert_failure_keeps_the_connection_and_a_later_sync_retries_without_oauth(): void
+    {
+        [$plan] = $this->planFor($this->client);
+        $state = $this->startOauth($plan);
+        $this->fakeOAuthAndCalendar(Http::sequence()
+            ->push(['error' => ['message' => 'sensitive API detail']], 503)
+            ->push([
+                'id' => 'retry-event',
+                'htmlLink' => 'https://calendar.google.com/calendar/event?eid=retry',
+            ], 201));
+
+        $this->actingAs($this->client)
+            ->get(route('client.google-calendar.callback', ['state' => $state, 'code' => 'authorization-code-not-logged']))
+            ->assertRedirect(route('client.visit-plans.show', $plan))
+            ->assertSessionHas('error', 'Google Calendar was connected, but the visit event could not be added. Please try Add to Google Calendar again.');
+
+        $this->assertDatabaseHas('google_calendar_connections', ['user_id' => $this->client->id]);
+        $this->assertDatabaseCount('google_calendar_events', 0);
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.google-calendar.sync', $plan))
+            ->assertRedirect(route('client.visit-plans.show', $plan))
+            ->assertSessionHas('status', 'Your Google Calendar event was updated.');
+
+        $this->assertDatabaseHas('google_calendar_events', ['visit_plan_id' => $plan->id]);
+        $this->assertCount(1, Http::recorded(fn (ClientRequest $request): bool => $request->url() === 'https://oauth2.googleapis.com/token'));
+        Http::assertSent(fn (ClientRequest $request): bool => $request->method() === 'POST'
+            && str_starts_with($request->url(), 'https://www.googleapis.com/calendar/v3/calendars/primary/events'));
+    }
+
+    public function test_token_exchange_failures_have_safe_reason_codes_and_never_log_sensitive_values(): void
+    {
+        [$plan] = $this->planFor($this->client);
+        $state = $this->startOauth($plan);
+        Log::spy();
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response([
+                'error' => 'invalid_client',
+                'error_description' => 'sensitive client secret detail',
+            ], 401),
+        ]);
+
+        $this->actingAs($this->client)
+            ->get(route('client.google-calendar.callback', ['state' => $state, 'code' => 'authorization-code-not-logged']))
+            ->assertRedirect(route('client.visit-plans.show', $plan))
+            ->assertSessionHas('error', 'Google Calendar could not complete the connection. Please try again.');
+
+        Log::shouldHaveReceived('warning')->atLeast()->once()->withArgs(function (string $message, array $context): bool {
+            $serialized = json_encode([$message, $context]);
+
+            return $message === 'Google Calendar integration failed.'
+                && ($context['safe_reason_code'] ?? null) === GoogleCalendarIntegrationException::REASON_TOKEN_EXCHANGE_INVALID_CLIENT
+                && ($context['google_http_status'] ?? null) === 401
+                && ! str_contains((string) $serialized, 'authorization-code-not-logged')
+                && ! str_contains((string) $serialized, 'sensitive client secret detail')
+                && ! str_contains((string) $serialized, 'calendar-test-client-secret');
+        });
+        $this->assertDatabaseCount('google_calendar_connections', 0);
+    }
+
+    public function test_redirect_uri_mismatch_and_calendar_api_forbidden_fail_safely(): void
+    {
+        [$plan] = $this->planFor($this->client);
+        $state = $this->startOauth($plan);
+        Log::spy();
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response(['error' => 'redirect_uri_mismatch'], 400),
+        ]);
+
+        $this->actingAs($this->client)
+            ->get(route('client.google-calendar.callback', ['state' => $state, 'code' => 'authorization-code-not-logged']))
+            ->assertSessionHas('error', 'Google Calendar could not complete the connection. Please try again.');
+        Log::shouldHaveReceived('warning')->atLeast()->once()->withArgs(fn (string $message, array $context): bool => $message === 'Google Calendar integration failed.'
+            && ($context['safe_reason_code'] ?? null) === GoogleCalendarIntegrationException::REASON_TOKEN_EXCHANGE_REDIRECT_MISMATCH);
+
+        [$apiPlan] = $this->planFor($this->client, visitDate: now()->addDays(4));
+        $this->establishConnection($this->client);
+        Log::spy();
+        Http::fake([
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events*' => Http::sequence()
+                ->push([
+                    'error' => ['errors' => [['reason' => 'accessNotConfigured']]],
+                ], 403)
+                ->push([
+                    'error' => ['errors' => [['reason' => 'insufficientPermissions']]],
+                ], 403),
+        ]);
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.google-calendar.sync', $apiPlan))
+            ->assertSessionHas('error', 'Google Calendar is currently unavailable. Please try again later.');
+        Log::shouldHaveReceived('warning')->atLeast()->once()->withArgs(fn (string $message, array $context): bool => $message === 'Google Calendar integration failed.'
+            && ($context['safe_reason_code'] ?? null) === GoogleCalendarIntegrationException::REASON_EVENT_INSERT_API_DISABLED
+            && ($context['google_http_status'] ?? null) === 403);
+
+        $this->actingAs($this->client)
+            ->post(route('client.visit-plans.google-calendar.sync', $apiPlan))
+            ->assertSessionHas('error', 'Google Calendar did not authorize event changes. Please reconnect and approve Calendar access again.');
+        Log::shouldHaveReceived('warning')->atLeast()->once()->withArgs(fn (string $message, array $context): bool => $message === 'Google Calendar integration failed.'
+            && ($context['safe_reason_code'] ?? null) === GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FORBIDDEN
+            && ($context['google_http_status'] ?? null) === 403);
     }
 
     public function test_state_mismatch_expiry_replay_and_consent_denial_are_safe(): void
@@ -419,7 +567,7 @@ class GoogleCalendarVisitPlanTest extends TestCase
         ]);
     }
 
-    private function fakeOAuthAndCalendar(): void
+    private function fakeOAuthAndCalendar(mixed $calendarResponse = null): void
     {
         Http::fake([
             'https://oauth2.googleapis.com/token' => Http::response([
@@ -427,8 +575,9 @@ class GoogleCalendarVisitPlanTest extends TestCase
                 'refresh_token' => 'calendar-refresh-token',
                 'expires_in' => 3600,
                 'scope' => GoogleCalendarOAuthService::SCOPE_EVENTS_OWNED,
+                'token_type' => 'Bearer',
             ]),
-            'https://www.googleapis.com/calendar/v3/calendars/primary/events*' => Http::response([
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events*' => $calendarResponse ?? Http::response([
                 'id' => 'calendar-event-id',
                 'htmlLink' => 'https://calendar.google.com/calendar/event?eid=calendar-event',
             ], 201),
