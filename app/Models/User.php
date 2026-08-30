@@ -151,6 +151,16 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return $this->hasMany(SocialMediaRecord::class, 'approved_by');
     }
 
+    public function createdCatalogImportProposals(): HasMany
+    {
+        return $this->hasMany(CatalogImportProposal::class, 'created_by');
+    }
+
+    public function reviewedCatalogImportProposals(): HasMany
+    {
+        return $this->hasMany(CatalogImportProposal::class, 'reviewed_by');
+    }
+
     public function socialAccounts(): HasMany
     {
         return $this->hasMany(SocialAccount::class);

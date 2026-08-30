@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\CatalogDataQualityController;
 use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
 use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
+use App\Http\Controllers\Admin\SocialMediaAutomationController;
 use App\Http\Controllers\Admin\SocialMediaExtractionController;
 use App\Http\Controllers\Admin\SocialMediaRecordController;
 use App\Http\Controllers\Admin\StallController;
@@ -229,6 +230,15 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/social-media-records', [SocialMediaRecordController::class, 'index'])
             ->name('social-media-records.index');
+        Route::get('/social-media/automation', [SocialMediaAutomationController::class, 'index'])
+            ->name('social-media.automation.index');
+        Route::get('/social-media/automation/create', [SocialMediaAutomationController::class, 'create'])
+            ->name('social-media.automation.create');
+        Route::post('/social-media/automation', [SocialMediaAutomationController::class, 'store'])
+            ->name('social-media.automation.store');
+        Route::get('/social-media/automation/{catalogImportProposal}', [SocialMediaAutomationController::class, 'show'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.show');
         Route::get('/social-media/extract', [SocialMediaExtractionController::class, 'create'])
             ->name('social-media.extract.create');
         Route::post('/social-media/extract', [SocialMediaExtractionController::class, 'extract'])

@@ -110,4 +110,9 @@ class NightMarket extends Model
     {
         return $this->hasMany(SocialMediaRecord::class);
     }
+
+    public function catalogImportProposals(): HasMany
+    {
+        return $this->hasMany(CatalogImportProposal::class, 'matched_night_market_id');
+    }
 }

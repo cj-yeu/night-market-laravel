@@ -154,4 +154,9 @@ class Stall extends Model
     {
         return $this->hasMany(Food::class);
     }
+
+    public function catalogImportProposals(): HasMany
+    {
+        return $this->hasMany(CatalogImportProposal::class, 'matched_stall_id');
+    }
 }
