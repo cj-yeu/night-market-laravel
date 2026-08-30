@@ -3,11 +3,22 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SocialMedia\DeleteCatalogSuggestionRequest;
 use App\Http\Requests\SocialMedia\FetchSocialMediaMetadataRequest;
+use App\Http\Requests\SocialMedia\GenerateCatalogSuggestionsRequest;
 use App\Http\Requests\SocialMedia\StoreCatalogImportProposalRequest;
+use App\Http\Requests\SocialMedia\UpdateCatalogSuggestionFoodRequest;
+use App\Http\Requests\SocialMedia\UpdateCatalogSuggestionMarketRequest;
+use App\Http\Requests\SocialMedia\UpdateCatalogSuggestionOperatingDayRequest;
+use App\Http\Requests\SocialMedia\UpdateCatalogSuggestionStallRequest;
 use App\Models\CatalogImportProposal;
+use App\Models\CatalogImportProposalFood;
+use App\Models\CatalogImportProposalMarket;
+use App\Models\CatalogImportProposalOperatingDay;
+use App\Models\CatalogImportProposalStall;
 use App\Models\SocialMediaSource;
 use App\Services\CatalogImportProposalService;
+use App\Services\CatalogSuggestionExtractionService;
 use App\Services\SocialMediaDiscoveryService;
 use App\Services\SocialMediaMetadataService;
 use Illuminate\Http\RedirectResponse;
@@ -19,6 +30,7 @@ class SocialMediaAutomationController extends Controller
         private readonly CatalogImportProposalService $catalogImportProposalService,
         private readonly SocialMediaDiscoveryService $socialMediaDiscoveryService,
         private readonly SocialMediaMetadataService $socialMediaMetadataService,
+        private readonly CatalogSuggestionExtractionService $catalogSuggestionExtractionService,
     ) {}
 
     public function index(): View
@@ -56,6 +68,7 @@ class SocialMediaAutomationController extends Controller
             'proposal' => $proposal,
             'metadataIsFresh' => $this->socialMediaMetadataService->isFresh($proposal->socialMediaSource),
             'metadataFailureMessage' => $this->socialMediaMetadataService->failureMessage($proposal->socialMediaSource->failure_code),
+            'extractionFailureMessage' => $this->catalogSuggestionExtractionService->failureMessage($proposal->extraction_failure_code),
         ]);
     }
 
@@ -66,5 +79,100 @@ class SocialMediaAutomationController extends Controller
         $source = $this->socialMediaMetadataService->fetch($socialMediaSource);
 
         return back()->with('status', $this->socialMediaMetadataService->statusMessage($source));
+    }
+
+    public function generateSuggestions(
+        GenerateCatalogSuggestionsRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+    ): RedirectResponse {
+        $result = $this->catalogSuggestionExtractionService->generate($catalogImportProposal);
+
+        return back()->with('status', $this->catalogSuggestionExtractionService->statusMessage($result));
+    }
+
+    public function updateSuggestionMarket(
+        UpdateCatalogSuggestionMarketRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+        CatalogImportProposalMarket $proposalMarket,
+    ): RedirectResponse {
+        $this->catalogSuggestionExtractionService->updateMarket(
+            $catalogImportProposal,
+            $proposalMarket,
+            $request->validated(),
+        );
+
+        return back()->with('status', 'The draft Market suggestion was updated. No catalog records were changed.');
+    }
+
+    public function updateSuggestionOperatingDay(
+        UpdateCatalogSuggestionOperatingDayRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+        CatalogImportProposalOperatingDay $proposalOperatingDay,
+    ): RedirectResponse {
+        $this->catalogSuggestionExtractionService->updateOperatingDay(
+            $catalogImportProposal,
+            $proposalOperatingDay,
+            $request->validated(),
+        );
+
+        return back()->with('status', 'The draft operating-day suggestion was updated.');
+    }
+
+    public function updateSuggestionStall(
+        UpdateCatalogSuggestionStallRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+        CatalogImportProposalStall $proposalStall,
+    ): RedirectResponse {
+        $this->catalogSuggestionExtractionService->updateStall(
+            $catalogImportProposal,
+            $proposalStall,
+            $request->validated(),
+        );
+
+        return back()->with('status', 'The draft Stall suggestion was updated.');
+    }
+
+    public function updateSuggestionFood(
+        UpdateCatalogSuggestionFoodRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+        CatalogImportProposalFood $proposalFood,
+    ): RedirectResponse {
+        $this->catalogSuggestionExtractionService->updateFood(
+            $catalogImportProposal,
+            $proposalFood,
+            $request->validated(),
+        );
+
+        return back()->with('status', 'The draft Food suggestion was updated.');
+    }
+
+    public function destroySuggestionOperatingDay(
+        DeleteCatalogSuggestionRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+        CatalogImportProposalOperatingDay $proposalOperatingDay,
+    ): RedirectResponse {
+        $this->catalogSuggestionExtractionService->deleteOperatingDay($catalogImportProposal, $proposalOperatingDay);
+
+        return back()->with('status', 'The draft operating-day suggestion was removed.');
+    }
+
+    public function destroySuggestionStall(
+        DeleteCatalogSuggestionRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+        CatalogImportProposalStall $proposalStall,
+    ): RedirectResponse {
+        $this->catalogSuggestionExtractionService->deleteStall($catalogImportProposal, $proposalStall);
+
+        return back()->with('status', 'The draft Stall suggestion was removed.');
+    }
+
+    public function destroySuggestionFood(
+        DeleteCatalogSuggestionRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+        CatalogImportProposalFood $proposalFood,
+    ): RedirectResponse {
+        $this->catalogSuggestionExtractionService->deleteFood($catalogImportProposal, $proposalFood);
+
+        return back()->with('status', 'The draft Food suggestion was removed.');
     }
 }

@@ -2,10 +2,12 @@
 
 namespace App\Providers;
 
+use App\Contracts\CatalogSuggestionProvider;
 use App\Contracts\HostnameResolver;
 use App\Contracts\RecommendationExplanationProvider;
 use App\Contracts\SocialMediaMetadataProvider;
 use App\Services\DeterministicRecommendationExplanationProvider;
+use App\Services\GeminiCatalogSuggestionProvider;
 use App\Services\NativeHostnameResolver;
 use App\Services\YouTubeMetadataProvider;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -28,6 +30,7 @@ class AppServiceProvider extends ServiceProvider
             DeterministicRecommendationExplanationProvider::class,
         );
         $this->app->bind(SocialMediaMetadataProvider::class, YouTubeMetadataProvider::class);
+        $this->app->bind(CatalogSuggestionProvider::class, GeminiCatalogSuggestionProvider::class);
     }
 
     /**

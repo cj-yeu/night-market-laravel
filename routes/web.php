@@ -239,6 +239,30 @@ Route::middleware('auth')->group(function () {
         Route::post('/social-media/automation/sources/{socialMediaSource}/fetch-metadata', [SocialMediaAutomationController::class, 'fetchMetadata'])
             ->whereNumber('socialMediaSource')
             ->name('social-media.automation.sources.fetch-metadata');
+        Route::post('/social-media/automation/proposals/{catalogImportProposal}/generate-suggestions', [SocialMediaAutomationController::class, 'generateSuggestions'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.proposals.generate-suggestions');
+        Route::patch('/social-media/automation/proposals/{catalogImportProposal}/market/{proposalMarket}', [SocialMediaAutomationController::class, 'updateSuggestionMarket'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalMarket')
+            ->name('social-media.automation.proposals.market.update');
+        Route::patch('/social-media/automation/proposals/{catalogImportProposal}/operating-days/{proposalOperatingDay}', [SocialMediaAutomationController::class, 'updateSuggestionOperatingDay'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalOperatingDay')
+            ->name('social-media.automation.proposals.operating-days.update');
+        Route::delete('/social-media/automation/proposals/{catalogImportProposal}/operating-days/{proposalOperatingDay}', [SocialMediaAutomationController::class, 'destroySuggestionOperatingDay'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalOperatingDay')
+            ->name('social-media.automation.proposals.operating-days.destroy');
+        Route::patch('/social-media/automation/proposals/{catalogImportProposal}/stalls/{proposalStall}', [SocialMediaAutomationController::class, 'updateSuggestionStall'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalStall')
+            ->name('social-media.automation.proposals.stalls.update');
+        Route::delete('/social-media/automation/proposals/{catalogImportProposal}/stalls/{proposalStall}', [SocialMediaAutomationController::class, 'destroySuggestionStall'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalStall')
+            ->name('social-media.automation.proposals.stalls.destroy');
+        Route::patch('/social-media/automation/proposals/{catalogImportProposal}/foods/{proposalFood}', [SocialMediaAutomationController::class, 'updateSuggestionFood'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalFood')
+            ->name('social-media.automation.proposals.foods.update');
+        Route::delete('/social-media/automation/proposals/{catalogImportProposal}/foods/{proposalFood}', [SocialMediaAutomationController::class, 'destroySuggestionFood'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalFood')
+            ->name('social-media.automation.proposals.foods.destroy');
         Route::get('/social-media/automation/{catalogImportProposal}', [SocialMediaAutomationController::class, 'show'])
             ->whereNumber('catalogImportProposal')
             ->name('social-media.automation.show');

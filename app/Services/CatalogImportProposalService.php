@@ -97,6 +97,8 @@ class CatalogImportProposalService
                 'matchedStall.nightMarket:id,name,city,state,status',
                 'createdBy:id,name',
                 'reviewedBy:id,name',
+                'proposalMarket.operatingDays',
+                'proposalMarket.stalls.foods',
             ])
             ->findOrFail($proposal->id);
     }
