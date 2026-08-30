@@ -162,6 +162,16 @@ class User extends Authenticatable implements MustVerifyEmailContract
             ->where('provider', SocialAccount::PROVIDER_GOOGLE);
     }
 
+    public function googleCalendarConnection(): HasOne
+    {
+        return $this->hasOne(GoogleCalendarConnection::class);
+    }
+
+    public function googleCalendarEvents(): HasMany
+    {
+        return $this->hasMany(GoogleCalendarEvent::class);
+    }
+
     public function authenticationMethod(): string
     {
         $hasPassword = array_key_exists('has_local_password', $this->attributes)

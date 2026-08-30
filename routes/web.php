@@ -17,6 +17,7 @@ use App\Http\Controllers\Auth\GoogleAuthenticationController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Client\ClientHomeController;
+use App\Http\Controllers\Client\GoogleCalendarController;
 use App\Http\Controllers\Client\NightMarketDiscoveryController;
 use App\Http\Controllers\Client\ReviewController;
 use App\Http\Controllers\Client\SmartVisitPlannerController;
@@ -144,6 +145,17 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('visitPlanItem')
             ->name('visit-plans.items.destroy');
 
+    });
+
+    Route::middleware(['role:client', 'verified'])->group(function () {
+        Route::get('/client/visit-plans/{visitPlan}/google-calendar/connect', [GoogleCalendarController::class, 'connect'])
+            ->whereNumber('visitPlan')->name('client.visit-plans.google-calendar.connect');
+        Route::post('/client/visit-plans/{visitPlan}/google-calendar/sync', [GoogleCalendarController::class, 'sync'])
+            ->whereNumber('visitPlan')->name('client.visit-plans.google-calendar.sync');
+        Route::delete('/client/visit-plans/{visitPlan}/google-calendar', [GoogleCalendarController::class, 'destroy'])
+            ->whereNumber('visitPlan')->name('client.visit-plans.google-calendar.destroy');
+        Route::get('/integrations/google-calendar/callback', [GoogleCalendarController::class, 'callback'])
+            ->name('client.google-calendar.callback');
     });
 
     Route::get('/admin/dashboard', AdminDashboardController::class)

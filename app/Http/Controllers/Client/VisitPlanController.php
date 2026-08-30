@@ -8,6 +8,7 @@ use App\Http\Requests\VisitPlan\StoreVisitPlanItemRequest;
 use App\Http\Requests\VisitPlan\StoreVisitPlanRequest;
 use App\Http\Requests\VisitPlan\UpdateVisitPlanRequest;
 use App\Http\Requests\VisitPlan\VisitPlanIndexRequest;
+use App\Services\GoogleCalendarService;
 use App\Services\VisitPlanService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,10 @@ use Illuminate\View\View;
 
 class VisitPlanController extends Controller
 {
-    public function __construct(private readonly VisitPlanService $visitPlanService) {}
+    public function __construct(
+        private readonly VisitPlanService $visitPlanService,
+        private readonly GoogleCalendarService $googleCalendarService,
+    ) {}
 
     public function index(VisitPlanIndexRequest $request): View
     {
@@ -66,6 +70,7 @@ class VisitPlanController extends Controller
             'canChangeItems' => $canChangeItems,
             'eligibleStalls' => $canChangeItems ? $this->visitPlanService->eligibleStallsForPlan($visitPlan) : collect(),
             'eligibleFoods' => $canChangeItems ? $this->visitPlanService->eligibleFoodsForPlan($visitPlan) : collect(),
+            'calendarIntegration' => $this->googleCalendarService->integrationDetailsForClient($request->user(), $visitPlan),
         ]);
     }
 

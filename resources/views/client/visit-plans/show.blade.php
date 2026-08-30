@@ -144,6 +144,66 @@
                 </div>
             </div>
 
+            <div class="card market-card mb-4">
+                <div class="card-body p-4">
+                    <h2 class="h4 fw-bold text-market">Google Calendar</h2>
+                    <p class="small text-secondary">Add this visit to your own Google Calendar. No invitations will be sent.</p>
+
+                    @php($calendarEvent = $calendarIntegration['event'])
+                    @if ($calendarEvent)
+                        <div class="alert alert-success mb-3" role="status">
+                            <i class="bi bi-calendar-check me-1" aria-hidden="true"></i>
+                            Added to Google Calendar
+                        </div>
+
+                        @if ($calendarIntegration['needs_sync'])
+                            <div class="alert alert-warning small" role="status">
+                                Your visit plan has changed. Update the Google Calendar event.
+                            </div>
+                        @endif
+
+                        <div class="d-grid gap-2">
+                            @if ($calendarEvent->google_event_url)
+                                <a href="{{ $calendarEvent->google_event_url }}" class="btn btn-outline-secondary"
+                                    target="_blank" rel="noopener noreferrer">
+                                    <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open in Google Calendar
+                                </a>
+                            @endif
+
+                            @if (! $planIsPast)
+                                <form method="POST" action="{{ route('client.visit-plans.google-calendar.sync', $visitPlan) }}"
+                                    data-calendar-submit>
+                                    @csrf
+                                    <button type="submit" class="btn btn-market w-100">
+                                        <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Update Calendar Event
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ route('client.visit-plans.google-calendar.destroy', $visitPlan) }}"
+                                    data-calendar-submit
+                                    onsubmit="return confirm('Remove this event from Google Calendar? Your visit plan will stay here.');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-outline-danger w-100">Remove from Calendar</button>
+                                </form>
+                            @endif
+                        </div>
+                    @elseif (! $calendarIntegration['can_create'])
+                        <div class="alert alert-secondary mb-0">Past visit plans cannot be added to Google Calendar.</div>
+                    @elseif ($calendarIntegration['connected'])
+                        <form method="POST" action="{{ route('client.visit-plans.google-calendar.sync', $visitPlan) }}" data-calendar-submit>
+                            @csrf
+                            <button type="submit" class="btn btn-market w-100">
+                                <i class="bi bi-calendar-plus me-1" aria-hidden="true"></i>Add to Google Calendar
+                            </button>
+                        </form>
+                    @else
+                        <a href="{{ route('client.visit-plans.google-calendar.connect', $visitPlan) }}" class="btn btn-market w-100">
+                            <i class="bi bi-calendar-plus me-1" aria-hidden="true"></i>Add to Google Calendar
+                        </a>
+                    @endif
+                </div>
+            </div>
+
             <div class="card market-card">
                 <div class="card-body p-4">
                     <h2 class="h4 fw-bold text-market">Add a Plan Item</h2>
@@ -199,15 +259,25 @@
         document.addEventListener('DOMContentLoaded', () => {
             const typeSelect = document.getElementById('item_type');
             const itemSelect = document.getElementById('item_id');
-            if (!typeSelect || !itemSelect) return;
-            const filterItems = () => {
-                itemSelect.value = '';
-                itemSelect.querySelectorAll('[data-item-type]').forEach((option) => {
-                    option.hidden = option.dataset.itemType !== typeSelect.value;
+            if (typeSelect && itemSelect) {
+                const filterItems = () => {
+                    itemSelect.value = '';
+                    itemSelect.querySelectorAll('[data-item-type]').forEach((option) => {
+                        option.hidden = option.dataset.itemType !== typeSelect.value;
+                    });
+                };
+                typeSelect.addEventListener('change', filterItems);
+                filterItems();
+            }
+
+            document.querySelectorAll('[data-calendar-submit]').forEach((form) => {
+                form.addEventListener('submit', () => {
+                    const button = form.querySelector('button[type="submit"]');
+                    if (!button) return;
+                    button.disabled = true;
+                    button.setAttribute('aria-busy', 'true');
                 });
-            };
-            typeSelect.addEventListener('change', filterItems);
-            filterItems();
+            });
         });
     </script>
 @endpush
