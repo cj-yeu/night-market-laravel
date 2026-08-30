@@ -99,6 +99,9 @@ class CatalogImportProposalService
                 'reviewedBy:id,name',
                 'proposalMarket.operatingDays',
                 'proposalMarket.stalls.foods',
+                'catalogSourceLinks.nightMarket:id,name',
+                'catalogSourceLinks.stall:id,name',
+                'catalogSourceLinks.food:id,name',
             ])
             ->findOrFail($proposal->id);
     }

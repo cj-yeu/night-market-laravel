@@ -136,6 +136,7 @@ class CatalogSuggestionExtractionService
         CatalogImportProposalMarket $market,
         array $data,
     ): void {
+        $this->assertDraft($proposal);
         $this->assertMarketBelongsToProposal($proposal, $market);
         if ($proposal->target_type !== CatalogImportProposal::TARGET_NEW_MARKET) {
             throw ValidationException::withMessages(['proposal' => 'The selected production Market identity is locked for this proposal.']);
@@ -152,6 +153,7 @@ class CatalogSuggestionExtractionService
         CatalogImportProposalOperatingDay $operatingDay,
         array $data,
     ): void {
+        $this->assertDraft($proposal);
         $this->assertOperatingDayBelongsToProposal($proposal, $operatingDay);
         $operatingDay->update($this->cleanEditableData($data, [
             'day_of_week', 'opening_time', 'closing_time', 'evidence_text', 'confidence',
@@ -164,6 +166,7 @@ class CatalogSuggestionExtractionService
         CatalogImportProposalStall $stall,
         array $data,
     ): void {
+        $this->assertDraft($proposal);
         $this->assertStallBelongsToProposal($proposal, $stall);
         if ($stall->matched_stall_id !== null) {
             throw ValidationException::withMessages(['proposal' => 'The selected production Stall identity is locked for this proposal.']);
@@ -180,6 +183,7 @@ class CatalogSuggestionExtractionService
         CatalogImportProposalFood $food,
         array $data,
     ): void {
+        $this->assertDraft($proposal);
         $this->assertFoodBelongsToProposal($proposal, $food);
         $food->update($this->cleanEditableData($data, [
             'name', 'category', 'description', 'price_display', 'price_min', 'price_max',
@@ -189,12 +193,14 @@ class CatalogSuggestionExtractionService
 
     public function deleteOperatingDay(CatalogImportProposal $proposal, CatalogImportProposalOperatingDay $operatingDay): void
     {
+        $this->assertDraft($proposal);
         $this->assertOperatingDayBelongsToProposal($proposal, $operatingDay);
         $operatingDay->delete();
     }
 
     public function deleteStall(CatalogImportProposal $proposal, CatalogImportProposalStall $stall): void
     {
+        $this->assertDraft($proposal);
         $this->assertStallBelongsToProposal($proposal, $stall);
         if ($stall->matched_stall_id !== null) {
             throw ValidationException::withMessages(['proposal' => 'The selected production Stall identity cannot be removed.']);
@@ -205,8 +211,22 @@ class CatalogSuggestionExtractionService
 
     public function deleteFood(CatalogImportProposal $proposal, CatalogImportProposalFood $food): void
     {
+        $this->assertDraft($proposal);
         $this->assertFoodBelongsToProposal($proposal, $food);
         $food->delete();
+    }
+
+    public function inputHashMatchesCurrentMetadata(CatalogImportProposal $proposal): bool
+    {
+        return filled($proposal->extraction_input_hash)
+            && hash_equals((string) $proposal->extraction_input_hash, $this->currentInputHash($proposal));
+    }
+
+    public function currentInputHash(CatalogImportProposal $proposal): string
+    {
+        $proposal = $this->detail($proposal);
+
+        return $this->inputHash($this->inputFor($proposal));
     }
 
     public function failureMessage(?string $failureCode): string
@@ -237,6 +257,15 @@ class CatalogSuggestionExtractionService
 
         if (! filled($proposal->socialMediaSource->title) || ! filled($proposal->socialMediaSource->description_excerpt)) {
             throw ValidationException::withMessages(['proposal' => 'Fetched metadata is incomplete and cannot generate suggestions.']);
+        }
+    }
+
+    private function assertDraft(CatalogImportProposal $proposal): void
+    {
+        if ($proposal->status !== CatalogImportProposal::STATUS_DRAFT) {
+            throw ValidationException::withMessages([
+                'proposal' => 'Only draft proposals can be edited.',
+            ]);
         }
     }
 

@@ -52,4 +52,9 @@ class SocialMediaSource extends Model
     {
         return $this->hasMany(CatalogImportProposal::class);
     }
+
+    public function catalogSourceLinks(): HasMany
+    {
+        return $this->hasMany(CatalogSocialMediaSourceLink::class);
+    }
 }

@@ -159,4 +159,9 @@ class Stall extends Model
     {
         return $this->hasMany(CatalogImportProposal::class, 'matched_stall_id');
     }
+
+    public function catalogSourceLinks(): HasMany
+    {
+        return $this->hasMany(CatalogSocialMediaSourceLink::class);
+    }
 }

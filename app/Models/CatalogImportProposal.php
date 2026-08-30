@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CatalogImportProposal extends Model
@@ -121,5 +122,10 @@ class CatalogImportProposal extends Model
     public function proposalMarket(): HasOne
     {
         return $this->hasOne(CatalogImportProposalMarket::class);
+    }
+
+    public function catalogSourceLinks(): HasMany
+    {
+        return $this->hasMany(CatalogSocialMediaSourceLink::class);
     }
 }

@@ -242,6 +242,15 @@ Route::middleware('auth')->group(function () {
         Route::post('/social-media/automation/proposals/{catalogImportProposal}/generate-suggestions', [SocialMediaAutomationController::class, 'generateSuggestions'])
             ->whereNumber('catalogImportProposal')
             ->name('social-media.automation.proposals.generate-suggestions');
+        Route::post('/social-media/automation/proposals/{catalogImportProposal}/submit', [SocialMediaAutomationController::class, 'submit'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.proposals.submit');
+        Route::post('/social-media/automation/proposals/{catalogImportProposal}/reject', [SocialMediaAutomationController::class, 'reject'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.proposals.reject');
+        Route::post('/social-media/automation/proposals/{catalogImportProposal}/approve-import', [SocialMediaAutomationController::class, 'approveAndImport'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.proposals.approve-import');
         Route::patch('/social-media/automation/proposals/{catalogImportProposal}/market/{proposalMarket}', [SocialMediaAutomationController::class, 'updateSuggestionMarket'])
             ->whereNumber('catalogImportProposal')->whereNumber('proposalMarket')
             ->name('social-media.automation.proposals.market.update');

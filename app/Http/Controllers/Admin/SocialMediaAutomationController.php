@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SocialMedia\ApproveCatalogImportProposalRequest;
 use App\Http\Requests\SocialMedia\DeleteCatalogSuggestionRequest;
 use App\Http\Requests\SocialMedia\FetchSocialMediaMetadataRequest;
 use App\Http\Requests\SocialMedia\GenerateCatalogSuggestionsRequest;
+use App\Http\Requests\SocialMedia\RejectCatalogImportProposalRequest;
 use App\Http\Requests\SocialMedia\StoreCatalogImportProposalRequest;
+use App\Http\Requests\SocialMedia\SubmitCatalogImportProposalRequest;
 use App\Http\Requests\SocialMedia\UpdateCatalogSuggestionFoodRequest;
 use App\Http\Requests\SocialMedia\UpdateCatalogSuggestionMarketRequest;
 use App\Http\Requests\SocialMedia\UpdateCatalogSuggestionOperatingDayRequest;
@@ -17,6 +20,7 @@ use App\Models\CatalogImportProposalMarket;
 use App\Models\CatalogImportProposalOperatingDay;
 use App\Models\CatalogImportProposalStall;
 use App\Models\SocialMediaSource;
+use App\Services\CatalogImportProposalImportService;
 use App\Services\CatalogImportProposalService;
 use App\Services\CatalogSuggestionExtractionService;
 use App\Services\SocialMediaDiscoveryService;
@@ -28,6 +32,7 @@ class SocialMediaAutomationController extends Controller
 {
     public function __construct(
         private readonly CatalogImportProposalService $catalogImportProposalService,
+        private readonly CatalogImportProposalImportService $catalogImportProposalImportService,
         private readonly SocialMediaDiscoveryService $socialMediaDiscoveryService,
         private readonly SocialMediaMetadataService $socialMediaMetadataService,
         private readonly CatalogSuggestionExtractionService $catalogSuggestionExtractionService,
@@ -69,6 +74,7 @@ class SocialMediaAutomationController extends Controller
             'metadataIsFresh' => $this->socialMediaMetadataService->isFresh($proposal->socialMediaSource),
             'metadataFailureMessage' => $this->socialMediaMetadataService->failureMessage($proposal->socialMediaSource->failure_code),
             'extractionFailureMessage' => $this->catalogSuggestionExtractionService->failureMessage($proposal->extraction_failure_code),
+            'importFailureMessage' => $this->catalogImportProposalImportService->failureMessage($proposal->failure_code),
         ]);
     }
 
@@ -88,6 +94,39 @@ class SocialMediaAutomationController extends Controller
         $result = $this->catalogSuggestionExtractionService->generate($catalogImportProposal);
 
         return back()->with('status', $this->catalogSuggestionExtractionService->statusMessage($result));
+    }
+
+    public function submit(
+        SubmitCatalogImportProposalRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+    ): RedirectResponse {
+        $this->catalogImportProposalImportService->submit($catalogImportProposal);
+
+        return back()->with('status', 'The proposal was submitted for Admin review. No catalog records were created.');
+    }
+
+    public function reject(
+        RejectCatalogImportProposalRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+    ): RedirectResponse {
+        $this->catalogImportProposalImportService->reject(
+            $request->user(),
+            $catalogImportProposal,
+            $request->validated('review_note'),
+        );
+
+        return back()->with('status', 'The submitted proposal was rejected. Its draft suggestions were preserved for review.');
+    }
+
+    public function approveAndImport(
+        ApproveCatalogImportProposalRequest $request,
+        CatalogImportProposal $catalogImportProposal,
+    ): RedirectResponse {
+        $result = $this->catalogImportProposalImportService->approveAndImport($request->user(), $catalogImportProposal);
+
+        return back()->with('status', $result->wasAlreadyImported
+            ? 'This proposal was already imported. No duplicate catalog records were created.'
+            : 'The proposal was approved and imported transactionally. New catalog records remain inactive until normal Admin activation.');
     }
 
     public function updateSuggestionMarket(

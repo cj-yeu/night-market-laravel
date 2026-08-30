@@ -105,12 +105,17 @@
                                             New Market proposal
                                         @endif
                                     </td>
-                                    <td><span class="badge text-bg-secondary">{{ ucfirst($proposal->status) }}</span></td>
+                                    <td>
+                                        <span class="badge text-bg-secondary">{{ ucfirst($proposal->status) }}</span>
+                                        @if ($proposal->submitted_at)
+                                            <div class="small text-secondary mt-1">Submitted {{ $proposal->submitted_at->format('d M Y') }}</div>
+                                        @endif
+                                    </td>
                                     <td>{{ $proposal->createdBy->name }}</td>
                                     <td>{{ $proposal->created_at->format('d M Y') }}</td>
                                     <td class="text-end">
                                         <a class="btn btn-sm btn-outline-secondary"
-                                            href="{{ route('admin.social-media.automation.show', $proposal) }}">View draft</a>
+                                            href="{{ route('admin.social-media.automation.show', $proposal) }}">View proposal</a>
                                     </td>
                                 </tr>
                             @endforeach
