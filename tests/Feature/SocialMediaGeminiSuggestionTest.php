@@ -135,11 +135,26 @@ class SocialMediaGeminiSuggestionTest extends TestCase
         $this->assertSame($market->id, $marketRow->matched_night_market_id);
         $this->assertSame('Locked Market', $marketRow->name);
 
-        Http::fake(['https://generativelanguage.googleapis.com/*' => Http::response($this->geminiResponse($this->payload()))]);
-        $stallProposal = $this->proposalFor($this->sourceFor($this->sourceText().' Extra Nasi Lemak RM5 must-try.'), CatalogImportProposal::TARGET_EXISTING_STALL, $market, $stall);
+        $stallPayload = $this->payload();
+        $stallPayload['stalls'][0]['name'] = 'Locked Stall';
+        $stallPayload['stalls'][0]['evidence_text'] = 'Locked Stall serves Nasi Lemak RM5';
+        Http::swap(new Factory);
+        Http::preventStrayRequests();
+        Http::fake(['https://generativelanguage.googleapis.com/*' => Http::response($this->geminiResponse($stallPayload))]);
+        $stallProposal = $this->proposalFor(
+            $this->sourceFor($this->sourceText().' Locked Stall serves Nasi Lemak RM5.'),
+            CatalogImportProposal::TARGET_EXISTING_STALL,
+            $market,
+            $stall,
+        );
         $this->actingAs($this->admin)
             ->post(route('admin.social-media.automation.proposals.generate-suggestions', $stallProposal))
             ->assertRedirect();
+        $this->assertSame(
+            CatalogImportProposal::EXTRACTION_COMPLETED,
+            $stallProposal->fresh()->extraction_status,
+            (string) $stallProposal->fresh()->extraction_failure_code,
+        );
         $stallRow = CatalogImportProposalMarket::query()->where('catalog_import_proposal_id', $stallProposal->id)->firstOrFail()->stalls()->firstOrFail();
         $this->assertSame($stall->id, $stallRow->matched_stall_id);
         $this->assertSame('Locked Stall', $stallRow->name);
@@ -352,7 +367,7 @@ class SocialMediaGeminiSuggestionTest extends TestCase
 
     private function sourceText(): string
     {
-        return 'Night Market One in Selangor. Saturday 18:00 to 23:00. Stall A serves Malay Nasi Lemak RM5, a must-try recommendation.';
+        return 'Night Market One in Selangor. Night Market One Saturday 18:00 to 23:00. Stall A serves Malay Nasi Lemak RM5, a must-try recommendation.';
     }
 
     /** @return array<string, mixed> */
@@ -364,7 +379,7 @@ class SocialMediaGeminiSuggestionTest extends TestCase
                 'evidence_text' => 'Night Market One in Selangor', 'confidence' => 92,
                 'operating_days' => [[
                     'day_of_week' => 'Saturday', 'opening_time' => '18:00', 'closing_time' => '23:00',
-                    'evidence_text' => 'Saturday 18:00 to 23:00', 'confidence' => 90,
+                    'evidence_text' => 'Night Market One Saturday 18:00 to 23:00', 'confidence' => 90,
                 ]],
             ],
             'stalls' => [[

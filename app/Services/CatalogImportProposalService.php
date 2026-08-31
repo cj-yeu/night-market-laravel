@@ -12,8 +12,10 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class CatalogImportProposalService
 {
@@ -104,6 +106,43 @@ class CatalogImportProposalService
                 'catalogSourceLinks.food:id,name',
             ])
             ->findOrFail($proposal->id);
+    }
+
+    /**
+     * @return array{uses_snapshot: bool, external_content_id: string|null, title: string|null, description_excerpt: string|null, creator_name: string|null, thumbnail_url: string|null, published_at_label: string|null}
+     */
+    public function metadataForDisplay(CatalogImportProposal $proposal): array
+    {
+        $usesSnapshot = $proposal->status !== CatalogImportProposal::STATUS_DRAFT;
+        $metadata = $usesSnapshot
+            ? (is_array($proposal->review_metadata_snapshot) ? $proposal->review_metadata_snapshot : [])
+            : [
+                'external_content_id' => $proposal->socialMediaSource?->external_content_id,
+                'title' => $proposal->socialMediaSource?->title,
+                'description_excerpt' => $proposal->socialMediaSource?->description_excerpt,
+                'creator_name' => $proposal->socialMediaSource?->creator_name,
+                'thumbnail_url' => $proposal->socialMediaSource?->thumbnail_url,
+                'published_at' => $proposal->socialMediaSource?->published_at,
+            ];
+
+        $publishedAtLabel = null;
+        if (filled($metadata['published_at'] ?? null)) {
+            try {
+                $publishedAtLabel = Carbon::parse($metadata['published_at'])->format('d M Y');
+            } catch (Throwable) {
+                $publishedAtLabel = null;
+            }
+        }
+
+        return [
+            'uses_snapshot' => $usesSnapshot,
+            'external_content_id' => $this->nullableDisplayValue($metadata['external_content_id'] ?? null),
+            'title' => $this->nullableDisplayValue($metadata['title'] ?? null),
+            'description_excerpt' => $this->nullableDisplayValue($metadata['description_excerpt'] ?? null),
+            'creator_name' => $this->nullableDisplayValue($metadata['creator_name'] ?? null),
+            'thumbnail_url' => $this->nullableDisplayValue($metadata['thumbnail_url'] ?? null),
+            'published_at_label' => $publishedAtLabel,
+        ];
     }
 
     /**
@@ -267,5 +306,16 @@ class CatalogImportProposalService
         }
 
         return ['night_market_id' => null, 'stall_id' => null];
+    }
+
+    private function nullableDisplayValue(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return $value === '' ? null : $value;
     }
 }

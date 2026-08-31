@@ -17,6 +17,7 @@ use App\Services\CatalogSuggestionExtractionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Tests\TestCase;
@@ -72,6 +73,19 @@ class SocialMediaCatalogImportTest extends TestCase
             ->assertSessionHasNoErrors();
         $this->assertSame(CatalogImportProposal::STATUS_SUBMITTED, $valid->fresh()->status);
         $this->assertNotNull($valid->fresh()->submitted_at);
+        $this->assertSame($valid->fresh()->extraction_input_hash, $valid->fresh()->review_input_hash);
+        $snapshotKeys = array_keys($valid->fresh()->review_metadata_snapshot);
+        sort($snapshotKeys);
+        $expectedSnapshotKeys = [
+            'external_content_id',
+            'title',
+            'description_excerpt',
+            'creator_name',
+            'thumbnail_url',
+            'published_at',
+        ];
+        sort($expectedSnapshotKeys);
+        $this->assertSame($expectedSnapshotKeys, $snapshotKeys);
 
         $incomplete = $this->proposalWithGraph(CatalogImportProposal::TARGET_NEW_MARKET, ['with_food' => false]);
         $this->actingAs($this->admin)
@@ -85,6 +99,98 @@ class SocialMediaCatalogImportTest extends TestCase
             ->post(route('admin.social-media.automation.proposals.submit', $stale))
             ->assertSessionHasErrors('proposal');
         $this->assertSame(CatalogImportProposal::STATUS_DRAFT, $stale->fresh()->status);
+        Http::assertNothingSent();
+    }
+
+    public function test_submitted_snapshot_is_immutable_and_import_does_not_recompute_mutable_source_metadata(): void
+    {
+        $proposal = $this->submittedProposal(CatalogImportProposal::TARGET_NEW_MARKET);
+        $snapshot = $proposal->review_metadata_snapshot;
+        $reviewInputHash = $proposal->review_input_hash;
+
+        $proposal->socialMediaSource->update([
+            'title' => 'A later draft revision changed the shared title',
+            'description_excerpt' => 'A later draft revision changed the shared description.',
+            'creator_name' => 'Different Channel',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.social-media.automation.show', $proposal))
+            ->assertOk()
+            ->assertSee('Review metadata is frozen.')
+            ->assertSee($snapshot['title'])
+            ->assertDontSee('A later draft revision changed the shared title')
+            ->assertDontSee('Different Channel');
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.social-media.automation.proposals.approve-import', $proposal))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $proposal->refresh();
+        $this->assertSame(CatalogImportProposal::STATUS_IMPORTED, $proposal->status);
+        $this->assertSame($snapshot, $proposal->review_metadata_snapshot);
+        $this->assertSame($reviewInputHash, $proposal->review_input_hash);
+        Http::assertNothingSent();
+    }
+
+    public function test_stale_submission_error_is_visible_on_the_proposal_page(): void
+    {
+        $proposal = $this->proposalWithGraph(CatalogImportProposal::TARGET_NEW_MARKET);
+        $proposal->socialMediaSource->update(['title' => 'Changed metadata after extraction']);
+
+        $this->actingAs($this->admin)
+            ->from(route('admin.social-media.automation.show', $proposal))
+            ->followingRedirects()
+            ->post(route('admin.social-media.automation.proposals.submit', $proposal))
+            ->assertOk()
+            ->assertSee('role="alert"', false)
+            ->assertSee('Please correct the following:')
+            ->assertSee('The source metadata or selected catalog target changed after suggestions were generated. Generate suggestions again before submitting.');
+
+        $this->assertSame(CatalogImportProposal::STATUS_DRAFT, $proposal->fresh()->status);
+        Http::assertNothingSent();
+    }
+
+    public function test_import_rejects_a_tampered_submitted_review_hash_without_catalog_writes(): void
+    {
+        $proposal = $this->submittedProposal(CatalogImportProposal::TARGET_NEW_MARKET);
+        $counts = [
+            NightMarket::query()->count(),
+            Stall::query()->count(),
+            Food::query()->count(),
+            CatalogSocialMediaSourceLink::query()->count(),
+        ];
+        $proposal->forceFill(['review_input_hash' => str_repeat('0', 64)])->save();
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.social-media.automation.proposals.approve-import', $proposal))
+            ->assertSessionHasErrors('proposal');
+
+        $this->assertSame(CatalogImportProposal::STATUS_SUBMITTED, $proposal->fresh()->status);
+        $this->assertSame($counts, [
+            NightMarket::query()->count(),
+            Stall::query()->count(),
+            Food::query()->count(),
+            CatalogSocialMediaSourceLink::query()->count(),
+        ]);
+        Http::assertNothingSent();
+    }
+
+    public function test_import_rejects_non_whitelisted_review_snapshot_data(): void
+    {
+        $proposal = $this->submittedProposal(CatalogImportProposal::TARGET_NEW_MARKET);
+        $snapshot = $proposal->review_metadata_snapshot;
+        $snapshot['unexpected_field'] = 'This field was never approved for the review snapshot.';
+        $proposal->forceFill(['review_metadata_snapshot' => $snapshot])->save();
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.social-media.automation.proposals.approve-import', $proposal))
+            ->assertSessionHasErrors('proposal');
+
+        $this->assertSame(CatalogImportProposal::STATUS_SUBMITTED, $proposal->fresh()->status);
+        $this->assertDatabaseMissing('night_markets', ['name' => 'Draft Market']);
+        $this->assertDatabaseCount('catalog_social_media_source_links', 0);
         Http::assertNothingSent();
     }
 
@@ -204,6 +310,46 @@ class SocialMediaCatalogImportTest extends TestCase
         $this->assertSame('8.00', $food->price_max);
         $this->assertTrue($food->is_must_try);
         $this->assertDatabaseCount('catalog_social_media_source_links', 3);
+        Http::assertNothingSent();
+    }
+
+    public function test_reviewed_false_must_try_value_is_preserved_during_import(): void
+    {
+        $proposal = $this->submittedProposal(CatalogImportProposal::TARGET_NEW_MARKET, ['is_must_try' => false]);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.social-media.automation.proposals.approve-import', $proposal))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $food = Food::query()->where('name', 'Draft Food')->firstOrFail();
+        $this->assertFalse($food->is_must_try);
+        Http::assertNothingSent();
+    }
+
+    public function test_admin_can_uncheck_must_try_and_the_imported_food_remains_false(): void
+    {
+        $proposal = $this->proposalWithGraph(CatalogImportProposal::TARGET_NEW_MARKET);
+        $food = $proposal->proposalMarket->stalls->firstOrFail()->foods->firstOrFail();
+        $this->assertTrue($food->is_must_try);
+
+        $this->actingAs($this->admin)
+            ->patch(route('admin.social-media.automation.proposals.foods.update', [$proposal, $food]), [
+                'name' => $food->name,
+                'is_must_try' => '0',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+        $this->assertFalse($food->fresh()->is_must_try);
+
+        $this->post(route('admin.social-media.automation.proposals.submit', $proposal))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+        $this->post(route('admin.social-media.automation.proposals.approve-import', $proposal))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertFalse(Food::query()->where('name', $food->name)->firstOrFail()->is_must_try);
         Http::assertNothingSent();
     }
 
@@ -333,6 +479,53 @@ class SocialMediaCatalogImportTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_named_market_identity_unique_violation_is_a_safe_conflict_with_no_partial_graph(): void
+    {
+        $proposal = $this->submittedProposal(CatalogImportProposal::TARGET_NEW_MARKET);
+        $counts = [
+            NightMarket::query()->count(),
+            Stall::query()->count(),
+            Food::query()->count(),
+            CatalogSocialMediaSourceLink::query()->count(),
+        ];
+        $injectedConcurrentIdentity = false;
+
+        NightMarket::query();
+        NightMarket::creating(function (NightMarket $market) use (&$injectedConcurrentIdentity): void {
+            if ($injectedConcurrentIdentity || $market->name !== 'Draft Market') {
+                return;
+            }
+
+            $injectedConcurrentIdentity = true;
+            DB::table('night_markets')->insert([
+                'name' => $market->name,
+                'address' => $market->address,
+                'city' => $market->city,
+                'state' => $market->state,
+                'catalog_identity_hash' => $market->catalog_identity_hash,
+                'status' => NightMarket::STATUS_INACTIVE,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.social-media.automation.proposals.approve-import', $proposal))
+            ->assertSessionHasErrors([
+                'proposal' => 'A matching Night Market already exists. Review the draft instead of merging it automatically.',
+            ]);
+
+        $this->assertTrue($injectedConcurrentIdentity);
+        $this->assertSame(CatalogImportProposal::STATUS_SUBMITTED, $proposal->fresh()->status);
+        $this->assertSame($counts, [
+            NightMarket::query()->count(),
+            Stall::query()->count(),
+            Food::query()->count(),
+            CatalogSocialMediaSourceLink::query()->count(),
+        ]);
+        Http::assertNothingSent();
+    }
+
     /** @param array<string, mixed> $overrides */
     private function submittedProposal(string $targetType, array $overrides = []): CatalogImportProposal
     {
@@ -365,6 +558,8 @@ class SocialMediaCatalogImportTest extends TestCase
             'title' => 'Draft Market official walkthrough',
             'description_excerpt' => 'Draft Market at 10 Draft Road, Klang, Selangor opens Saturday 18:00 to 23:00. Draft Stall serves must-try Draft Food for RM5.50 to RM8.00.',
             'creator_name' => 'Official Channel',
+            'thumbnail_url' => 'https://i.ytimg.com/vi/draftmarket1/hqdefault.jpg',
+            'published_at' => '2026-08-30 12:00:00',
             'metadata_status' => SocialMediaSource::METADATA_FETCHED,
             'metadata_fetched_at' => now(),
         ]);
@@ -425,7 +620,7 @@ class SocialMediaCatalogImportTest extends TestCase
                 'price_min' => '5.50',
                 'price_max' => '8.00',
                 'price_display' => 'RM5.50–RM8.00',
-                'is_must_try' => true,
+                'is_must_try' => (bool) ($overrides['is_must_try'] ?? true),
                 'evidence_text' => 'must-try Draft Food for RM5.50 to RM8.00',
             ]);
         }

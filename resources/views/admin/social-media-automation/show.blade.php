@@ -15,7 +15,22 @@
         <div class="alert alert-success" role="status">{{ session('status') }}</div>
     @endif
 
-    @if ($proposal->socialMediaSource->metadata_status === \App\Models\SocialMediaSource::METADATA_FETCHED)
+    @if ($errors->any())
+        <div class="alert alert-danger" role="alert" aria-labelledby="proposal-errors-heading">
+            <h2 id="proposal-errors-heading" class="h6">Please correct the following:</h2>
+            <ul class="mb-0">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
+    @if ($displayMetadata['uses_snapshot'])
+        <div class="alert alert-info" role="status">
+            <strong>Review metadata is frozen.</strong> This submitted proposal uses the immutable metadata snapshot captured at submission.
+        </div>
+    @elseif ($proposal->socialMediaSource->metadata_status === \App\Models\SocialMediaSource::METADATA_FETCHED)
         <div class="alert alert-success" role="status">
             <strong>Official YouTube metadata was retrieved.</strong> This proposal remains a draft; no Night Market, Stall, or Food record has been created.
         </div>
@@ -44,39 +59,43 @@
                 </dd>
 
                 <dt class="col-sm-3">Metadata status</dt>
-                <dd class="col-sm-9"><span class="badge text-bg-secondary">{{ ucfirst($proposal->socialMediaSource->metadata_status) }}</span></dd>
+                <dd class="col-sm-9">
+                    <span class="badge text-bg-secondary">{{ $displayMetadata['uses_snapshot'] ? 'Review snapshot' : ucfirst($proposal->socialMediaSource->metadata_status) }}</span>
+                </dd>
 
-                @if ($proposal->socialMediaSource->thumbnail_url)
+                @if ($displayMetadata['thumbnail_url'])
                     <dt class="col-sm-3">Video thumbnail</dt>
                     <dd class="col-sm-9">
-                        <img src="{{ $proposal->socialMediaSource->thumbnail_url }}"
-                            alt="{{ $proposal->socialMediaSource->title ?? 'YouTube video thumbnail' }}"
+                        <img src="{{ $displayMetadata['thumbnail_url'] }}"
+                            alt="{{ $displayMetadata['title'] ?? 'YouTube video thumbnail' }}"
                             class="img-fluid rounded border" style="max-width: 320px" referrerpolicy="no-referrer">
                     </dd>
                 @endif
 
-                @if ($proposal->socialMediaSource->title)
+                @if ($displayMetadata['title'])
                     <dt class="col-sm-3">Video title</dt>
-                    <dd class="col-sm-9">{{ $proposal->socialMediaSource->title }}</dd>
+                    <dd class="col-sm-9">{{ $displayMetadata['title'] }}</dd>
                 @endif
 
-                @if ($proposal->socialMediaSource->creator_name)
+                @if ($displayMetadata['creator_name'])
                     <dt class="col-sm-3">Channel</dt>
-                    <dd class="col-sm-9">{{ $proposal->socialMediaSource->creator_name }}</dd>
+                    <dd class="col-sm-9">{{ $displayMetadata['creator_name'] }}</dd>
                 @endif
 
-                @if ($proposal->socialMediaSource->published_at)
+                @if ($displayMetadata['published_at_label'])
                     <dt class="col-sm-3">Published</dt>
-                    <dd class="col-sm-9">{{ $proposal->socialMediaSource->published_at->format('d M Y') }}</dd>
+                    <dd class="col-sm-9">{{ $displayMetadata['published_at_label'] }}</dd>
                 @endif
 
-                @if ($proposal->socialMediaSource->description_excerpt)
+                @if ($displayMetadata['description_excerpt'])
                     <dt class="col-sm-3">Description excerpt</dt>
-                    <dd class="col-sm-9 text-break">{{ $proposal->socialMediaSource->description_excerpt }}</dd>
+                    <dd class="col-sm-9 text-break">{{ $displayMetadata['description_excerpt'] }}</dd>
                 @endif
 
-                <dt class="col-sm-3">Last metadata check</dt>
-                <dd class="col-sm-9">{{ $proposal->socialMediaSource->metadata_fetched_at?->format('d M Y, H:i') ?? 'Not checked yet' }}</dd>
+                @if (! $displayMetadata['uses_snapshot'])
+                    <dt class="col-sm-3">Last metadata check</dt>
+                    <dd class="col-sm-9">{{ $proposal->socialMediaSource->metadata_fetched_at?->format('d M Y, H:i') ?? 'Not checked yet' }}</dd>
+                @endif
 
                 <dt class="col-sm-3">Proposal target</dt>
                 <dd class="col-sm-9">
@@ -130,7 +149,7 @@
                 @elseif ($metadataIsFresh)
                     <p class="mb-0 text-secondary">Metadata is current and will be refreshed after 24 hours if needed.</p>
                 @else
-                    <form method="POST" action="{{ route('admin.social-media.automation.sources.fetch-metadata', $proposal->socialMediaSource) }}">
+                    <form method="POST" action="{{ route('admin.social-media.automation.proposals.fetch-metadata', $proposal) }}">
                         @csrf
                         <button type="submit" class="btn btn-outline-secondary">
                             {{ $proposal->socialMediaSource->metadata_status === \App\Models\SocialMediaSource::METADATA_FAILED ? 'Retry Metadata' : 'Fetch Metadata' }}
@@ -203,7 +222,10 @@
                             <form method="POST" action="{{ route('admin.social-media.automation.proposals.reject', $proposal) }}" class="border rounded p-3">
                                 @csrf
                                 <label class="form-label" for="review-note">Reject with review note</label>
-                                <textarea id="review-note" class="form-control" name="review_note" rows="3" maxlength="2000" required>{{ old('review_note') }}</textarea>
+                                <textarea id="review-note" class="form-control @error('review_note') is-invalid @enderror" name="review_note" rows="3" maxlength="2000" required @error('review_note') aria-invalid="true" aria-describedby="review-note-error" @enderror>{{ old('review_note') }}</textarea>
+                                @error('review_note')
+                                    <div id="review-note-error" class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                                 <button class="btn btn-outline-danger mt-3" type="submit">Reject Proposal</button>
                             </form>
                         </div>
@@ -368,7 +390,7 @@
                                                 <div class="col-md-4"><label class="form-label">Maximum price</label><input class="form-control" type="number" min="0" step="0.01" name="price_max" value="{{ $food->price_max }}"></div>
                                                 <div class="col-md-8"><label class="form-label">Source evidence</label><input class="form-control" name="evidence_text" value="{{ $food->evidence_text }}"></div>
                                                 <div class="col-md-4"><label class="form-label">Confidence</label><input class="form-control" type="number" min="0" max="100" step="0.01" name="confidence" value="{{ $food->confidence }}"></div>
-                                                <div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" value="1" name="is_must_try" id="food-must-try-{{ $food->id }}" @checked($food->is_must_try)><label class="form-check-label" for="food-must-try-{{ $food->id }}">Must-Try (Admin review only)</label></div>
+                                                <div class="col-12 form-check ms-2"><input type="hidden" name="is_must_try" value="0"><input class="form-check-input" type="checkbox" value="1" name="is_must_try" id="food-must-try-{{ $food->id }}" @checked(old('is_must_try', $food->is_must_try))><label class="form-check-label" for="food-must-try-{{ $food->id }}">Must-Try (Admin review only)</label></div>
                                                 <div class="col-12"><button class="btn btn-outline-secondary" type="submit">Save Food Draft</button></div>
                                                 </form>
                                                 <form method="POST" action="{{ route('admin.social-media.automation.proposals.foods.destroy', [$proposal, $food]) }}" class="mt-2">@csrf @method('DELETE')<button class="btn btn-outline-danger" type="submit">Remove Food Draft</button></form>

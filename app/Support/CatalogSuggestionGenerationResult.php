@@ -10,5 +10,6 @@ final readonly class CatalogSuggestionGenerationResult
         public CatalogImportProposal $proposal,
         public bool $wasSkipped,
         public bool $retainedPreviousSuggestions = false,
+        public bool $wasAlreadyProcessing = false,
     ) {}
 }

@@ -82,6 +82,10 @@ class CatalogImportProposal extends Model
         'extraction_model',
         'extraction_input_hash',
         'extracted_at',
+        'review_metadata_snapshot',
+        'review_input_hash',
+        'extraction_attempt_token',
+        'extraction_attempt_started_at',
     ];
 
     protected function casts(): array
@@ -91,6 +95,8 @@ class CatalogImportProposal extends Model
             'reviewed_at' => 'datetime',
             'imported_at' => 'datetime',
             'extracted_at' => 'datetime',
+            'review_metadata_snapshot' => 'array',
+            'extraction_attempt_started_at' => 'datetime',
         ];
     }
 

@@ -236,9 +236,9 @@ Route::middleware('auth')->group(function () {
             ->name('social-media.automation.create');
         Route::post('/social-media/automation', [SocialMediaAutomationController::class, 'store'])
             ->name('social-media.automation.store');
-        Route::post('/social-media/automation/sources/{socialMediaSource}/fetch-metadata', [SocialMediaAutomationController::class, 'fetchMetadata'])
-            ->whereNumber('socialMediaSource')
-            ->name('social-media.automation.sources.fetch-metadata');
+        Route::post('/social-media/automation/proposals/{catalogImportProposal}/fetch-metadata', [SocialMediaAutomationController::class, 'fetchMetadata'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.proposals.fetch-metadata');
         Route::post('/social-media/automation/proposals/{catalogImportProposal}/generate-suggestions', [SocialMediaAutomationController::class, 'generateSuggestions'])
             ->whereNumber('catalogImportProposal')
             ->name('social-media.automation.proposals.generate-suggestions');

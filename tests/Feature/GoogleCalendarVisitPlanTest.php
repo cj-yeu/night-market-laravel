@@ -28,6 +28,8 @@ class GoogleCalendarVisitPlanTest extends TestCase
 
     private User $client;
 
+    private int $marketSequence = 0;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -521,8 +523,9 @@ class GoogleCalendarVisitPlanTest extends TestCase
         ?Carbon $visitDate = null,
     ): array {
         $visitDate ??= now()->addDays(3);
+        $this->marketSequence++;
         $market = NightMarket::factory()->create([
-            'name' => 'Calendar Test Market',
+            'name' => 'Calendar Test Market'.($this->marketSequence === 1 ? '' : ' '.$this->marketSequence),
             'address' => '12 Jalan Test',
             'city' => 'Shah Alam',
             'state' => 'Selangor',

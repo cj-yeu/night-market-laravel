@@ -7,6 +7,7 @@ use App\Exceptions\SocialMediaMetadataException;
 use App\Models\SocialMediaSource;
 use App\Support\SocialMediaMetadata;
 use Carbon\CarbonImmutable;
+use DateTimeImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -94,9 +95,8 @@ class YouTubeMetadataProvider implements SocialMediaMetadataProvider
             throw new SocialMediaMetadataException(SocialMediaMetadataService::FAILURE_YOUTUBE_INVALID_RESPONSE);
         }
 
-        try {
-            $publishedAt = CarbonImmutable::parse($snippet['publishedAt'] ?? null);
-        } catch (Throwable) {
+        $publishedAt = $this->publishedAt($snippet['publishedAt'] ?? null);
+        if ($publishedAt === null) {
             throw new SocialMediaMetadataException(SocialMediaMetadataService::FAILURE_YOUTUBE_INVALID_RESPONSE);
         }
 
@@ -156,5 +156,61 @@ class YouTubeMetadataProvider implements SocialMediaMetadataProvider
         $value = trim(preg_replace('/\s+/u', ' ', $value) ?? '');
 
         return $value === '' ? null : Str::limit($value, $limit, '');
+    }
+
+    private function publishedAt(mixed $value): ?CarbonImmutable
+    {
+        if (! is_string($value) || $value === '' || trim($value) !== $value) {
+            return null;
+        }
+
+        $matched = preg_match(
+            '/\A(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})T(?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2})(?:\.(?<fraction>\d+))?(?<offset>Z|[+-]\d{2}:\d{2})\z/D',
+            $value,
+            $parts,
+        );
+
+        if ($matched !== 1
+            || ! checkdate((int) $parts['month'], (int) $parts['day'], (int) $parts['year'])
+            || (int) $parts['hour'] > 23
+            || (int) $parts['minute'] > 59
+            || (int) $parts['second'] > 59) {
+            return null;
+        }
+
+        $offset = $parts['offset'] === 'Z' ? '+00:00' : $parts['offset'];
+        if ($parts['offset'] !== 'Z') {
+            [$offsetHour, $offsetMinute] = array_map('intval', explode(':', substr($offset, 1)));
+            if ($offsetHour > 23 || $offsetMinute > 59) {
+                return null;
+            }
+        }
+
+        $fraction = isset($parts['fraction'])
+            ? '.'.str_pad(substr($parts['fraction'], 0, 6), 6, '0')
+            : '';
+        $format = $fraction === '' ? '!Y-m-d\TH:i:sP' : '!Y-m-d\TH:i:s.uP';
+        $normalized = sprintf(
+            '%s-%s-%sT%s:%s:%s%s%s',
+            $parts['year'],
+            $parts['month'],
+            $parts['day'],
+            $parts['hour'],
+            $parts['minute'],
+            $parts['second'],
+            $fraction,
+            $offset,
+        );
+
+        $parsed = DateTimeImmutable::createFromFormat($format, $normalized);
+        $parseErrors = DateTimeImmutable::getLastErrors();
+
+        if ($parsed === false
+            || (is_array($parseErrors)
+                && ($parseErrors['warning_count'] > 0 || $parseErrors['error_count'] > 0))) {
+            return null;
+        }
+
+        return CarbonImmutable::instance($parsed)->setTimezone((string) config('app.timezone', 'UTC'));
     }
 }

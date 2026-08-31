@@ -19,7 +19,6 @@ use App\Models\CatalogImportProposalFood;
 use App\Models\CatalogImportProposalMarket;
 use App\Models\CatalogImportProposalOperatingDay;
 use App\Models\CatalogImportProposalStall;
-use App\Models\SocialMediaSource;
 use App\Services\CatalogImportProposalImportService;
 use App\Services\CatalogImportProposalService;
 use App\Services\CatalogSuggestionExtractionService;
@@ -58,7 +57,7 @@ class SocialMediaAutomationController extends Controller
             $request->user(),
             $request->validated(),
         );
-        $source = $this->socialMediaMetadataService->fetch($proposal->socialMediaSource);
+        $source = $this->socialMediaMetadataService->fetch($proposal);
 
         return redirect()
             ->route('admin.social-media.automation.show', $proposal)
@@ -71,6 +70,7 @@ class SocialMediaAutomationController extends Controller
 
         return view('admin.social-media-automation.show', [
             'proposal' => $proposal,
+            'displayMetadata' => $this->catalogImportProposalService->metadataForDisplay($proposal),
             'metadataIsFresh' => $this->socialMediaMetadataService->isFresh($proposal->socialMediaSource),
             'metadataFailureMessage' => $this->socialMediaMetadataService->failureMessage($proposal->socialMediaSource->failure_code),
             'extractionFailureMessage' => $this->catalogSuggestionExtractionService->failureMessage($proposal->extraction_failure_code),
@@ -80,9 +80,9 @@ class SocialMediaAutomationController extends Controller
 
     public function fetchMetadata(
         FetchSocialMediaMetadataRequest $request,
-        SocialMediaSource $socialMediaSource,
+        CatalogImportProposal $catalogImportProposal,
     ): RedirectResponse {
-        $source = $this->socialMediaMetadataService->fetch($socialMediaSource);
+        $source = $this->socialMediaMetadataService->fetch($catalogImportProposal);
 
         return back()->with('status', $this->socialMediaMetadataService->statusMessage($source));
     }

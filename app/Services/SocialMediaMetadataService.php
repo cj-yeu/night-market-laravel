@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Contracts\SocialMediaMetadataProvider;
 use App\Exceptions\SocialMediaMetadataException;
+use App\Models\CatalogImportProposal;
 use App\Models\SocialMediaSource;
 use App\Support\SocialMediaMetadata;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class SocialMediaMetadataService
@@ -37,9 +39,9 @@ class SocialMediaMetadataService
 
     public function __construct(private readonly SocialMediaMetadataProvider $metadataProvider) {}
 
-    public function fetch(SocialMediaSource $source): SocialMediaSource
+    public function fetch(CatalogImportProposal $proposal): SocialMediaSource
     {
-        $source = $source->fresh() ?? $source;
+        [$proposalId, $sourceId, $source] = $this->prepareDraftFetch($proposal);
 
         if ($this->isFresh($source)) {
             return $source;
@@ -48,12 +50,12 @@ class SocialMediaMetadataService
         try {
             $metadata = $this->metadataProvider->fetch($source);
         } catch (SocialMediaMetadataException $exception) {
-            return $this->persistFailure($source, $exception->failureCode);
+            return $this->persistFailure($proposalId, $sourceId, $exception->failureCode);
         } catch (Throwable) {
-            return $this->persistFailure($source, self::FAILURE_YOUTUBE_REQUEST_FAILED);
+            return $this->persistFailure($proposalId, $sourceId, self::FAILURE_YOUTUBE_REQUEST_FAILED);
         }
 
-        return $this->persistSuccess($source, $metadata);
+        return $this->persistSuccess($proposalId, $sourceId, $metadata);
     }
 
     public function isFresh(SocialMediaSource $source): bool
@@ -88,10 +90,34 @@ class SocialMediaMetadataService
         };
     }
 
-    private function persistSuccess(SocialMediaSource $source, SocialMediaMetadata $metadata): SocialMediaSource
+    /** @return array{0: int, 1: int, 2: SocialMediaSource} */
+    private function prepareDraftFetch(CatalogImportProposal $proposal): array
     {
-        return DB::transaction(function () use ($source, $metadata): SocialMediaSource {
-            $lockedSource = SocialMediaSource::query()->lockForUpdate()->findOrFail($source->id);
+        return DB::transaction(function () use ($proposal): array {
+            $lockedProposal = CatalogImportProposal::query()
+                ->lockForUpdate()
+                ->findOrFail($proposal->getKey());
+            $this->assertDraft($lockedProposal);
+
+            $lockedSource = $this->lockOwnedSource($lockedProposal);
+
+            return [
+                (int) $lockedProposal->getKey(),
+                (int) $lockedSource->getKey(),
+                $lockedSource,
+            ];
+        }, 3);
+    }
+
+    private function persistSuccess(int $proposalId, int $sourceId, SocialMediaMetadata $metadata): SocialMediaSource
+    {
+        return DB::transaction(function () use ($proposalId, $sourceId, $metadata): SocialMediaSource {
+            $lockedProposal = CatalogImportProposal::query()
+                ->lockForUpdate()
+                ->findOrFail($proposalId);
+            $this->assertDraft($lockedProposal);
+
+            $lockedSource = $this->lockOwnedSource($lockedProposal, $sourceId);
 
             if ($this->isFresh($lockedSource)) {
                 return $lockedSource;
@@ -114,10 +140,15 @@ class SocialMediaMetadataService
         }, 3);
     }
 
-    private function persistFailure(SocialMediaSource $source, string $failureCode): SocialMediaSource
+    private function persistFailure(int $proposalId, int $sourceId, string $failureCode): SocialMediaSource
     {
-        return DB::transaction(function () use ($source, $failureCode): SocialMediaSource {
-            $lockedSource = SocialMediaSource::query()->lockForUpdate()->findOrFail($source->id);
+        return DB::transaction(function () use ($proposalId, $sourceId, $failureCode): SocialMediaSource {
+            $lockedProposal = CatalogImportProposal::query()
+                ->lockForUpdate()
+                ->findOrFail($proposalId);
+            $this->assertDraft($lockedProposal);
+
+            $lockedSource = $this->lockOwnedSource($lockedProposal, $sourceId);
 
             if ($this->isFresh($lockedSource)) {
                 return $lockedSource;
@@ -132,5 +163,40 @@ class SocialMediaMetadataService
 
             return $lockedSource->refresh();
         }, 3);
+    }
+
+    private function assertDraft(CatalogImportProposal $proposal): void
+    {
+        if ($proposal->status !== CatalogImportProposal::STATUS_DRAFT) {
+            throw ValidationException::withMessages([
+                'proposal' => 'Only draft proposals can fetch official YouTube metadata.',
+            ]);
+        }
+    }
+
+    private function lockOwnedSource(
+        CatalogImportProposal $proposal,
+        ?int $expectedSourceId = null,
+    ): SocialMediaSource {
+        if ($expectedSourceId !== null
+            && (int) $proposal->social_media_source_id !== $expectedSourceId) {
+            throw ValidationException::withMessages([
+                'proposal' => 'The metadata source no longer belongs to this proposal.',
+            ]);
+        }
+
+        $source = $proposal->socialMediaSource()
+            ->lockForUpdate()
+            ->first();
+
+        if (! $source
+            || (int) $source->getKey() !== (int) $proposal->social_media_source_id
+            || ($expectedSourceId !== null && (int) $source->getKey() !== $expectedSourceId)) {
+            throw ValidationException::withMessages([
+                'proposal' => 'The metadata source no longer belongs to this proposal.',
+            ]);
+        }
+
+        return $source;
     }
 }

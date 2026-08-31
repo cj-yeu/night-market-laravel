@@ -6,6 +6,7 @@ use App\Models\CatalogImportProposal;
 use App\Models\SocialMediaSource;
 use App\Models\User;
 use App\Services\SocialMediaMetadataService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory;
@@ -95,7 +96,7 @@ class SocialMediaYouTubeMetadataTest extends TestCase
         $proposal = $this->proposalFor($this->sourceFor($this->videoId('missing-key')));
 
         $this->actingAs($this->admin)
-            ->post(route('admin.social-media.automation.sources.fetch-metadata', $proposal->socialMediaSource))
+            ->post(route('admin.social-media.automation.proposals.fetch-metadata', $proposal))
             ->assertRedirect()
             ->assertSessionHas('status', 'Official YouTube metadata is not configured. Ask an administrator to configure the YouTube Data API key. This proposal remains a draft; no catalog records were created.');
 
@@ -106,6 +107,103 @@ class SocialMediaYouTubeMetadataTest extends TestCase
         ]);
         $this->assertSame(CatalogImportProposal::STATUS_DRAFT, $proposal->fresh()->status);
         Http::assertNothingSent();
+    }
+
+    public function test_published_at_accepts_strict_rfc3339_timestamps_with_z_or_offsets_and_optional_fractions(): void
+    {
+        $timestamps = [
+            'z-seconds' => '2026-08-30T12:00:00Z',
+            'z-fraction' => '2026-08-30T12:00:00.123Z',
+            'offset-seconds' => '2026-08-30T12:00:00+08:00',
+            'offset-fraction' => '2026-08-30T12:00:00.123456789-04:30',
+        ];
+        $responses = [];
+
+        foreach ($timestamps as $suffix => $timestamp) {
+            $videoId = $this->videoId('valid-published-at-'.$suffix);
+            $responses[$videoId] = Http::response($this->videoPayload($videoId, [
+                'publishedAt' => $timestamp,
+            ]));
+        }
+
+        Http::fake(function (Request $request) use ($responses) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return $responses[$query['id'] ?? ''] ?? Http::response([], 500);
+        });
+
+        foreach ($timestamps as $suffix => $timestamp) {
+            $source = $this->sourceFor($this->videoId('valid-published-at-'.$suffix));
+            $proposal = $this->proposalFor($source);
+
+            $this->actingAs($this->admin)
+                ->post(route('admin.social-media.automation.proposals.fetch-metadata', $proposal))
+                ->assertRedirect();
+
+            $source->refresh();
+            $this->assertSame(SocialMediaSource::METADATA_FETCHED, $source->metadata_status);
+            $this->assertNotNull($source->published_at);
+            $this->assertSame(CarbonImmutable::parse($timestamp)->getTimestamp(), $source->published_at->getTimestamp());
+            $this->assertNull($source->failure_code);
+        }
+    }
+
+    public function test_missing_blank_malformed_and_impossible_published_at_values_are_safe_invalid_responses(): void
+    {
+        Log::spy();
+        $timestamps = [
+            'missing' => null,
+            'blank' => '',
+            'whitespace' => ' ',
+            'not-a-string' => 123456,
+            'date-only' => '2026-08-30',
+            'missing-offset' => '2026-08-30T12:00:00',
+            'lowercase-separators' => '2026-08-30t12:00:00z',
+            'comma-fraction' => '2026-08-30T12:00:00,123Z',
+            'impossible-day' => '2026-02-30T12:00:00Z',
+            'impossible-hour' => '2026-08-30T24:00:00Z',
+            'impossible-minute' => '2026-08-30T12:60:00Z',
+            'impossible-second' => '2026-08-30T12:00:60Z',
+            'impossible-offset-hour' => '2026-08-30T12:00:00+24:00',
+            'impossible-offset-minute' => '2026-08-30T12:00:00+08:60',
+            'trailing-data' => '2026-08-30T12:00:00Z extra',
+        ];
+        $responses = [];
+
+        foreach ($timestamps as $suffix => $timestamp) {
+            $videoId = $this->videoId('invalid-published-at-'.$suffix);
+            $payload = $this->videoPayload($videoId, ['publishedAt' => $timestamp]);
+            if ($suffix === 'missing') {
+                unset($payload['items'][0]['snippet']['publishedAt']);
+            }
+            $responses[$videoId] = Http::response($payload);
+        }
+
+        Http::fake(function (Request $request) use ($responses) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return $responses[$query['id'] ?? ''] ?? Http::response([], 500);
+        });
+
+        foreach (array_keys($timestamps) as $suffix) {
+            $source = $this->sourceFor($this->videoId('invalid-published-at-'.$suffix));
+            $proposal = $this->proposalFor($source);
+
+            $this->actingAs($this->admin)
+                ->post(route('admin.social-media.automation.proposals.fetch-metadata', $proposal))
+                ->assertRedirect()
+                ->assertSessionMissing('errors');
+
+            $source->refresh();
+            $this->assertSame(SocialMediaSource::METADATA_FAILED, $source->metadata_status);
+            $this->assertSame(SocialMediaMetadataService::FAILURE_YOUTUBE_INVALID_RESPONSE, $source->failure_code);
+            $this->assertNull($source->published_at);
+        }
+
+        Log::shouldNotHaveReceived('debug');
+        Log::shouldNotHaveReceived('info');
+        Log::shouldNotHaveReceived('warning');
+        Log::shouldNotHaveReceived('error');
     }
 
     public function test_empty_and_http_failure_responses_are_saved_as_safe_failure_codes(): void
@@ -136,7 +234,7 @@ class SocialMediaYouTubeMetadataTest extends TestCase
             $proposal = $this->proposalFor($source);
 
             $this->actingAs($this->admin)
-                ->post(route('admin.social-media.automation.sources.fetch-metadata', $source))
+                ->post(route('admin.social-media.automation.proposals.fetch-metadata', $proposal))
                 ->assertRedirect();
 
             $this->assertDatabaseHas('social_media_sources', [
@@ -171,10 +269,10 @@ class SocialMediaYouTubeMetadataTest extends TestCase
 
         foreach ($cases as $suffix => $response) {
             $source = $this->sourceFor($this->videoId($suffix));
-            $this->proposalFor($source);
+            $proposal = $this->proposalFor($source);
 
             $this->actingAs($this->admin)
-                ->post(route('admin.social-media.automation.sources.fetch-metadata', $source))
+                ->post(route('admin.social-media.automation.proposals.fetch-metadata', $proposal))
                 ->assertRedirect()
                 ->assertSessionMissing('errors');
 
@@ -195,14 +293,14 @@ class SocialMediaYouTubeMetadataTest extends TestCase
         $proposal = $this->proposalFor($source);
 
         $this->actingAs($this->admin)
-            ->post(route('admin.social-media.automation.sources.fetch-metadata', $source))
+            ->post(route('admin.social-media.automation.proposals.fetch-metadata', $proposal))
             ->assertRedirect();
         Http::assertNothingSent();
 
         config(['services.youtube.data_api_key' => 'testing-youtube-key']);
         Http::fake(['https://www.googleapis.com/youtube/v3/videos*' => Http::response($this->videoPayload($source->external_content_id))]);
         $this->actingAs($this->admin)
-            ->post(route('admin.social-media.automation.sources.fetch-metadata', $source))
+            ->post(route('admin.social-media.automation.proposals.fetch-metadata', $proposal))
             ->assertRedirect();
 
         $this->assertDatabaseCount('social_media_sources', 1);
@@ -212,7 +310,7 @@ class SocialMediaYouTubeMetadataTest extends TestCase
 
         Http::fake();
         $this->actingAs($this->admin)
-            ->post(route('admin.social-media.automation.sources.fetch-metadata', $source))
+            ->post(route('admin.social-media.automation.proposals.fetch-metadata', $proposal))
             ->assertRedirect();
         Http::assertNothingSent();
         $this->assertSame(CatalogImportProposal::STATUS_DRAFT, $proposal->fresh()->status);
@@ -222,12 +320,13 @@ class SocialMediaYouTubeMetadataTest extends TestCase
     {
         Log::spy();
         $source = $this->sourceFor($this->videoId('authorization'));
+        $proposal = $this->proposalFor($source);
         $client = User::factory()->create(['role' => User::ROLE_CLIENT]);
 
-        $this->post(route('admin.social-media.automation.sources.fetch-metadata', $source))
+        $this->post(route('admin.social-media.automation.proposals.fetch-metadata', $proposal))
             ->assertRedirect(route('login'));
         $this->actingAs($client)
-            ->post(route('admin.social-media.automation.sources.fetch-metadata', $source))
+            ->post(route('admin.social-media.automation.proposals.fetch-metadata', $proposal))
             ->assertForbidden();
 
         Http::assertNothingSent();

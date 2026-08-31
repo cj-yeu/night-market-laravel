@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\CatalogMarketIdentity;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -31,7 +32,21 @@ class NightMarket extends Model
 
     protected $hidden = [
         'catalog_code',
+        'catalog_identity_hash',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(static function (NightMarket $market): void {
+            $market->catalog_identity_hash = $market->computedCatalogIdentityHash();
+        });
+
+        static::updating(static function (NightMarket $market): void {
+            if ($market->isDirty(CatalogMarketIdentity::FIELDS)) {
+                $market->catalog_identity_hash = $market->computedCatalogIdentityHash();
+            }
+        });
+    }
 
     public function scopePubliclyVisible(Builder $query): Builder
     {
@@ -119,5 +134,15 @@ class NightMarket extends Model
     public function catalogSourceLinks(): HasMany
     {
         return $this->hasMany(CatalogSocialMediaSourceLink::class);
+    }
+
+    private function computedCatalogIdentityHash(): string
+    {
+        return CatalogMarketIdentity::hash(
+            $this->name,
+            $this->address,
+            $this->city,
+            $this->state,
+        );
     }
 }

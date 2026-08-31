@@ -14,6 +14,8 @@ use App\Models\SocialMediaSource;
 use App\Models\Stall;
 use App\Models\User;
 use App\Support\CatalogImportProposalImportResult;
+use App\Support\CatalogMarketIdentity;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -21,6 +23,15 @@ use Throwable;
 
 class CatalogImportProposalImportService
 {
+    private const REVIEW_METADATA_FIELDS = [
+        'external_content_id',
+        'title',
+        'description_excerpt',
+        'creator_name',
+        'thumbnail_url',
+        'published_at',
+    ];
+
     public const FAILURE_ALREADY_IMPORTED = 'catalog_already_imported';
 
     public const FAILURE_CONFLICT_MARKET = 'catalog_market_conflict';
@@ -35,21 +46,29 @@ class CatalogImportProposalImportService
 
     public const FAILURE_IMPORT_FAILED = 'catalog_import_failed';
 
-    public function __construct(private readonly CatalogSuggestionExtractionService $catalogSuggestionExtractionService) {}
+    public function __construct(
+        private readonly CatalogSuggestionExtractionService $catalogSuggestionExtractionService,
+        private readonly CatalogMarketIdentity $catalogMarketIdentity,
+    ) {}
 
     public function submit(CatalogImportProposal $proposal): CatalogImportProposal
     {
         return DB::transaction(function () use ($proposal): CatalogImportProposal {
             $proposal = $this->lockedDetail($proposal->id);
             $this->assertStatus($proposal, CatalogImportProposal::STATUS_DRAFT);
-            $this->assertReadyForReview($proposal);
+            $source = $this->lockedSource($proposal);
             $this->lockedTargets($proposal);
+            $currentInputHash = $this->assertReadyForSubmission($proposal, $source);
             $this->assertNoExistingImport($proposal);
+            $reviewMetadataSnapshot = $this->reviewMetadataSnapshot($source);
+            $this->assertReviewMetadataSnapshot($reviewMetadataSnapshot);
 
             $proposal->forceFill([
                 'status' => CatalogImportProposal::STATUS_SUBMITTED,
                 'submitted_at' => now(),
                 'failure_code' => null,
+                'review_metadata_snapshot' => $reviewMetadataSnapshot,
+                'review_input_hash' => $currentInputHash,
             ])->save();
 
             return $proposal->refresh();
@@ -90,7 +109,7 @@ class CatalogImportProposalImportService
                 }
 
                 $this->assertStatus($proposal, CatalogImportProposal::STATUS_SUBMITTED);
-                $this->assertReadyForReview($proposal);
+                $this->assertReadyForImport($proposal);
                 $targets = $this->lockedTargets($proposal);
                 $this->assertNoExistingImport($proposal);
                 $this->preflightConflicts($proposal, $targets);
@@ -118,7 +137,11 @@ class CatalogImportProposalImportService
             }, 3);
         } catch (ValidationException $exception) {
             throw $exception;
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            if ($this->isMarketIdentityUniqueViolation($exception)) {
+                $this->fail(self::FAILURE_CONFLICT_MARKET, $this->failureMessage(self::FAILURE_CONFLICT_MARKET));
+            }
+
             $this->markImportFailure($proposal->id);
 
             $this->fail(self::FAILURE_IMPORT_FAILED, $this->failureMessage(self::FAILURE_IMPORT_FAILED));
@@ -151,6 +174,21 @@ class CatalogImportProposalImportService
                 'catalogSourceLinks',
             ])
             ->findOrFail($proposalId);
+    }
+
+    private function lockedSource(CatalogImportProposal $proposal): SocialMediaSource
+    {
+        $source = SocialMediaSource::query()
+            ->lockForUpdate()
+            ->find($proposal->social_media_source_id);
+
+        if (! $source || $source->id !== $proposal->social_media_source_id) {
+            $this->fail(self::FAILURE_PROPOSAL_INVALID);
+        }
+
+        $proposal->setRelation('socialMediaSource', $source);
+
+        return $source;
     }
 
     /** @return array{market: NightMarket|null, stall: Stall|null} */
@@ -214,16 +252,49 @@ class CatalogImportProposalImportService
         return $market;
     }
 
-    private function assertReadyForReview(CatalogImportProposal $proposal): void
+    private function assertReadyForSubmission(CatalogImportProposal $proposal, SocialMediaSource $source): string
     {
-        if ($proposal->socialMediaSource === null
-            || $proposal->socialMediaSource->platform !== SocialMediaSource::PLATFORM_YOUTUBE
-            || $proposal->socialMediaSource->metadata_status !== SocialMediaSource::METADATA_FETCHED
+        if ($source->platform !== SocialMediaSource::PLATFORM_YOUTUBE
+            || $source->metadata_status !== SocialMediaSource::METADATA_FETCHED
             || $proposal->extraction_status !== CatalogImportProposal::EXTRACTION_COMPLETED
-            || ! $this->catalogSuggestionExtractionService->inputHashMatchesCurrentMetadata($proposal)) {
+            || ! filled($proposal->extraction_input_hash)) {
             $this->fail(self::FAILURE_PROPOSAL_INVALID);
         }
 
+        try {
+            $currentInputHash = $this->catalogSuggestionExtractionService->currentInputHash($proposal);
+        } catch (Throwable) {
+            $this->fail(self::FAILURE_PROPOSAL_INVALID);
+        }
+
+        if (! hash_equals((string) $proposal->extraction_input_hash, $currentInputHash)) {
+            $this->fail(
+                self::FAILURE_PROPOSAL_INVALID,
+                'The source metadata or selected catalog target changed after suggestions were generated. Generate suggestions again before submitting.',
+            );
+        }
+
+        $this->assertReviewGraph($proposal);
+
+        return $currentInputHash;
+    }
+
+    private function assertReadyForImport(CatalogImportProposal $proposal): void
+    {
+        if ($proposal->extraction_status !== CatalogImportProposal::EXTRACTION_COMPLETED
+            || ! is_string($proposal->review_input_hash)
+            || preg_match('/\A[0-9a-f]{64}\z/', $proposal->review_input_hash) !== 1
+            || ! is_string($proposal->extraction_input_hash)
+            || ! hash_equals($proposal->extraction_input_hash, $proposal->review_input_hash)) {
+            $this->fail(self::FAILURE_PROPOSAL_INVALID);
+        }
+
+        $this->assertReviewMetadataSnapshot($proposal->review_metadata_snapshot);
+        $this->assertReviewGraph($proposal);
+    }
+
+    private function assertReviewGraph(CatalogImportProposal $proposal): void
+    {
         $market = $proposal->proposalMarket;
         if (! $market) {
             $this->fail(self::FAILURE_PROPOSAL_INVALID);
@@ -252,6 +323,54 @@ class CatalogImportProposalImportService
                 $this->fail(self::FAILURE_PROPOSAL_INVALID);
             }
         }
+    }
+
+    /** @return array<string, string|null> */
+    private function reviewMetadataSnapshot(SocialMediaSource $source): array
+    {
+        return [
+            'external_content_id' => $this->snapshotText($source->external_content_id, 255),
+            'title' => $this->snapshotText($source->title, 500),
+            'description_excerpt' => $this->snapshotText($source->description_excerpt, 5000),
+            'creator_name' => $this->snapshotText($source->creator_name, 255),
+            'thumbnail_url' => $this->snapshotText($source->thumbnail_url, 2048),
+            'published_at' => $source->published_at?->toISOString(),
+        ];
+    }
+
+    private function assertReviewMetadataSnapshot(mixed $snapshot): void
+    {
+        if (! is_array($snapshot)) {
+            $this->fail(self::FAILURE_PROPOSAL_INVALID);
+        }
+
+        $keys = array_keys($snapshot);
+        sort($keys);
+        $expected = self::REVIEW_METADATA_FIELDS;
+        sort($expected);
+
+        if ($keys !== $expected) {
+            $this->fail(self::FAILURE_PROPOSAL_INVALID);
+        }
+
+        foreach (self::REVIEW_METADATA_FIELDS as $field) {
+            if (! is_string($snapshot[$field]) || trim($snapshot[$field]) === '') {
+                $this->fail(self::FAILURE_PROPOSAL_INVALID);
+            }
+        }
+    }
+
+    private function snapshotText(?string $value, int $maximum): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = html_entity_decode(strip_tags($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', ' ', $value) ?? '';
+        $value = trim(preg_replace('/\s+/u', ' ', $value) ?? '');
+
+        return $value === '' ? null : Str::limit($value, $maximum, '');
     }
 
     /** @param iterable<CatalogImportProposalOperatingDay> $days */
@@ -341,11 +460,20 @@ class CatalogImportProposalImportService
         }
 
         if ($proposal->target_type === CatalogImportProposal::TARGET_NEW_MARKET) {
+            $name = $this->normalizedRequired($market->name, 255);
+            $address = $this->normalizedRequired($market->address, 255);
+            $city = $this->normalizedRequired($market->city, 100);
+            $state = 'Selangor';
+            $identityHash = $this->catalogMarketIdentity->hash($name, $address, $city, $state);
             $conflict = NightMarket::query()
-                ->where('name', $this->normalizedRequired($market->name, 255))
-                ->where('address', $this->normalizedRequired($market->address, 255))
-                ->where('city', $this->normalizedRequired($market->city, 100))
-                ->where('state', 'Selangor')
+                ->where('catalog_identity_hash', $identityHash)
+                ->orWhere(function ($query) use ($name, $address, $city, $state): void {
+                    $query->whereNull('catalog_identity_hash')
+                        ->where('name', $name)
+                        ->where('address', $address)
+                        ->where('city', $city)
+                        ->where('state', $state);
+                })
                 ->exists();
             if ($conflict) {
                 $this->fail(self::FAILURE_CONFLICT_MARKET);
@@ -446,14 +574,22 @@ class CatalogImportProposalImportService
 
     private function importNewMarket(CatalogImportProposal $proposal, CatalogImportProposalMarket $suggestion): void
     {
-        $market = NightMarket::create([
-            'name' => $this->normalizedRequired($suggestion->name, 255),
-            'address' => $this->normalizedRequired($suggestion->address, 255),
-            'city' => $this->normalizedRequired($suggestion->city, 100),
-            'state' => 'Selangor',
+        $name = $this->normalizedRequired($suggestion->name, 255);
+        $address = $this->normalizedRequired($suggestion->address, 255);
+        $city = $this->normalizedRequired($suggestion->city, 100);
+        $state = 'Selangor';
+        $identityHash = $this->catalogMarketIdentity->hash($name, $address, $city, $state);
+
+        $market = new NightMarket([
+            'name' => $name,
+            'address' => $address,
+            'city' => $city,
+            'state' => $state,
             'description' => $this->nullableString($suggestion->description, 5000),
             'status' => NightMarket::STATUS_INACTIVE,
         ]);
+        $market->catalog_identity_hash = $identityHash;
+        $market->save();
         $this->createLink($proposal, CatalogSocialMediaSourceLink::TYPE_NIGHT_MARKET, $market);
 
         foreach ($suggestion->operatingDays as $day) {
@@ -548,6 +684,19 @@ class CatalogImportProposalImportService
                 ])->save();
             }
         }, 3);
+    }
+
+    private function isMarketIdentityUniqueViolation(Throwable $exception): bool
+    {
+        if (! $exception instanceof QueryException) {
+            return false;
+        }
+
+        $errorInfo = $exception->errorInfo ?? [];
+
+        return ($errorInfo[0] ?? null) === '23000'
+            && (int) ($errorInfo[1] ?? 0) === 1062
+            && str_contains($exception->getMessage(), 'night_markets_catalog_identity_hash_unique');
     }
 
     private function assertStatus(CatalogImportProposal $proposal, string $expected): void

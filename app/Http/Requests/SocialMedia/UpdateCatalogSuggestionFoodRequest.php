@@ -21,9 +21,16 @@ class UpdateCatalogSuggestionFoodRequest extends FormRequest
             'price_display' => ['nullable', 'string', 'max:255'],
             'price_min' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'price_max' => ['nullable', 'numeric', 'min:0', 'max:99999999.99', 'gte:price_min'],
-            'is_must_try' => ['nullable', 'boolean'],
+            'is_must_try' => ['required', 'boolean'],
             'evidence_text' => ['nullable', 'string', 'max:1000'],
             'confidence' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'is_must_try' => $this->boolean('is_must_try'),
+        ]);
     }
 }
