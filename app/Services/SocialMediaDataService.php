@@ -11,11 +11,26 @@ use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as SupportCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class SocialMediaDataService
 {
+    public const SORT_LATEST = 'latest';
+
+    public const SORT_OLDEST = 'oldest';
+
+    public const SORT_ENGAGEMENT = 'engagement';
+
+    /** @var array<string, string> */
+    public const PUBLIC_SORTS = [
+        self::SORT_LATEST => 'Newest first',
+        self::SORT_OLDEST => 'Oldest first',
+        self::SORT_ENGAGEMENT => 'Most engagement',
+    ];
+
     public function __construct(private readonly SocialMediaUrlPolicy $urlPolicy) {}
 
     /**
@@ -24,7 +39,12 @@ class SocialMediaDataService
     public function records(array $filters): LengthAwarePaginator
     {
         $records = SocialMediaRecord::query()
-            ->with(['nightMarket:id,name', 'food:id,name', 'approvedBy:id,name'])
+            ->with([
+                'nightMarket:id,name',
+                'food:id,name',
+                'approvedBy:id,name',
+                'rejectedBy:id,name',
+            ])
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
                 ->applyKeywordSearch($query, $search))
             ->when($filters['night_market_id'] ?? null, fn (Builder $query, int $marketId) => $query
@@ -76,10 +96,10 @@ class SocialMediaDataService
     public function create(array $data): SocialMediaRecord
     {
         $this->validateEligibility($data);
-        $this->validatePresentationUrls($data);
+        $sourceUrl = $this->validateSourceUrl($data);
 
         return SocialMediaRecord::create([
-            ...$this->recordData($data),
+            ...$this->recordData($data, $sourceUrl),
             'status' => SocialMediaRecord::STATUS_PENDING,
             'extraction_status' => $data['extraction_status'] ?? SocialMediaRecord::EXTRACTION_MANUAL,
         ]);
@@ -91,19 +111,31 @@ class SocialMediaDataService
     public function update(SocialMediaRecord $socialMediaRecord, array $data): SocialMediaRecord
     {
         $this->validateEligibility($data);
-        $this->validatePresentationUrls($data);
+        $sourceUrl = $this->validateSourceUrl($data, $socialMediaRecord);
         $socialMediaRecord->update([
-            ...$this->recordData($data),
+            ...$this->recordData($data, $sourceUrl, allowClearing: true),
             'status' => SocialMediaRecord::STATUS_PENDING,
             'approved_by' => null,
             'approved_at' => null,
+            'rejection_reason' => null,
+            'rejected_by' => null,
+            'rejected_at' => null,
         ]);
 
         return $socialMediaRecord->refresh();
     }
 
-    public function moderate(SocialMediaRecord $socialMediaRecord, User $admin, string $status): SocialMediaRecord
-    {
+    /**
+     * Both outcomes are recorded symmetrically: an approval names the approver
+     * and clears any earlier rejection, a rejection names the rejecting
+     * administrator and keeps the reason they gave.
+     */
+    public function moderate(
+        SocialMediaRecord $socialMediaRecord,
+        User $admin,
+        string $status,
+        ?string $rejectionReason = null,
+    ): SocialMediaRecord {
         if ($status === SocialMediaRecord::STATUS_APPROVED) {
             $this->validateEligibility([
                 'night_market_id' => $socialMediaRecord->night_market_id,
@@ -114,12 +146,18 @@ class SocialMediaDataService
                 'status' => SocialMediaRecord::STATUS_APPROVED,
                 'approved_by' => $admin->id,
                 'approved_at' => now(),
+                'rejection_reason' => null,
+                'rejected_by' => null,
+                'rejected_at' => null,
             ]);
         } else {
             $socialMediaRecord->update([
                 'status' => SocialMediaRecord::STATUS_REJECTED,
                 'approved_by' => null,
                 'approved_at' => null,
+                'rejection_reason' => $rejectionReason,
+                'rejected_by' => $admin->id,
+                'rejected_at' => now(),
             ]);
         }
 
@@ -132,16 +170,30 @@ class SocialMediaDataService
     }
 
     /**
-     * @param  array{search?: string|null}  $filters
+     * @return SupportCollection<int, SocialMediaRecord>
+     */
+    public function marketHighlights(NightMarket $nightMarket, int $limit = 6): SupportCollection
+    {
+        $records = $this->publiclyVisibleQuery()
+            ->where('night_market_id', $nightMarket->id)
+            ->latest('posted_date')
+            ->limit($limit)
+            ->get();
+
+        $this->decorateSafeUrls($records);
+
+        return $records;
+    }
+
+    /**
+     * @param  array{search?: string|null, platform?: string|null, night_market_id?: int|null, hashtag?: string|null, sort?: string|null}  $filters
      */
     public function publicHighlights(array $filters): LengthAwarePaginator
     {
-        $records = $this->publiclyVisibleQuery()
-            ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
-                ->applyKeywordSearch($query, $search))
-            ->latest('posted_date')
-            ->paginate(12)
-            ->withQueryString();
+        $query = $this->applyPublicFilters($this->publiclyVisibleQuery(), $filters);
+        $this->applyPublicSort($query, $filters['sort'] ?? null);
+
+        $records = $query->paginate(12)->withQueryString();
 
         $this->decorateSafeUrls($records->getCollection());
 
@@ -149,7 +201,7 @@ class SocialMediaDataService
     }
 
     /**
-     * @param  array{search?: string|null}  $filters
+     * @param  array{search?: string|null, platform?: string|null, night_market_id?: int|null, hashtag?: string|null, sort?: string|null}  $filters
      * @return array{
      *   recordsByPlatform: array<string, int>,
      *   engagementByPlatform: array<string, int>,
@@ -160,10 +212,7 @@ class SocialMediaDataService
      */
     public function publicInsights(array $filters): array
     {
-        $records = $this->publiclyVisibleQuery()
-            ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
-                ->applyKeywordSearch($query, $search))
-            ->get();
+        $records = $this->applyPublicFilters($this->publiclyVisibleQuery(), $filters)->get();
 
         $this->decorateSafeUrls($records);
 
@@ -184,6 +233,56 @@ class SocialMediaDataService
                 ->take(5)
                 ->values(),
         ];
+    }
+
+    /**
+     * Most-used hashtags across the publicly visible records that match the
+     * current filters. The hashtag filter itself is ignored on purpose, so the
+     * list stays usable for switching between tags.
+     *
+     * @param  array{search?: string|null, platform?: string|null, night_market_id?: int|null, hashtag?: string|null}  $filters
+     * @return array<int, array{tag: string, count: int}>
+     */
+    public function popularHashtags(array $filters, int $limit = 10): array
+    {
+        unset($filters['hashtag']);
+
+        return $this->applyPublicFilters(SocialMediaRecord::query()->publiclyVisible(), $filters)
+            ->get(['id', 'extracted_hashtags'])
+            ->pluck('extracted_hashtags')
+            ->flatten()
+            ->filter()
+            ->countBy()
+            ->sortDesc()
+            ->take($limit)
+            ->map(fn (int $count, string $tag) => ['tag' => $tag, 'count' => $count])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Night markets that actually have publicly visible highlights, so the
+     * public filter never offers a market with nothing behind it.
+     *
+     * @return Collection<int, NightMarket>
+     */
+    public function highlightedMarkets(): Collection
+    {
+        $marketIds = SocialMediaRecord::query()
+            ->publiclyVisible()
+            ->distinct()
+            ->pluck('night_market_id')
+            ->filter()
+            ->all();
+
+        if ($marketIds === []) {
+            return NightMarket::query()->whereRaw('1 = 0')->get(['id', 'name']);
+        }
+
+        return NightMarket::query()
+            ->whereKey($marketIds)
+            ->orderBy('name')
+            ->get(['id', 'name']);
     }
 
     /**
@@ -310,16 +409,22 @@ class SocialMediaDataService
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    private function recordData(array $data): array
+    private function recordData(array $data, string $sourceUrl, bool $allowClearing = false): array
     {
         $extracted = $this->extractFromText($data['content_summary']);
 
         foreach (array_keys($extracted) as $field) {
-            if (array_key_exists($field, $data) && filled($data[$field])) {
+            if (! array_key_exists($field, $data)) {
+                continue;
+            }
+
+            if (filled($data[$field])) {
                 $extracted[$field] = $this->normalizeEditableList(
                     $data[$field],
                     hashtags: $field === 'extracted_hashtags',
                 );
+            } elseif ($allowClearing) {
+                $extracted[$field] = [];
             }
         }
 
@@ -331,7 +436,8 @@ class SocialMediaDataService
             'night_market_id' => $data['night_market_id'] ?? null,
             'food_id' => $data['food_id'] ?? null,
             'platform' => $data['platform'],
-            'original_post_url' => $data['original_post_url'],
+            'original_post_url' => $sourceUrl,
+            'source_url_hash' => $this->sourceUrlHash($sourceUrl),
             'extracted_title' => $data['extracted_title'] ?? null,
             'content_summary' => $data['content_summary'],
             'external_image_url' => $data['external_image_url'] ?? null,
@@ -381,6 +487,34 @@ class SocialMediaDataService
             ]);
     }
 
+    /**
+     * Filters shared by the public highlight list, its insights, and the
+     * hashtag cloud, so all three always describe the same set of records.
+     *
+     * @param  array{search?: string|null, platform?: string|null, night_market_id?: int|null, hashtag?: string|null}  $filters
+     */
+    private function applyPublicFilters(Builder $query, array $filters): Builder
+    {
+        return $query
+            ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
+                ->applyKeywordSearch($query, $search))
+            ->when($filters['platform'] ?? null, fn (Builder $query, string $platform) => $query
+                ->where('platform', $platform))
+            ->when($filters['night_market_id'] ?? null, fn (Builder $query, int $marketId) => $query
+                ->where('night_market_id', $marketId))
+            ->when($filters['hashtag'] ?? null, fn (Builder $query, string $hashtag) => $query
+                ->where('extracted_hashtags', 'like', $this->literalLikePattern('"'.$hashtag.'"')));
+    }
+
+    private function applyPublicSort(Builder $query, ?string $sort): void
+    {
+        match ($sort) {
+            self::SORT_OLDEST => $query->oldest('posted_date')->oldest('id'),
+            self::SORT_ENGAGEMENT => $query->orderByDesc('engagement_count')->latest('posted_date'),
+            default => $query->latest('posted_date')->latest('id'),
+        };
+    }
+
     private function applyKeywordSearch(Builder $query, string $search): void
     {
         $pattern = $this->literalLikePattern($search);
@@ -398,9 +532,9 @@ class SocialMediaDataService
     }
 
     /**
-     * @param  Collection<int, SocialMediaRecord>  $records
+     * @param  SupportCollection<int, SocialMediaRecord>  $records
      */
-    private function decorateSafeUrls(Collection $records): void
+    private function decorateSafeUrls(SupportCollection $records): void
     {
         $records->each(function (SocialMediaRecord $record): void {
             $record->setAttribute(
@@ -414,8 +548,15 @@ class SocialMediaDataService
         });
     }
 
-    /** @param array<string, mixed> $data */
-    private function validatePresentationUrls(array $data): void
+    /**
+     * Validates the submitted post URL and returns the normalised form that
+     * gets stored. Normalising here means the same post reached through two
+     * slightly different URLs (a trailing fragment, for instance) resolves to
+     * one stored value and therefore one de-duplication hash.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function validateSourceUrl(array $data, ?SocialMediaRecord $ignore = null): string
     {
         try {
             $source = $this->urlPolicy->inspectSourceUrl($data['original_post_url']);
@@ -430,6 +571,31 @@ class SocialMediaDataService
                 'platform' => 'The selected platform must match the original post URL.',
             ]);
         }
+
+        $alreadyRecorded = SocialMediaRecord::query()
+            ->where('source_url_hash', $this->sourceUrlHash($source['url']))
+            ->when($ignore, fn (Builder $query, SocialMediaRecord $record) => $query
+                ->whereKeyNot($record->getKey()))
+            ->exists();
+
+        if ($alreadyRecorded) {
+            throw ValidationException::withMessages([
+                'original_post_url' => 'This post has already been recorded. Search the existing records instead of adding it again.',
+            ]);
+        }
+
+        return $source['url'];
+    }
+
+    /**
+     * A varchar(2048) column cannot carry a full unique index under InnoDB, so
+     * duplicates are detected through a fixed-width hash of the stored URL.
+     * The URL is hashed as-is: post paths are case-sensitive on several
+     * platforms, so lower-casing here would merge two different posts.
+     */
+    private function sourceUrlHash(string $sourceUrl): string
+    {
+        return hash('sha256', $sourceUrl);
     }
 
     private function literalLikePattern(string $value): string
@@ -466,5 +632,40 @@ class SocialMediaDataService
     private function textContains(string $normalizedText, ?string $needle): bool
     {
         return filled($needle) && Str::contains($normalizedText, Str::lower($needle));
+    }
+
+    /**
+     * @param  array<int, int>  $recordIds
+     * @return array{moderated: int, skipped: array<int, string>}
+     */
+    public function bulkModerate(
+        array $recordIds,
+        User $admin,
+        string $status,
+        ?string $rejectionReason = null,
+    ): array {
+        $records = SocialMediaRecord::query()->whereKey($recordIds)->orderBy('id')->get();
+
+        $moderated = 0;
+        $skipped = [];
+
+        DB::transaction(function () use ($records, $admin, $status, $rejectionReason, &$moderated, &$skipped): void {
+            foreach ($records as $record) {
+                if ($record->status === $status) {
+                    $skipped[] = "#{$record->getKey()} was already {$status}";
+
+                    continue;
+                }
+
+                try {
+                    $this->moderate($record, $admin, $status, $rejectionReason);
+                    $moderated++;
+                } catch (ValidationException $exception) {
+                    $skipped[] = "#{$record->getKey()}: ".$exception->validator->errors()->first();
+                }
+            }
+        });
+
+        return ['moderated' => $moderated, 'skipped' => $skipped];
     }
 }

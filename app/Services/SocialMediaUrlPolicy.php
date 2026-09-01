@@ -34,6 +34,29 @@ class SocialMediaUrlPolicy
         'twimg.com',
     ];
 
+    /**
+     * Share links carry per-share tracking parameters, so the same post reaches
+     * two administrators as two different URLs. These names are dropped when a
+     * source URL is normalised, which keeps one post to one stored URL.
+     *
+     * Identity-bearing parameters are deliberately absent: YouTube's `v` and
+     * `list` name the video and playlist, so removing them would break the link.
+     *
+     * @var list<string>
+     */
+    private const TRACKING_QUERY_PARAMETERS = [
+        // TikTok
+        '_r', '_t', 'is_from_webapp', 'sender_device', 'web_id', 'is_copy_url',
+        // Instagram
+        'igsh', 'igshid', 'igsi', 'img_index',
+        // YouTube
+        'si', 'feature', 'pp', 'ab_channel',
+        // Facebook
+        'fbclid', 'mibextid', 'rdid', 'share_url',
+        // X / Twitter
+        's', 't', 'ref_src', 'ref_url',
+    ];
+
     public function __construct(private readonly HostnameResolver $hostnameResolver) {}
 
     /** @return array{url: string, host: string, port: int, ip: string, platform: string} */
@@ -47,7 +70,7 @@ class SocialMediaUrlPolicy
     /** @return array{url: string, host: string, port: int, platform: string} */
     public function inspectSourceUrl(string $url): array
     {
-        $parts = $this->parseHttpUrl($url);
+        $parts = $this->parseHttpUrl($url, normaliseQuery: true);
         $platform = self::SOURCE_HOSTS[$parts['host']] ?? null;
 
         if ($platform === null) {
@@ -132,7 +155,7 @@ class SocialMediaUrlPolicy
     }
 
     /** @return array{url: string, host: string, port: int} */
-    private function parseHttpUrl(string $url, bool $requireHttps = false): array
+    private function parseHttpUrl(string $url, bool $requireHttps = false, bool $normaliseQuery = false): array
     {
         $url = trim($url);
 
@@ -168,13 +191,51 @@ class SocialMediaUrlPolicy
             throw new SocialMediaExtractionException('Only standard HTTP and HTTPS ports are supported.');
         }
 
-        $fragmentlessUrl = preg_replace('/#.*\z/s', '', $url);
+        $normalisedUrl = (string) preg_replace('/#.*\z/s', '', $url);
+
+        if ($normaliseQuery) {
+            $normalisedUrl = $this->withoutTrackingParameters($normalisedUrl);
+        }
 
         return [
-            'url' => (string) $fragmentlessUrl,
+            'url' => $normalisedUrl,
             'host' => $host,
             'port' => $port,
         ];
+    }
+
+    /**
+     * Removes per-share tracking parameters while preserving the order and the
+     * original encoding of every parameter that is kept. Parameters are matched
+     * case-insensitively, and any `utm_*` campaign parameter is dropped.
+     */
+    private function withoutTrackingParameters(string $url): string
+    {
+        $position = strpos($url, '?');
+
+        if ($position === false) {
+            return $url;
+        }
+
+        $base = substr($url, 0, $position);
+        $query = substr($url, $position + 1);
+        $kept = [];
+
+        foreach (explode('&', $query) as $pair) {
+            if ($pair === '') {
+                continue;
+            }
+
+            $name = strtolower(rawurldecode(explode('=', $pair, 2)[0]));
+
+            if (str_starts_with($name, 'utm_') || in_array($name, self::TRACKING_QUERY_PARAMETERS, true)) {
+                continue;
+            }
+
+            $kept[] = $pair;
+        }
+
+        return $kept === [] ? $base : $base.'?'.implode('&', $kept);
     }
 
     private function isAllowedImageHost(string $hostname): bool

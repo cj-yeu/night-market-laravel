@@ -2,6 +2,33 @@
 
 @section('title', 'Social Media Highlights | Night Market Selangor')
 
+@php($activeFilters = collect($filters ?? [])->filter()->isNotEmpty())
+@php($maxRecordCount = collect($insights['recordsByPlatform'])->max() ?: 1)
+@php($maxEngagement = collect($insights['engagementByPlatform'])->max() ?: 1)
+@php($maxTopEngagement = $insights['topEngagementPosts']->max('engagement_count') ?: 1)
+
+@push('styles')
+    <style>
+        .insight-track {
+            height: .5rem;
+            background: rgba(216, 91, 31, .12);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .insight-bar {
+            height: 100%;
+            background: var(--market-orange);
+            border-radius: 999px;
+            transition: width .25s ease;
+        }
+
+        .insight-row + .insight-row {
+            margin-top: .75rem;
+        }
+    </style>
+@endpush
+
 @section('content')
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">
         <div>
@@ -16,7 +43,7 @@
         <div class="card-body p-4">
             <form method="GET" action="{{ route('social-media-highlights.index') }}">
                 <div class="row g-3 align-items-end">
-                    <div class="col-12 col-lg-8">
+                    <div class="col-12 col-lg-4">
                         <label for="search" class="form-label">Keyword Search</label>
                         <input type="search" id="search" name="search" maxlength="255"
                             value="{{ $filters['search'] ?? '' }}"
@@ -24,17 +51,90 @@
                             placeholder="Search text, hashtag, night market, or food">
                         @error('search')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
-                    <div class="col-12 col-lg-4 d-flex flex-wrap gap-2">
+
+                    <div class="col-12 col-sm-6 col-lg-2">
+                        <label for="platform" class="form-label">Platform</label>
+                        <select id="platform" name="platform" class="form-select @error('platform') is-invalid @enderror">
+                            <option value="">All platforms</option>
+                            @foreach ($platforms as $platform)
+                                <option value="{{ $platform }}" @selected(($filters['platform'] ?? '') === $platform)>
+                                    {{ $platform }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('platform')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <label for="night_market_id" class="form-label">Night Market</label>
+                        <select id="night_market_id" name="night_market_id"
+                            class="form-select @error('night_market_id') is-invalid @enderror">
+                            <option value="">All night markets</option>
+                            @foreach ($nightMarkets as $nightMarket)
+                                <option value="{{ $nightMarket->id }}"
+                                    @selected((string) ($filters['night_market_id'] ?? '') === (string) $nightMarket->id)>
+                                    {{ $nightMarket->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('night_market_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <label for="sort" class="form-label">Sort By</label>
+                        <select id="sort" name="sort" class="form-select @error('sort') is-invalid @enderror">
+                            @foreach ($sorts as $sortValue => $sortLabel)
+                                <option value="{{ $sortValue }}" @selected(($filters['sort'] ?? '') === $sortValue)>
+                                    {{ $sortLabel }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('sort')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    @if ($filters['hashtag'] ?? null)
+                        <input type="hidden" name="hashtag" value="{{ $filters['hashtag'] }}">
+                    @endif
+
+                    <div class="col-12 d-flex flex-wrap gap-2">
                         <button type="submit" class="btn btn-market">Search Highlights</button>
-                        @if ($filters['search'] ?? null)
+                        @if ($activeFilters)
                             <a href="{{ route('social-media-highlights.index') }}"
-                                class="btn btn-outline-secondary">Reset Search</a>
+                                class="btn btn-outline-secondary">Reset Filters</a>
                         @endif
                     </div>
                 </div>
             </form>
         </div>
     </div>
+
+    @if (! empty($popularHashtags))
+        <section class="card market-card mb-4" aria-labelledby="popular-hashtags-heading">
+            <div class="card-body p-4">
+                <h2 id="popular-hashtags-heading" class="h6 text-secondary mb-3">Popular Hashtags</h2>
+                <div class="d-flex flex-wrap gap-2">
+                    @foreach ($popularHashtags as $popularHashtag)
+                        @php($isActiveTag = ($filters['hashtag'] ?? null) === $popularHashtag['tag'])
+                        <a class="btn btn-sm {{ $isActiveTag ? 'btn-market' : 'btn-outline-secondary' }}"
+                            href="{{ request()->fullUrlWithQuery([
+                                'hashtag' => $isActiveTag ? null : $popularHashtag['tag'],
+                                'page' => null,
+                            ]) }}"
+                            @if ($isActiveTag) aria-current="true" @endif>
+                            {{ $popularHashtag['tag'] }}
+                            <span class="badge text-bg-light border ms-1">{{ $popularHashtag['count'] }}</span>
+                        </a>
+                    @endforeach
+                </div>
+                @if ($filters['hashtag'] ?? null)
+                    <p class="small text-secondary mt-3 mb-0">
+                        Showing posts tagged <strong>{{ $filters['hashtag'] }}</strong>.
+                        <a href="{{ request()->fullUrlWithQuery(['hashtag' => null, 'page' => null]) }}">Clear tag</a>
+                    </p>
+                @endif
+            </div>
+        </section>
+    @endif
 
     @if ($records->isNotEmpty())
         <section class="mb-5" aria-labelledby="social-media-insights-heading">
@@ -43,10 +143,16 @@
                 <div class="col-12 col-md-6 col-xl-3">
                     <div class="card h-100 border-0 shadow-sm">
                         <div class="card-body">
-                            <h3 class="h6 text-secondary">Records by Platform</h3>
-                            @foreach ($insights['recordsByPlatform'] as $platform => $count)
-                                <div class="d-flex justify-content-between">
-                                    <span>{{ $platform }}</span><strong>{{ $count }}</strong>
+                            <h3 class="h6 text-secondary mb-3">Records by Platform</h3>
+                            @foreach ($insights['recordsByPlatform'] as $platformName => $count)
+                                <div class="insight-row" title="{{ $platformName }}: {{ number_format($count) }} {{ $count === 1 ? 'record' : 'records' }}">
+                                    <div class="d-flex justify-content-between align-items-baseline gap-2 mb-1">
+                                        <span class="small">{{ $platformName }}</span>
+                                        <strong class="small">{{ number_format($count) }}</strong>
+                                    </div>
+                                    <div class="insight-track" aria-hidden="true">
+                                        <div class="insight-bar" style="width: {{ round($count / $maxRecordCount * 100, 1) }}%"></div>
+                                    </div>
                                 </div>
                             @endforeach
                         </div>
@@ -55,10 +161,16 @@
                 <div class="col-12 col-md-6 col-xl-3">
                     <div class="card h-100 border-0 shadow-sm">
                         <div class="card-body">
-                            <h3 class="h6 text-secondary">Engagement by Platform</h3>
-                            @foreach ($insights['engagementByPlatform'] as $platform => $engagement)
-                                <div class="d-flex justify-content-between gap-2">
-                                    <span>{{ $platform }}</span><strong>{{ number_format($engagement) }}</strong>
+                            <h3 class="h6 text-secondary mb-3">Engagement by Platform</h3>
+                            @foreach ($insights['engagementByPlatform'] as $platformName => $engagement)
+                                <div class="insight-row" title="{{ $platformName }}: {{ number_format($engagement) }} total engagement">
+                                    <div class="d-flex justify-content-between align-items-baseline gap-2 mb-1">
+                                        <span class="small">{{ $platformName }}</span>
+                                        <strong class="small">{{ number_format($engagement) }}</strong>
+                                    </div>
+                                    <div class="insight-track" aria-hidden="true">
+                                        <div class="insight-bar" style="width: {{ round($engagement / $maxEngagement * 100, 1) }}%"></div>
+                                    </div>
                                 </div>
                             @endforeach
                         </div>
@@ -98,18 +210,22 @@
 
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    <h3 class="h5 text-market">Top Engagement Posts</h3>
+                    <h3 class="h5 text-market mb-3">Top Engagement Posts</h3>
                     <div class="row g-2">
                         @foreach ($insights['topEngagementPosts'] as $topPost)
                             <div class="col-12 col-lg-6">
-                                <div class="border rounded-3 p-3 h-100">
+                                <div class="border rounded-3 p-3 h-100"
+                                    title="{{ $topPost->platform }} · {{ $topPost->nightMarket->name }}: {{ number_format($topPost->engagement_count) }} engagement">
                                     <div class="d-flex justify-content-between gap-2">
                                         <strong>{{ $topPost->platform }}</strong>
                                         <span class="badge text-bg-warning">
                                             {{ number_format($topPost->engagement_count) }} engagement
                                         </span>
                                     </div>
-                                    <div class="small text-secondary mt-1">{{ $topPost->nightMarket->name }}</div>
+                                    <div class="small text-secondary mt-1 mb-2">{{ $topPost->nightMarket->name }}</div>
+                                    <div class="insight-track" aria-hidden="true">
+                                        <div class="insight-bar" style="width: {{ round($topPost->engagement_count / $maxTopEngagement * 100, 1) }}%"></div>
+                                    </div>
                                 </div>
                             </div>
                         @endforeach
@@ -121,11 +237,11 @@
 
     @if ($records->isEmpty())
         <div class="alert alert-info text-center py-4" role="status">
-            @if ($filters['search'] ?? null)
+            @if ($activeFilters)
                 <h2 class="h5">No approved highlights found</h2>
-                <p>No approved social-media highlights match your search.</p>
+                <p>No approved social-media highlights match your current filters.</p>
                 <a href="{{ route('social-media-highlights.index') }}"
-                    class="btn btn-outline-secondary">Reset Search</a>
+                    class="btn btn-outline-secondary">Reset Filters</a>
             @else
                 <h2 class="h5">No approved social-media highlights yet</h2>
                 <p class="mb-0">Approved public-post information will appear here after administrator review.</p>
@@ -164,7 +280,10 @@
                             @if (! empty($record->extracted_hashtags))
                                 <div class="d-flex flex-wrap gap-1 mb-3">
                                     @foreach ($record->extracted_hashtags as $hashtag)
-                                        <span class="badge text-bg-light border">{{ $hashtag }}</span>
+                                        <a class="badge text-decoration-none {{ ($filters['hashtag'] ?? null) === $hashtag ? 'text-bg-warning' : 'text-bg-light border' }}"
+                                            href="{{ request()->fullUrlWithQuery(['hashtag' => $hashtag, 'page' => null]) }}">
+                                            {{ $hashtag }}
+                                        </a>
                                     @endforeach
                                 </div>
                             @endif

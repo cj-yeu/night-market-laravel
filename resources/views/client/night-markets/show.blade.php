@@ -121,6 +121,52 @@
                 </div>
             </div>
 
+            <section class="card market-card mb-4" aria-labelledby="market-social-media-heading">
+                <div class="card-body p-4 p-md-5">
+                    <h2 id="market-social-media-heading" class="h4 fw-bold text-market mb-1">Social Media Highlights</h2>
+                    <p class="text-secondary mb-4">Administrator-approved public posts about {{ $nightMarket->name }}.</p>
+
+                    @if ($socialMediaHighlights->isEmpty())
+                        <div class="alert alert-secondary mb-0">
+                            No approved social-media highlights for this market yet.
+                        </div>
+                    @else
+                        <div class="row g-3">
+                            @foreach ($socialMediaHighlights as $highlight)
+                                <div class="col-12 col-lg-6">
+                                    <article class="border rounded-3 bg-white p-3 h-100 d-flex flex-column">
+                                        <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                                            <span class="badge text-bg-warning">{{ $highlight->platform }}</span>
+                                            <span class="text-secondary small">
+                                                Published {{ $highlight->posted_date->format('d M Y') }}
+                                            </span>
+                                        </div>
+                                        <h3 class="h6 fw-bold mb-1">
+                                            {{ $highlight->extracted_title ?: $nightMarket->name }}
+                                        </h3>
+                                        @if ($highlight->food)
+                                            <p class="small fw-semibold mb-2">Featured food: {{ $highlight->food->name }}</p>
+                                        @endif
+                                        <p class="text-secondary small mb-3">
+                                            {{ \Illuminate\Support\Str::limit($highlight->content_summary, 200) }}
+                                        </p>
+                                        @if ($highlight->safe_source_url)
+                                            <a href="{{ $highlight->safe_source_url }}" target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="btn btn-sm btn-outline-secondary mt-auto">Open Original Post</a>
+                                        @endif
+                                    </article>
+                                </div>
+                            @endforeach
+                        </div>
+                        @if (Route::has('social-media-highlights.index'))
+                            <a href="{{ route('social-media-highlights.index') }}"
+                                class="btn btn-outline-secondary mt-4">View All Social Media Highlights</a>
+                        @endif
+                    @endif
+                </div>
+            </section>
+
             <section class="card market-card mb-4" aria-labelledby="market-reviews-heading">
                 <div class="card-body p-4 p-md-5">
                     <div class="d-flex flex-column flex-sm-row justify-content-between gap-2 mb-4">

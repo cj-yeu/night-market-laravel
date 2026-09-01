@@ -804,14 +804,14 @@
                 <div class="collapse navbar-collapse" id="primaryNavigation">
                     <div class="navbar-nav ms-auto align-items-lg-center gap-lg-1 pt-2 pt-lg-0">
                         @if (! $currentUser)
-                            @foreach ([['Home', 'home', 'home'], ['Discover Markets', 'night-markets.index', 'night-markets.*'], ['Explore Stalls', 'stalls.index', 'stalls.*'], ['Must-Try Foods', 'foods.index', 'foods.*']] as [$label, $routeName, $routePattern])
+                            @foreach ([['Home', 'home', 'home'], ['Discover Markets', 'night-markets.index', 'night-markets.*'], ['Explore Stalls', 'stalls.index', 'stalls.*'], ['Must-Try Foods', 'foods.index', 'foods.*'], ['Social Media', 'social-media-highlights.index', 'social-media-highlights.*']] as [$label, $routeName, $routePattern])
                                 <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs($routePattern) ? 'active' : '' }}" href="{{ route($routeName, $routeName === 'foods.index' ? ['is_must_try' => '1'] : []) }}" @if(request()->routeIs($routePattern)) aria-current="page" @endif>{{ $label }}</a>
                             @endforeach
                             <a class="btn btn-sm {{ request()->routeIs('login') ? 'btn-market' : 'btn-outline-secondary' }} ms-lg-2" href="{{ route('login') }}">Login</a>
                             <a class="btn btn-sm btn-market ms-lg-1" href="{{ route('register') }}">Register</a>
                         @elseif ($isClient)
-                            @foreach ([['Home', 'client.home'], ['Discover Markets', 'night-markets.*'], ['Explore Stalls', 'stalls.*'], ['Must-Try Foods', 'foods.*'], ['My Visit Plans', 'client.visit-plans.*']] as [$label, $routePattern])
-                                <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs($routePattern) ? 'active' : '' }}" href="{{ route(match($label) {'Home' => 'client.home', 'Discover Markets' => 'night-markets.index', 'Explore Stalls' => 'stalls.index', 'Must-Try Foods' => 'foods.index', default => 'client.visit-plans.index'}, $label === 'Must-Try Foods' ? ['is_must_try' => '1'] : []) }}" @if(request()->routeIs($routePattern)) aria-current="page" @endif>{{ $label }}</a>
+                            @foreach ([['Home', 'client.home'], ['Discover Markets', 'night-markets.*'], ['Explore Stalls', 'stalls.*'], ['Must-Try Foods', 'foods.*'], ['Social Media', 'social-media-highlights.*'], ['My Visit Plans', 'client.visit-plans.*']] as [$label, $routePattern])
+                                <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs($routePattern) ? 'active' : '' }}" href="{{ route(match($label) {'Home' => 'client.home', 'Discover Markets' => 'night-markets.index', 'Explore Stalls' => 'stalls.index', 'Must-Try Foods' => 'foods.index', 'Social Media' => 'social-media-highlights.index', default => 'client.visit-plans.index'}, $label === 'Must-Try Foods' ? ['is_must_try' => '1'] : []) }}" @if(request()->routeIs($routePattern)) aria-current="page" @endif>{{ $label }}</a>
                             @endforeach
                             <a class="nav-link fw-semibold px-lg-2 d-inline-flex align-items-center gap-1 {{ request()->routeIs('profile.*') ? 'active' : '' }}" href="{{ route('profile.edit') }}" @if(request()->routeIs('profile.*')) aria-current="page" @endif>
                                 @if ($currentUser->avatarUrl())

@@ -7,6 +7,7 @@ use App\Http\Requests\NightMarket\MarketDiscoveryRequest;
 use App\Models\NightMarket;
 use App\Models\User;
 use App\Services\NightMarketService;
+use App\Services\SocialMediaDataService;
 use App\Services\ReviewService;
 use App\Services\StallFoodService;
 use Illuminate\View\View;
@@ -16,6 +17,7 @@ class NightMarketDiscoveryController extends Controller
     public function __construct(
         private readonly NightMarketService $nightMarketService,
         private readonly StallFoodService $stallFoodService,
+        private readonly SocialMediaDataService $socialMediaDataService,
         private readonly ReviewService $reviewService,
     ) {}
 
@@ -47,6 +49,7 @@ class NightMarketDiscoveryController extends Controller
             'nightMarket' => $nightMarket,
             'activeStalls' => $nightMarket->stalls,
             'mustTryFoods' => $this->nightMarketService->mustTryFoods($nightMarket),
+            'socialMediaHighlights' => $this->socialMediaDataService->marketHighlights($nightMarket),
             ...$this->reviewContextForMarket($nightMarket),
         ]);
     }
