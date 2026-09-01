@@ -243,6 +243,8 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('socialMediaRecord')->name('social-media-records.destroy');
         Route::patch('/social-media-records/{socialMediaRecord}/moderate', [SocialMediaRecordController::class, 'moderate'])
             ->whereNumber('socialMediaRecord')->name('social-media-records.moderate');
+            Route::patch('/social-media-records/bulk-moderate', [SocialMediaRecordController::class, 'bulkModerate'])
+                ->name('social-media-records.bulk-moderate');
 
         Route::get('/users', [UserManagementController::class, 'index'])
             ->name('users.index');

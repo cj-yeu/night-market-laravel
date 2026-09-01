@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SocialMedia\BulkModerateSocialMediaRecordsRequest;
 use App\Http\Requests\SocialMedia\SocialMediaRecordFilterRequest;
 use App\Http\Requests\SocialMedia\ModerateSocialMediaRecordRequest;
 use App\Http\Requests\SocialMedia\StoreSocialMediaRecordRequest;
@@ -89,5 +90,33 @@ class SocialMediaRecordController extends Controller
                     ? 'The social media record was approved successfully.'
                     : 'The social media record was rejected successfully.',
             );
+    }
+
+    public function bulkModerate(BulkModerateSocialMediaRecordsRequest $request): RedirectResponse
+    {
+        $status = $request->validated('status');
+
+        $summary = $this->socialMediaDataService->bulkModerate(
+            $request->validated('ids'),
+            $request->user(),
+            $status,
+            $request->validated('rejection_reason'),
+        );
+
+        $outcome = $status === SocialMediaRecord::STATUS_APPROVED ? 'approved' : 'rejected';
+
+        $message = match (true) {
+            $summary['moderated'] === 0 => "No social media records were {$outcome}.",
+            $summary['moderated'] === 1 => "1 social media record was {$outcome} successfully.",
+            default => "{$summary['moderated']} social media records were {$outcome} successfully.",
+        };
+
+        if ($summary['skipped'] !== []) {
+            $message .= ' Skipped '.count($summary['skipped']).': '.implode('; ', $summary['skipped']).'.';
+        }
+
+        return redirect()
+            ->route('admin.social-media-records.index')
+            ->with('status', $message);
     }
 }

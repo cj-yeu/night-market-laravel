@@ -12,6 +12,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as SupportCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -631,5 +632,40 @@ class SocialMediaDataService
     private function textContains(string $normalizedText, ?string $needle): bool
     {
         return filled($needle) && Str::contains($normalizedText, Str::lower($needle));
+    }
+
+    /**
+     * @param  array<int, int>  $recordIds
+     * @return array{moderated: int, skipped: array<int, string>}
+     */
+    public function bulkModerate(
+        array $recordIds,
+        User $admin,
+        string $status,
+        ?string $rejectionReason = null,
+    ): array {
+        $records = SocialMediaRecord::query()->whereKey($recordIds)->orderBy('id')->get();
+
+        $moderated = 0;
+        $skipped = [];
+
+        DB::transaction(function () use ($records, $admin, $status, $rejectionReason, &$moderated, &$skipped): void {
+            foreach ($records as $record) {
+                if ($record->status === $status) {
+                    $skipped[] = "#{$record->getKey()} was already {$status}";
+
+                    continue;
+                }
+
+                try {
+                    $this->moderate($record, $admin, $status, $rejectionReason);
+                    $moderated++;
+                } catch (ValidationException $exception) {
+                    $skipped[] = "#{$record->getKey()}: ".$exception->validator->errors()->first();
+                }
+            }
+        });
+
+        return ['moderated' => $moderated, 'skipped' => $skipped];
     }
 }
