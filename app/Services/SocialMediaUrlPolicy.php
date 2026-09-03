@@ -34,6 +34,13 @@ class SocialMediaUrlPolicy
         'twimg.com',
     ];
 
+    /** @var list<string> */
+    private const TRACKING_QUERY_PARAMETERS = [
+        '_r', '_t', 'ab_channel', 'fbclid', 'feature', 'gclid', 'igsh', 'igshid', 'igsi',
+        'is_copy_url', 'is_from_webapp', 'mibextid', 'pp', 'rdid', 'ref_src', 'ref_url',
+        's', 'sender_device', 'si', 't', 'web_id',
+    ];
+
     public function __construct(private readonly HostnameResolver $hostnameResolver) {}
 
     /** @return array{url: string, host: string, port: int, ip: string, platform: string} */
@@ -47,7 +54,7 @@ class SocialMediaUrlPolicy
     /** @return array{url: string, host: string, port: int, platform: string} */
     public function inspectSourceUrl(string $url): array
     {
-        $parts = $this->parseHttpUrl($url);
+        $parts = $this->parseHttpUrl($url, normaliseSourceQuery: true);
         $platform = self::SOURCE_HOSTS[$parts['host']] ?? null;
 
         if ($platform === null) {
@@ -132,8 +139,11 @@ class SocialMediaUrlPolicy
     }
 
     /** @return array{url: string, host: string, port: int} */
-    private function parseHttpUrl(string $url, bool $requireHttps = false): array
-    {
+    private function parseHttpUrl(
+        string $url,
+        bool $requireHttps = false,
+        bool $normaliseSourceQuery = false,
+    ): array {
         $url = trim($url);
 
         if ($url === '' || strlen($url) > 2048 || filter_var($url, FILTER_VALIDATE_URL) === false) {
@@ -168,13 +178,57 @@ class SocialMediaUrlPolicy
             throw new SocialMediaExtractionException('Only standard HTTP and HTTPS ports are supported.');
         }
 
-        $fragmentlessUrl = preg_replace('/#.*\z/s', '', $url);
+        $canonicalHost = $normaliseSourceQuery ? $this->canonicalSourceHost($host) : $host;
+        $path = (string) ($parts['path'] ?? '/');
+        $query = (string) ($parts['query'] ?? '');
+        if ($normaliseSourceQuery) {
+            $query = $this->normaliseSourceQuery($query);
+        }
+
+        $fragmentlessUrl = $scheme.'://'.$canonicalHost.$path.($query === '' ? '' : '?'.$query);
 
         return [
             'url' => (string) $fragmentlessUrl,
             'host' => $host,
             'port' => $port,
         ];
+    }
+
+    private function canonicalSourceHost(string $host): string
+    {
+        return match ($host) {
+            'instagram.com' => 'www.instagram.com',
+            'tiktok.com' => 'www.tiktok.com',
+            'facebook.com' => 'www.facebook.com',
+            'youtube.com' => 'www.youtube.com',
+            'www.x.com', 'twitter.com', 'www.twitter.com' => 'x.com',
+            default => $host,
+        };
+    }
+
+    private function normaliseSourceQuery(string $query): string
+    {
+        if ($query === '') {
+            return '';
+        }
+
+        $remaining = [];
+        foreach (explode('&', $query) as $pair) {
+            if ($pair === '') {
+                continue;
+            }
+
+            $name = strtolower(rawurldecode(explode('=', $pair, 2)[0]));
+            if (str_starts_with($name, 'utm_') || in_array($name, self::TRACKING_QUERY_PARAMETERS, true)) {
+                continue;
+            }
+
+            $remaining[] = $pair;
+        }
+
+        sort($remaining, SORT_STRING);
+
+        return implode('&', $remaining);
     }
 
     private function isAllowedImageHost(string $hostname): bool

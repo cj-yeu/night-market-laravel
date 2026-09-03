@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\SocialMedia\SocialMediaRecordFilterRequest;
+use App\Http\Requests\SocialMedia\BulkModerateSocialMediaRecordsRequest;
 use App\Http\Requests\SocialMedia\ModerateSocialMediaRecordRequest;
+use App\Http\Requests\SocialMedia\SocialMediaRecordFilterRequest;
 use App\Http\Requests\SocialMedia\StoreSocialMediaRecordRequest;
 use App\Http\Requests\SocialMedia\UpdateSocialMediaRecordRequest;
 use App\Models\SocialMediaRecord;
@@ -24,6 +25,7 @@ class SocialMediaRecordController extends Controller
             'platforms' => SocialMediaRecord::PLATFORMS,
             'statuses' => SocialMediaRecord::STATUSES,
             'filters' => $request->validated(),
+            'platformInsights' => $this->socialMediaDataService->adminPlatformInsights(),
         ]);
     }
 
@@ -78,6 +80,7 @@ class SocialMediaRecordController extends Controller
             $socialMediaRecord,
             $request->user(),
             $status,
+            $request->validated('rejection_reason'),
         );
 
         return redirect()
@@ -87,6 +90,24 @@ class SocialMediaRecordController extends Controller
                 $status === SocialMediaRecord::STATUS_APPROVED
                     ? 'The social media record was approved successfully.'
                     : 'The social media record was rejected successfully.',
+            );
+    }
+
+    public function bulkModerate(BulkModerateSocialMediaRecordsRequest $request): RedirectResponse
+    {
+        $data = $request->validated();
+        $result = $this->socialMediaDataService->bulkModerate(
+            $data['record_ids'],
+            $request->user(),
+            $data['action'],
+            $data['rejection_reason'] ?? null,
+        );
+
+        return redirect()
+            ->route('admin.social-media-records.index')
+            ->with(
+                'status',
+                "Bulk moderation complete: {$result['approved']} approved, {$result['rejected']} rejected, {$result['skipped']} skipped.",
             );
     }
 }

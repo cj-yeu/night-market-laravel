@@ -48,6 +48,19 @@ class Food extends Model
             ->whereHas('stall', fn (Builder $query) => $query->publiclyVisible());
     }
 
+    public function scopeWithPublicReviewSummary(Builder $query): Builder
+    {
+        return $query
+            ->withCount([
+                'reviews as public_reviews_count' => fn (Builder $reviewQuery) => $reviewQuery
+                    ->publiclyVisible(),
+            ])
+            ->withAvg([
+                'reviews as public_reviews_avg_rating' => fn (Builder $reviewQuery) => $reviewQuery
+                    ->publiclyVisible(),
+            ], 'rating');
+    }
+
     public static function isOwnedImagePath(?string $path): bool
     {
         return $path !== null && preg_match(

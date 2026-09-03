@@ -68,6 +68,7 @@
                             <div class="card-body p-4 d-flex flex-column">
                                 <span class="badge text-bg-warning align-self-start mb-2">{{ $nightMarket->city }}</span>
                                 <h3 class="h5 fw-bold">{{ $nightMarket->name }}</h3>
+                                <x-review-rating-summary :reviewable="$nightMarket" compact class="mb-2" />
                                 <p class="text-secondary text-break">{{ $nightMarket->address }}</p>
                                 <a href="{{ route('night-markets.show', $nightMarket) }}" class="btn btn-market mt-auto align-self-start">
                                     View market details

@@ -10,6 +10,7 @@ use App\Http\Requests\StallFood\DeleteFoodImageRequest;
 use App\Http\Requests\StallFood\StoreFoodRequest;
 use App\Http\Requests\StallFood\UpdateFoodImageRequest;
 use App\Http\Requests\StallFood\UpdateFoodRequest;
+use App\Models\CatalogCategory;
 use App\Models\Food;
 use App\Models\User;
 use App\Services\AdminReturnUrlService;
@@ -50,12 +51,13 @@ class FoodController extends Controller
     {
         return view('admin.foods.create', [
             'stalls' => $this->stallFoodService->activeStalls(),
+            'categories' => $this->stallFoodService->activeCatalogCategories(CatalogCategory::TYPE_FOOD),
         ]);
     }
 
     public function store(StoreFoodRequest $request): RedirectResponse
     {
-        $food = $this->stallFoodService->createFood($request->validated());
+        $food = $this->stallFoodService->createFood($request->validated(), $request->user());
         $this->catalogAuditLogService->record($request->user(), $food, 'created', 'Created food “'.$food->name.'”');
 
         return redirect()
@@ -75,6 +77,7 @@ class FoodController extends Controller
         return view('admin.foods.edit', [
             'food' => $this->stallFoodService->adminFoodDetails($food),
             'stalls' => $this->stallFoodService->activeStalls(),
+            'categories' => $this->stallFoodService->activeCatalogCategories(CatalogCategory::TYPE_FOOD),
             'returnTo' => $this->adminReturnUrlService->catalogQualityUrl($request),
         ]);
     }
@@ -82,7 +85,7 @@ class FoodController extends Controller
     public function update(UpdateFoodRequest $request, Food $food): RedirectResponse
     {
         $before = $food->getAttributes();
-        $food = $this->stallFoodService->updateFood($food, $request->validated());
+        $food = $this->stallFoodService->updateFood($food, $request->validated(), $request->user());
         $changes = $this->catalogAuditLogService->safeChanges($before, $food);
         if ($changes) {
             $this->catalogAuditLogService->record($request->user(), $food, 'updated', 'Updated '.collect($changes)->pluck('label')->map(fn ($label) => strtolower($label))->implode(', '), $changes);

@@ -15,6 +15,7 @@
                         <div class="catalog-detail-copy">
                     <span class="badge text-bg-warning mb-3">{{ $nightMarket->city }}</span>
                     <h1 class="h2 fw-bold text-market">{{ $nightMarket->name }}</h1>
+                    <x-review-rating-summary :reviewable="$nightMarket" class="mt-2" />
 
                     <div class="d-flex flex-wrap gap-2 mt-3">
                         @if (Route::has('night-markets.stalls.index'))
@@ -110,6 +111,7 @@
                                             @if ($food->category)
                                                 <div class="small text-market fw-semibold mb-1">{{ $food->category }}</div>
                                             @endif
+                                            <x-review-rating-summary :reviewable="$food" compact class="mb-2" />
                                             <p class="text-secondary mb-0 text-clamp-3">
                                                 {{ $food->description ?: 'No food description available.' }}
                                             </p>

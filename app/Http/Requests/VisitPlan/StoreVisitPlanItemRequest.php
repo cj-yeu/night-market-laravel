@@ -21,7 +21,8 @@ class StoreVisitPlanItemRequest extends FormRequest
     {
         return [
             'item_type' => ['required', Rule::in(['stall', 'food'])],
-            'item_id' => ['required', 'integer'],
+            'stall_id' => ['exclude_unless:item_type,stall', 'required', 'integer'],
+            'food_id' => ['exclude_unless:item_type,food', 'required', 'integer'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];
     }

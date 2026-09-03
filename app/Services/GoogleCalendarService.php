@@ -9,6 +9,7 @@ use App\Models\MarketOperatingDay;
 use App\Models\User;
 use App\Models\VisitPlan;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\DB;
@@ -32,19 +33,38 @@ class GoogleCalendarService
             ->findOrFail($visitPlanId);
     }
 
-    /** @return array{connected: bool, event: GoogleCalendarEvent|null, needs_sync: bool, can_create: bool} */
+    /** @return array{connected: bool, event: GoogleCalendarEvent|null, needs_sync: bool, can_create: bool, state: string} */
     public function integrationDetailsForClient(User $user, VisitPlan $visitPlan): array
     {
         $plan = $this->calendarPlanForClient($user, $visitPlan->id);
         $event = $plan->googleCalendarEvent;
         $payloadHash = $this->payloadHash($this->eventPayload($plan, $user));
+        $connected = $user->googleCalendarConnection()->exists();
+        $state = match (true) {
+            $event?->sync_status === GoogleCalendarEvent::SYNC_STATUS_RECONNECT_REQUIRED => 'Reconnect Required',
+            $event !== null && ! $connected => 'Reconnect Required',
+            ! $connected => 'Not Connected',
+            $event?->sync_status === GoogleCalendarEvent::SYNC_STATUS_FAILED => 'Update Failed',
+            $event !== null && ! hash_equals((string) $event->payload_hash, $payloadHash) => 'Update Needed',
+            $event !== null => 'Synced',
+            default => 'Not Connected',
+        };
 
         return [
-            'connected' => $user->googleCalendarConnection()->exists(),
+            'connected' => $connected,
             'event' => $event,
-            'needs_sync' => $event !== null && ! hash_equals((string) $event->payload_hash, $payloadHash),
+            'needs_sync' => $event !== null && $state !== 'Synced',
             'can_create' => ! $this->isPastPlan($plan),
+            'state' => $state,
         ];
+    }
+
+    public function hasSyncedEventForClient(User $user, int $visitPlanId): bool
+    {
+        return GoogleCalendarEvent::query()
+            ->where('user_id', $user->id)
+            ->where('visit_plan_id', $visitPlanId)
+            ->exists();
     }
 
     public function assertCanStartConnection(User $user, int $visitPlanId): VisitPlan
@@ -65,35 +85,11 @@ class GoogleCalendarService
     public function syncForClient(User $user, int $visitPlanId): GoogleCalendarEvent
     {
         $this->oauthService->assertEligibleClient($user);
-        $plan = $this->calendarPlanForClient($user, $visitPlanId);
-        $event = GoogleCalendarEvent::query()
-            ->where('user_id', $user->id)
-            ->where('visit_plan_id', $plan->id)
-            ->first();
 
         try {
-            if ($this->isPastPlan($plan) && $event === null) {
-                throw new GoogleCalendarIntegrationException(
-                    'Past visit plans cannot be added to Google Calendar.',
-                    GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
-                );
-            }
-
-            $connection = GoogleCalendarConnection::query()
-                ->where('user_id', $user->id)
-                ->first();
-
-            if (! $connection) {
-                throw new GoogleCalendarIntegrationException(
-                    'Connect your Google Calendar before adding this visit plan.',
-                    GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
-                );
-            }
-
-            $this->assertEventWriteScope($connection);
-
-            $payload = $this->eventPayload($plan, $user);
-            $payloadHash = $this->payloadHash($payload);
+            // Lock and validate the local state first, then commit before calling
+            // Google. Network I/O must never keep a database transaction open.
+            [$plan, $event, $connection, $payload, $payloadHash] = $this->preparedSync($user, $visitPlanId);
 
             if ($event) {
                 $response = $this->updateRemoteEvent($connection, $event->google_event_id, $payload);
@@ -121,14 +117,20 @@ class GoogleCalendarService
                 $payloadHash,
             );
         } catch (GoogleCalendarIntegrationException $exception) {
+            $this->recordSyncFailure($user, $visitPlanId, $exception);
             $this->disconnectWhenRequired($user, $exception);
 
             throw $exception;
+        } catch (ModelNotFoundException $exception) {
+            throw $exception;
         } catch (Throwable) {
-            throw new GoogleCalendarIntegrationException(
+            $exception = new GoogleCalendarIntegrationException(
                 'Google Calendar could not add this visit event. Please try again.',
                 GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
             );
+            $this->recordSyncFailure($user, $visitPlanId, $exception);
+
+            throw $exception;
         }
     }
 
@@ -137,7 +139,7 @@ class GoogleCalendarService
         $this->oauthService->assertEligibleClient($user);
 
         try {
-            DB::transaction(function () use ($user, $visitPlanId): void {
+            [$eventId, $connection] = DB::transaction(function () use ($user, $visitPlanId): array {
                 $plan = $this->calendarPlanForClient($user, $visitPlanId, true);
                 $event = GoogleCalendarEvent::query()
                     ->where('user_id', $user->id)
@@ -164,13 +166,94 @@ class GoogleCalendarService
                     );
                 }
 
-                $this->deleteRemoteEvent($connection, $event->google_event_id);
-                $event->delete();
+                return [$event->google_event_id, $connection];
+            }, 3);
+
+            $this->deleteRemoteEvent($connection, $eventId);
+
+            DB::transaction(function () use ($user, $visitPlanId, $eventId): void {
+                GoogleCalendarEvent::query()
+                    ->where('user_id', $user->id)
+                    ->where('visit_plan_id', $visitPlanId)
+                    ->where('google_event_id', $eventId)
+                    ->lockForUpdate()
+                    ->first()?->delete();
             }, 3);
         } catch (GoogleCalendarIntegrationException $exception) {
+            $this->recordSyncFailure($user, $visitPlanId, $exception);
             $this->disconnectWhenRequired($user, $exception);
 
             throw $exception;
+        }
+    }
+
+    /**
+     * @return array{0: VisitPlan, 1: GoogleCalendarEvent|null, 2: GoogleCalendarConnection, 3: array<string, mixed>, 4: string}
+     */
+    private function preparedSync(User $user, int $visitPlanId): array
+    {
+        return DB::transaction(function () use ($user, $visitPlanId): array {
+            $plan = $this->calendarPlanForClient($user, $visitPlanId, true);
+            $event = GoogleCalendarEvent::query()
+                ->where('user_id', $user->id)
+                ->where('visit_plan_id', $plan->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($this->isPastPlan($plan) && $event === null) {
+                throw new GoogleCalendarIntegrationException(
+                    'Past visit plans cannot be added to Google Calendar.',
+                    GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+                );
+            }
+
+            $connection = GoogleCalendarConnection::query()
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $connection) {
+                throw new GoogleCalendarIntegrationException(
+                    'Connect your Google Calendar before adding this visit plan.',
+                    GoogleCalendarIntegrationException::REASON_EVENT_INSERT_FAILED,
+                );
+            }
+
+            $this->assertEventWriteScope($connection);
+            $payload = $this->eventPayload($plan, $user);
+
+            return [$plan, $event, $connection, $payload, $this->payloadHash($payload)];
+        }, 3);
+    }
+
+    private function recordSyncFailure(
+        User $user,
+        int $visitPlanId,
+        GoogleCalendarIntegrationException $exception,
+    ): void {
+        try {
+            DB::transaction(function () use ($user, $visitPlanId, $exception): void {
+                $event = GoogleCalendarEvent::query()
+                    ->where('user_id', $user->id)
+                    ->where('visit_plan_id', $visitPlanId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $event) {
+                    return;
+                }
+
+                $event->forceFill([
+                    'sync_status' => $exception->disconnect
+                        ? GoogleCalendarEvent::SYNC_STATUS_RECONNECT_REQUIRED
+                        : GoogleCalendarEvent::SYNC_STATUS_FAILED,
+                    'last_sync_error_code' => $exception->reasonCode,
+                    'last_sync_failed_at' => now(),
+                ])->save();
+            }, 3);
+        } catch (Throwable) {
+            // Failure diagnostics must never replace the safe, user-facing result
+            // of the Calendar request itself.
         }
     }
 
@@ -210,7 +293,10 @@ class GoogleCalendarService
                     'google_event_id' => $eventId,
                     'google_event_url' => $eventUrl ?? $event->google_event_url,
                     'payload_hash' => $payloadHash,
+                    'sync_status' => GoogleCalendarEvent::SYNC_STATUS_SYNCED,
+                    'last_sync_error_code' => null,
                     'last_synced_at' => now(),
+                    'last_sync_failed_at' => null,
                 ]);
                 $event->save();
 
@@ -260,7 +346,8 @@ class GoogleCalendarService
             'View this plan: '.$this->httpsPlanUrl($plan),
         ];
         $payload = [
-            'summary' => 'Night Market Visit — '.$this->plainText($market?->name ?: 'Night Market'),
+            'summary' => $this->plainText($plan->title ?: 'Night Market Visit')
+                .' — '.$this->plainText($market?->name ?: 'Night Market'),
             'description' => implode("\n", $description),
             'extendedProperties' => [
                 'private' => [

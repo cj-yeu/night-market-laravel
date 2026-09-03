@@ -10,6 +10,7 @@ use App\Http\Requests\StallFood\DeleteStallImageRequest;
 use App\Http\Requests\StallFood\StoreStallRequest;
 use App\Http\Requests\StallFood\UpdateStallImageRequest;
 use App\Http\Requests\StallFood\UpdateStallRequest;
+use App\Models\CatalogCategory;
 use App\Models\Stall;
 use App\Models\User;
 use App\Services\AdminReturnUrlService;
@@ -51,12 +52,13 @@ class StallController extends Controller
         return view('admin.stalls.create', [
             'nightMarkets' => $this->stallFoodService->activeNightMarkets(),
             'halalStatuses' => Stall::halalStatusOptions(),
+            'categories' => $this->stallFoodService->activeCatalogCategories(CatalogCategory::TYPE_STALL),
         ]);
     }
 
     public function store(StoreStallRequest $request): RedirectResponse
     {
-        $stall = $this->stallFoodService->createStall($request->validated());
+        $stall = $this->stallFoodService->createStall($request->validated(), $request->user());
         $this->catalogAuditLogService->record($request->user(), $stall, 'created', 'Created stall “'.$stall->name.'”');
 
         return redirect()
@@ -77,6 +79,7 @@ class StallController extends Controller
             'stall' => $this->stallFoodService->adminStallDetails($stall),
             'nightMarkets' => $this->stallFoodService->activeNightMarkets(),
             'halalStatuses' => Stall::halalStatusOptions(),
+            'categories' => $this->stallFoodService->activeCatalogCategories(CatalogCategory::TYPE_STALL),
             'returnTo' => $this->adminReturnUrlService->catalogQualityUrl($request),
         ]);
     }
@@ -84,7 +87,7 @@ class StallController extends Controller
     public function update(UpdateStallRequest $request, Stall $stall): RedirectResponse
     {
         $before = $stall->getAttributes();
-        $stall = $this->stallFoodService->updateStall($stall, $request->validated());
+        $stall = $this->stallFoodService->updateStall($stall, $request->validated(), $request->user());
         $changes = $this->catalogAuditLogService->safeChanges($before, $stall);
         if ($changes) {
             $this->catalogAuditLogService->record($request->user(), $stall, 'updated', 'Updated '.collect($changes)->pluck('label')->map(fn ($label) => strtolower($label))->implode(', '), $changes);

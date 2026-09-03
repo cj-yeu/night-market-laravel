@@ -11,6 +11,8 @@ use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -24,7 +26,7 @@ class SocialMediaDataService
     public function records(array $filters): LengthAwarePaginator
     {
         $records = SocialMediaRecord::query()
-            ->with(['nightMarket:id,name', 'food:id,name', 'approvedBy:id,name'])
+            ->with(['nightMarket:id,name', 'food:id,name', 'approvedBy:id,name', 'rejectedBy:id,name'])
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
                 ->applyKeywordSearch($query, $search))
             ->when($filters['night_market_id'] ?? null, fn (Builder $query, int $marketId) => $query
@@ -76,13 +78,18 @@ class SocialMediaDataService
     public function create(array $data): SocialMediaRecord
     {
         $this->validateEligibility($data);
-        $this->validatePresentationUrls($data);
+        $source = $this->validatedSourceUrl($data);
+        $this->ensureUniqueSourceUrl($source['url']);
 
-        return SocialMediaRecord::create([
-            ...$this->recordData($data),
-            'status' => SocialMediaRecord::STATUS_PENDING,
-            'extraction_status' => $data['extraction_status'] ?? SocialMediaRecord::EXTRACTION_MANUAL,
-        ]);
+        try {
+            return SocialMediaRecord::create([
+                ...$this->recordData($data, $source['url']),
+                'status' => SocialMediaRecord::STATUS_PENDING,
+                'extraction_status' => $data['extraction_status'] ?? SocialMediaRecord::EXTRACTION_MANUAL,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            throw $this->duplicateSourceUrlException();
+        }
     }
 
     /**
@@ -91,39 +98,72 @@ class SocialMediaDataService
     public function update(SocialMediaRecord $socialMediaRecord, array $data): SocialMediaRecord
     {
         $this->validateEligibility($data);
-        $this->validatePresentationUrls($data);
-        $socialMediaRecord->update([
-            ...$this->recordData($data),
-            'status' => SocialMediaRecord::STATUS_PENDING,
-            'approved_by' => null,
-            'approved_at' => null,
-        ]);
+        $source = $this->validatedSourceUrl($data);
+        $this->ensureUniqueSourceUrl($source['url'], $socialMediaRecord);
+
+        try {
+            $socialMediaRecord->update([
+                ...$this->recordData($data, $source['url']),
+                'status' => SocialMediaRecord::STATUS_PENDING,
+                'approved_by' => null,
+                'approved_at' => null,
+                'rejection_reason' => null,
+                'rejected_by' => null,
+                'rejected_at' => null,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            throw $this->duplicateSourceUrlException();
+        }
 
         return $socialMediaRecord->refresh();
     }
 
-    public function moderate(SocialMediaRecord $socialMediaRecord, User $admin, string $status): SocialMediaRecord
+    public function moderate(
+        SocialMediaRecord $socialMediaRecord,
+        User $admin,
+        string $status,
+        ?string $rejectionReason = null,
+    ): SocialMediaRecord {
+        return DB::transaction(function () use ($socialMediaRecord, $admin, $status, $rejectionReason): SocialMediaRecord {
+            $record = SocialMediaRecord::query()->lockForUpdate()->findOrFail($socialMediaRecord->id);
+
+            return $this->moderateLocked($record, $admin, $status, $rejectionReason);
+        });
+    }
+
+    /**
+     * @param  list<int>  $recordIds
+     * @return array{approved: int, rejected: int, skipped: int}
+     */
+    public function bulkModerate(array $recordIds, User $admin, string $status, ?string $rejectionReason = null): array
     {
-        if ($status === SocialMediaRecord::STATUS_APPROVED) {
-            $this->validateEligibility([
-                'night_market_id' => $socialMediaRecord->night_market_id,
-                'food_id' => $socialMediaRecord->food_id,
-            ], requireMarket: true);
+        return DB::transaction(function () use ($recordIds, $admin, $status, $rejectionReason): array {
+            $records = SocialMediaRecord::query()
+                ->whereIn('id', $recordIds)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
 
-            $socialMediaRecord->update([
-                'status' => SocialMediaRecord::STATUS_APPROVED,
-                'approved_by' => $admin->id,
-                'approved_at' => now(),
-            ]);
-        } else {
-            $socialMediaRecord->update([
-                'status' => SocialMediaRecord::STATUS_REJECTED,
-                'approved_by' => null,
-                'approved_at' => null,
-            ]);
-        }
+            $result = ['approved' => 0, 'rejected' => 0, 'skipped' => 0];
+            foreach ($recordIds as $recordId) {
+                $record = $records->get($recordId);
 
-        return $socialMediaRecord->refresh();
+                if (! $record || $record->status !== SocialMediaRecord::STATUS_PENDING) {
+                    $result['skipped']++;
+
+                    continue;
+                }
+
+                try {
+                    $this->moderateLocked($record, $admin, $status, $rejectionReason);
+                    $result[$status]++;
+                } catch (ValidationException) {
+                    $result['skipped']++;
+                }
+            }
+
+            return $result;
+        });
     }
 
     public function delete(SocialMediaRecord $socialMediaRecord): void
@@ -184,6 +224,24 @@ class SocialMediaDataService
                 ->take(5)
                 ->values(),
         ];
+    }
+
+    /**
+     * @return Collection<int, object{platform: string, record_count: int, total_engagement: int, percentage: int}>
+     */
+    public function adminPlatformInsights(): Collection
+    {
+        $insights = SocialMediaRecord::query()
+            ->selectRaw('platform, COUNT(*) as record_count, COALESCE(SUM(engagement_count), 0) as total_engagement')
+            ->groupBy('platform')
+            ->orderByDesc('record_count')
+            ->orderBy('platform')
+            ->get();
+        $highestCount = max(1, (int) $insights->max('record_count'));
+
+        return $insights->each(function (object $insight) use ($highestCount): void {
+            $insight->percentage = (int) round(((int) $insight->record_count / $highestCount) * 100);
+        });
     }
 
     /**
@@ -310,7 +368,7 @@ class SocialMediaDataService
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    private function recordData(array $data): array
+    private function recordData(array $data, string $canonicalSourceUrl): array
     {
         $extracted = $this->extractFromText($data['content_summary']);
 
@@ -331,7 +389,8 @@ class SocialMediaDataService
             'night_market_id' => $data['night_market_id'] ?? null,
             'food_id' => $data['food_id'] ?? null,
             'platform' => $data['platform'],
-            'original_post_url' => $data['original_post_url'],
+            'original_post_url' => $canonicalSourceUrl,
+            'source_url_fingerprint' => hash('sha256', $canonicalSourceUrl),
             'extracted_title' => $data['extracted_title'] ?? null,
             'content_summary' => $data['content_summary'],
             'external_image_url' => $data['external_image_url'] ?? null,
@@ -414,8 +473,10 @@ class SocialMediaDataService
         });
     }
 
-    /** @param array<string, mixed> $data */
-    private function validatePresentationUrls(array $data): void
+    /** @param array<string, mixed> $data
+     * @return array{url: string, host: string, port: int, platform: string}
+     */
+    private function validatedSourceUrl(array $data): array
     {
         try {
             $source = $this->urlPolicy->inspectSourceUrl($data['original_post_url']);
@@ -430,6 +491,75 @@ class SocialMediaDataService
                 'platform' => 'The selected platform must match the original post URL.',
             ]);
         }
+
+        return $source;
+    }
+
+    private function ensureUniqueSourceUrl(string $canonicalSourceUrl, ?SocialMediaRecord $ignore = null): void
+    {
+        $fingerprint = hash('sha256', $canonicalSourceUrl);
+        $duplicate = SocialMediaRecord::query()
+            ->where('source_url_fingerprint', $fingerprint)
+            ->when($ignore, fn (Builder $query) => $query->where('id', '!=', $ignore->id))
+            ->exists();
+
+        if (! $duplicate) {
+            $legacyRecords = SocialMediaRecord::query()
+                ->select(['id', 'original_post_url'])
+                ->whereNull('source_url_fingerprint')
+                ->when($ignore, fn (Builder $query) => $query->where('id', '!=', $ignore->id))
+                ->orderBy('id')
+                ->get();
+
+            $duplicate = $legacyRecords->contains(function (SocialMediaRecord $record) use ($canonicalSourceUrl): bool {
+                return $this->urlPolicy->safeStoredSourceUrl($record->original_post_url) === $canonicalSourceUrl;
+            });
+        }
+
+        if ($duplicate) {
+            throw $this->duplicateSourceUrlException();
+        }
+    }
+
+    private function duplicateSourceUrlException(): ValidationException
+    {
+        return ValidationException::withMessages([
+            'original_post_url' => 'This social media post URL has already been recorded.',
+        ]);
+    }
+
+    private function moderateLocked(
+        SocialMediaRecord $socialMediaRecord,
+        User $admin,
+        string $status,
+        ?string $rejectionReason,
+    ): SocialMediaRecord {
+        if ($status === SocialMediaRecord::STATUS_APPROVED) {
+            $this->validateEligibility([
+                'night_market_id' => $socialMediaRecord->night_market_id,
+                'food_id' => $socialMediaRecord->food_id,
+            ], requireMarket: true);
+
+            $socialMediaRecord->update([
+                'status' => SocialMediaRecord::STATUS_APPROVED,
+                'approved_by' => $admin->id,
+                'approved_at' => now(),
+                'rejection_reason' => null,
+                'rejected_by' => null,
+                'rejected_at' => null,
+            ]);
+        } else {
+            $socialMediaRecord->update([
+                'status' => SocialMediaRecord::STATUS_REJECTED,
+                'approved_by' => null,
+                'approved_at' => null,
+                'rejection_reason' => $rejectionReason,
+                'rejected_by' => $admin->id,
+                'rejected_at' => now(),
+            ]);
+        }
+
+        return $socialMediaRecord->refresh();
     }
 
     private function literalLikePattern(string $value): string

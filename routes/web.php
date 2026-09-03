@@ -297,6 +297,8 @@ Route::middleware('auth')->group(function () {
             ->name('social-media-records.create');
         Route::post('/social-media-records', [SocialMediaRecordController::class, 'store'])
             ->name('social-media-records.store');
+        Route::patch('/social-media-records/bulk-moderate', [SocialMediaRecordController::class, 'bulkModerate'])
+            ->name('social-media-records.bulk-moderate');
         Route::get('/social-media-records/{socialMediaRecord}/edit', [SocialMediaRecordController::class, 'edit'])
             ->whereNumber('socialMediaRecord')->name('social-media-records.edit');
         Route::patch('/social-media-records/{socialMediaRecord}', [SocialMediaRecordController::class, 'update'])

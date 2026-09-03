@@ -66,6 +66,21 @@ class NightMarket extends Model
                     ->where('status', Food::STATUS_ACTIVE)));
     }
 
+    public function scopeWithPublicReviewSummary(Builder $query): Builder
+    {
+        return $query
+            ->withCount([
+                'reviews as public_reviews_count' => fn (Builder $reviewQuery) => $reviewQuery
+                    ->publiclyVisible()
+                    ->whereNull('food_id'),
+            ])
+            ->withAvg([
+                'reviews as public_reviews_avg_rating' => fn (Builder $reviewQuery) => $reviewQuery
+                    ->publiclyVisible()
+                    ->whereNull('food_id'),
+            ], 'rating');
+    }
+
     public static function isOwnedImagePath(?string $path): bool
     {
         if ($path === null) {

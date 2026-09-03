@@ -277,6 +277,7 @@ class AdminMarketCatalogManagementTest extends TestCase
             'name' => ' Updated Food ',
             'description' => 'Updated.',
             'category' => ' Local Snack ',
+            'new_category' => ' Local Snack ',
             'is_must_try' => 'on',
             'status' => Food::STATUS_INACTIVE,
         ])->assertRedirect(route('admin.foods.show', $food));

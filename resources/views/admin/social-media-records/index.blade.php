@@ -24,6 +24,35 @@
         </div>
     @endif
 
+    <section class="card market-card mb-4" aria-labelledby="platform-insights-heading">
+        <div class="card-body p-4">
+            <h2 id="platform-insights-heading" class="h4 text-market mb-3">Platform Insights</h2>
+            @if ($platformInsights->isEmpty())
+                <p class="text-secondary mb-0">No social media records are available for platform insights yet.</p>
+            @else
+                <div class="row g-3">
+                    @foreach ($platformInsights as $insight)
+                        <div class="col-12 col-md-6 col-xl-4">
+                            <div class="border rounded-3 p-3 h-100">
+                                <div class="d-flex justify-content-between gap-2 mb-2">
+                                    <strong>{{ $insight->platform }}</strong>
+                                    <span class="text-secondary small">{{ number_format($insight->record_count) }} records</span>
+                                </div>
+                                <div class="progress" role="progressbar" aria-label="{{ $insight->platform }} record share"
+                                    aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $insight->percentage }}">
+                                    <div class="progress-bar bg-market" style="width: {{ $insight->percentage }}%"></div>
+                                </div>
+                                <div class="small text-secondary mt-2">
+                                    {{ number_format($insight->total_engagement) }} total engagement
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+    </section>
+
     <div class="card market-card mb-4">
         <div class="card-body p-4">
             <form method="GET" action="{{ route('admin.social-media-records.index') }}">
@@ -95,11 +124,34 @@
             No social media records found. Add a record or adjust the current filters.
         </div>
     @else
+        <form id="bulk-moderation-form" method="POST" action="{{ route('admin.social-media-records.bulk-moderate') }}"
+            class="card market-card mb-3">
+            @csrf
+            @method('PATCH')
+            <div class="card-body p-3 d-flex flex-column flex-lg-row align-items-lg-end gap-3">
+                <div class="form-check mb-lg-2">
+                    <input class="form-check-input" type="checkbox" id="select-pending-records">
+                    <label class="form-check-label" for="select-pending-records">Select visible pending records</label>
+                </div>
+                <div class="flex-grow-1">
+                    <label for="bulk-rejection-reason" class="form-label mb-1">Rejection reason (required only when rejecting)</label>
+                    <input type="text" id="bulk-rejection-reason" name="rejection_reason" maxlength="500" class="form-control"
+                        value="{{ old('rejection_reason') }}" placeholder="Explain why the selected records are unsuitable">
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="submit" name="action" value="approved" class="btn btn-success"
+                        data-bulk-confirm="Approve the selected pending records for public viewing?">Approve Selected</button>
+                    <button type="submit" name="action" value="rejected" class="btn btn-outline-danger"
+                        data-bulk-confirm="Reject the selected pending records?">Reject Selected</button>
+                </div>
+            </div>
+        </form>
         <div class="card market-card">
             <div class="table-responsive">
                 <table class="table table-striped table-hover align-middle mb-0">
                     <thead>
                         <tr>
+                            <th scope="col"><span class="visually-hidden">Select record</span></th>
                             <th>Night Market</th>
                             <th>Related Food</th>
                             <th>Platform</th>
@@ -120,6 +172,13 @@
                     <tbody>
                         @foreach ($records as $record)
                             <tr>
+                                <td>
+                                    @if ($record->status === \App\Models\SocialMediaRecord::STATUS_PENDING)
+                                        <input class="form-check-input pending-record-checkbox" type="checkbox"
+                                            form="bulk-moderation-form" name="record_ids[]" value="{{ $record->id }}"
+                                            aria-label="Select social media record {{ $record->id }}">
+                                    @endif
+                                </td>
                                 <td>{{ $record->nightMarket?->name ?? 'Unavailable market' }}</td>
                                 <td>{{ $record->food?->name ?? 'None' }}</td>
                                 <td><span class="badge text-bg-warning">{{ $record->platform }}</span></td>
@@ -128,6 +187,17 @@
                                     <span class="badge {{ $record->status === \App\Models\SocialMediaRecord::STATUS_APPROVED ? 'text-bg-success' : ($record->status === \App\Models\SocialMediaRecord::STATUS_REJECTED ? 'text-bg-danger' : 'text-bg-secondary') }}">
                                         {{ ucfirst($record->status) }}
                                     </span>
+                                    @if ($record->status === \App\Models\SocialMediaRecord::STATUS_REJECTED)
+                                        <div class="small text-secondary mt-1">
+                                            <strong>Reason:</strong> {{ $record->rejection_reason ?? 'Not recorded' }}
+                                            @if ($record->rejectedBy || $record->rejected_at)
+                                                <br>By {{ $record->rejectedBy?->name ?? 'Former administrator' }}
+                                                @if ($record->rejected_at)
+                                                    on {{ $record->rejected_at->format('d M Y H:i') }}
+                                                @endif
+                                            @endif
+                                        </div>
+                                    @endif
                                 </td>
                                 <td>
                                     @if ($record->safe_source_url)
@@ -194,14 +264,20 @@
                                             </form>
                                         @endif
                                         @if ($record->status !== \App\Models\SocialMediaRecord::STATUS_REJECTED)
-                                            <form method="POST"
-                                                action="{{ route('admin.social-media-records.moderate', $record) }}"
-                                                onsubmit="return confirm('Reject this social media record?');">
-                                                @csrf
-                                                @method('PATCH')
-                                                <input type="hidden" name="status" value="rejected">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
-                                            </form>
+                                            <details>
+                                                <summary class="btn btn-sm btn-outline-danger">Reject</summary>
+                                                <form method="POST" class="mt-2" action="{{ route('admin.social-media-records.moderate', $record) }}"
+                                                    onsubmit="return confirm('Reject this social media record?');">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <input type="hidden" name="status" value="rejected">
+                                                    <label class="visually-hidden" for="rejection-reason-{{ $record->id }}">Rejection reason</label>
+                                                    <textarea id="rejection-reason-{{ $record->id }}" name="rejection_reason" rows="2"
+                                                        minlength="3" maxlength="500" required class="form-control form-control-sm mb-2"
+                                                        placeholder="Rejection reason"></textarea>
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger">Confirm rejection</button>
+                                                </form>
+                                            </details>
                                         @endif
                                     </div>
                                 </td>
@@ -223,3 +299,41 @@
         @endif
     @endif
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const toggle = document.getElementById('select-pending-records');
+            const form = document.getElementById('bulk-moderation-form');
+            const reason = document.getElementById('bulk-rejection-reason');
+
+            toggle?.addEventListener('change', () => {
+                document.querySelectorAll('.pending-record-checkbox').forEach((checkbox) => {
+                    checkbox.checked = toggle.checked;
+                });
+            });
+
+            form?.addEventListener('submit', (event) => {
+                const action = event.submitter?.value;
+                const selected = document.querySelectorAll('.pending-record-checkbox:checked').length;
+
+                if (selected === 0) {
+                    event.preventDefault();
+                    window.alert('Select at least one pending record first.');
+                    return;
+                }
+
+                if (action === 'rejected' && reason.value.trim().length < 3) {
+                    event.preventDefault();
+                    reason.focus();
+                    window.alert('Enter a rejection reason with at least 3 characters.');
+                    return;
+                }
+
+                if (!window.confirm(event.submitter.dataset.bulkConfirm)) {
+                    event.preventDefault();
+                }
+            });
+        });
+    </script>
+@endpush

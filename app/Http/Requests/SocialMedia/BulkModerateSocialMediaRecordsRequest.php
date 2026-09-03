@@ -7,7 +7,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class ModerateSocialMediaRecordRequest extends FormRequest
+class BulkModerateSocialMediaRecordsRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -20,15 +20,14 @@ class ModerateSocialMediaRecordRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'status' => [
-                'required',
-                Rule::in([
-                    SocialMediaRecord::STATUS_APPROVED,
-                    SocialMediaRecord::STATUS_REJECTED,
-                ]),
-            ],
+            'record_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'record_ids.*' => ['required', 'integer', 'distinct', 'exists:social_media_records,id'],
+            'action' => ['required', Rule::in([
+                SocialMediaRecord::STATUS_APPROVED,
+                SocialMediaRecord::STATUS_REJECTED,
+            ])],
             'rejection_reason' => [
-                'exclude_unless:status,'.SocialMediaRecord::STATUS_REJECTED,
+                'exclude_unless:action,'.SocialMediaRecord::STATUS_REJECTED,
                 'required',
                 'string',
                 'min:3',

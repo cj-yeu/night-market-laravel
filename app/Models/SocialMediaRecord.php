@@ -48,6 +48,7 @@ class SocialMediaRecord extends Model
         'food_id',
         'platform',
         'original_post_url',
+        'source_url_fingerprint',
         'extracted_title',
         'content_summary',
         'external_image_url',
@@ -64,6 +65,13 @@ class SocialMediaRecord extends Model
         'extracted_food_mentions',
         'approved_by',
         'approved_at',
+        'rejection_reason',
+        'rejected_by',
+        'rejected_at',
+    ];
+
+    protected $hidden = [
+        'source_url_fingerprint',
     ];
 
     public function scopePubliclyVisible(Builder $query): Builder
@@ -94,6 +102,7 @@ class SocialMediaRecord extends Model
             'extracted_market_mentions' => 'array',
             'extracted_food_mentions' => 'array',
             'approved_at' => 'datetime',
+            'rejected_at' => 'datetime',
         ];
     }
 
@@ -110,5 +119,10 @@ class SocialMediaRecord extends Model
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
     }
 }

@@ -45,11 +45,12 @@
                                 @error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror
                             </div>
 
-                            <div class="mb-3">
-                                <label for="category" class="form-label">Category</label>
-                                <input id="category" name="category" value="{{ old('category', $food->category) }}" class="form-control @error('category') is-invalid @enderror">
-                                @error('category')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                            </div>
+                            @include('admin.partials.managed-category-field', [
+                                'categories' => $categories,
+                                'currentCategory' => $food->category,
+                                'categoryType' => 'food',
+                                'categoryLabel' => 'Food Category',
+                            ])
 
                             <div class="mb-3">
                                 <label for="description" class="form-label">Description</label>

@@ -2,12 +2,15 @@
 
 namespace App\Http\Requests\StallFood;
 
+use App\Models\CatalogCategory;
 use App\Models\NightMarket;
 use App\Models\Stall;
+use App\Services\CatalogCategoryService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreStallRequest extends FormRequest
 {
@@ -39,6 +42,7 @@ class StoreStallRequest extends FormRequest
             ],
             'description' => ['nullable', 'string', 'max:5000'],
             'category' => ['nullable', 'string', 'max:100'],
+            'new_category' => ['nullable', 'string', 'max:100', 'not_regex:/[\\x00-\\x1F\\x7F]/', 'not_regex:/<[^>]*>/'],
             'halal_status' => ['required', Rule::in(Stall::HALAL_STATUSES)],
             'halal_evidence_url' => [
                 'nullable',
@@ -70,12 +74,29 @@ class StoreStallRequest extends FormRequest
         ];
     }
 
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            if ($this->filled('new_category')) {
+                return;
+            }
+
+            if (! app(CatalogCategoryService::class)->isPermittedSelection(
+                CatalogCategory::TYPE_STALL,
+                $this->input('category'),
+            )) {
+                $validator->errors()->add('category', 'Choose an active stall category or add a new one.');
+            }
+        });
+    }
+
     protected function prepareForValidation(): void
     {
         $this->merge([
             'name' => str((string) $this->name)->squish()->value(),
             'description' => $this->filled('description') ? trim((string) $this->description) : null,
             'category' => $this->filled('category') ? str($this->category)->squish()->value() : null,
+            'new_category' => $this->filled('new_category') ? (string) $this->new_category : null,
             'halal_status' => $this->filled('halal_status')
                 ? trim((string) $this->halal_status)
                 : Stall::HALAL_UNKNOWN,

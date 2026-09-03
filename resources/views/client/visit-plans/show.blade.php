@@ -32,7 +32,7 @@
         <div class="col-12 col-lg-7">
             <div class="card market-card mb-4">
                 <div class="card-body p-4">
-                    <h2 class="h4 fw-bold text-market">Visit Details</h2>
+                    <h2 class="h4 fw-bold text-market">Plan Summary</h2>
                     <dl class="row mb-0">
                         <dt class="col-sm-4">Visit Date</dt>
                         <dd class="col-sm-8">{{ $visitPlan->visit_date->format('l, d M Y') }}</dd>
@@ -69,7 +69,8 @@
                                     </div>
                                     @if ($canChangeItems)
                                         <form method="POST"
-                                            action="{{ route('client.visit-plans.items.destroy', [$visitPlan, $item]) }}">
+                                            action="{{ route('client.visit-plans.items.destroy', [$visitPlan, $item]) }}"
+                                            onsubmit="return confirm('Remove this stall from your visit plan?');">
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
@@ -109,7 +110,8 @@
                                     </div>
                                     @if ($canChangeItems)
                                         <form method="POST"
-                                            action="{{ route('client.visit-plans.items.destroy', [$visitPlan, $item]) }}">
+                                            action="{{ route('client.visit-plans.items.destroy', [$visitPlan, $item]) }}"
+                                            onsubmit="return confirm('Remove this food from your visit plan?');">
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
@@ -150,17 +152,19 @@
                     <p class="small text-secondary">Add this visit to your own Google Calendar. No invitations will be sent.</p>
 
                     @php($calendarEvent = $calendarIntegration['event'])
+                    @php($calendarState = $calendarIntegration['state'])
+                    <p class="mb-3"><span class="badge {{ $calendarState === 'Synced' ? 'text-bg-success' : ($calendarState === 'Update Needed' ? 'text-bg-warning' : ($calendarState === 'Update Failed' || $calendarState === 'Reconnect Required' ? 'text-bg-danger' : 'text-bg-secondary')) }}">{{ $calendarState }}</span></p>
                     @if ($calendarEvent)
-                        <div class="alert alert-success mb-3" role="status">
+                        <div class="alert {{ $calendarState === 'Synced' ? 'alert-success' : 'alert-warning' }} mb-3" role="status">
                             <i class="bi bi-calendar-check me-1" aria-hidden="true"></i>
-                            Added to Google Calendar
+                            @if ($calendarState === 'Synced')
+                                Synced to Google Calendar. Editing this plan updates the existing event.
+                            @elseif ($calendarState === 'Reconnect Required')
+                                Reconnect Google Calendar before retrying this event update.
+                            @else
+                                Your plan is saved here. Retry Google Calendar to refresh the existing event.
+                            @endif
                         </div>
-
-                        @if ($calendarIntegration['needs_sync'])
-                            <div class="alert alert-warning small" role="status">
-                                Your visit plan has changed. Update the Google Calendar event.
-                            </div>
-                        @endif
 
                         <div class="d-grid gap-2">
                             @if ($calendarEvent->google_event_url)
@@ -170,12 +174,16 @@
                                 </a>
                             @endif
 
-                            @if (! $planIsPast)
+                            @if (! $planIsPast && $calendarState === 'Reconnect Required')
+                                <a href="{{ route('client.visit-plans.google-calendar.connect', $visitPlan) }}" class="btn btn-market w-100">
+                                    <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Reconnect Google Calendar
+                                </a>
+                            @elseif (! $planIsPast)
                                 <form method="POST" action="{{ route('client.visit-plans.google-calendar.sync', $visitPlan) }}"
                                     data-calendar-submit>
                                     @csrf
                                     <button type="submit" class="btn btn-market w-100">
-                                        <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Update Calendar Event
+                                        <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>{{ $calendarState === 'Update Failed' ? 'Retry Calendar Update' : 'Update Calendar Event' }}
                                     </button>
                                 </form>
                                 <form method="POST" action="{{ route('client.visit-plans.google-calendar.destroy', $visitPlan) }}"
@@ -210,34 +218,55 @@
                     @if ($planIsPast)
                         <div class="alert alert-secondary mb-0">Past visit plans cannot change items. You can still update the title or notes.</div>
                     @elseif ($eligibleStalls->isEmpty() && $eligibleFoods->isEmpty())
-                        <div class="alert alert-secondary mb-0">No active stalls or foods are available for this market.</div>
+                        <div class="alert alert-secondary mb-0">No active stalls or foods are available for this market yet. Browse the market later or update your plan when new items are published.</div>
                     @else
-                        <form method="POST" action="{{ route('client.visit-plans.items.store', $visitPlan) }}" novalidate>
+                        <form method="POST" action="{{ route('client.visit-plans.items.store', $visitPlan) }}" novalidate
+                            data-stall-available="{{ $eligibleStalls->isNotEmpty() ? 'true' : 'false' }}"
+                            data-food-available="{{ $eligibleFoods->isNotEmpty() ? 'true' : 'false' }}">
                             @csrf
+                            <p class="small text-secondary">Choose either a stall or a food. You can add more items later; duplicates are prevented.</p>
                             <div class="mb-3">
                                 <label for="item_type" class="form-label">Item Type</label>
                                 <select id="item_type" name="item_type"
                                     class="form-select @error('item_type') is-invalid @enderror" required>
-                                    <option value="stall">Stall</option>
-                                    <option value="food">Food</option>
+                                    <option value="stall" @selected(old('item_type', 'stall') === 'stall')>Add a Stall</option>
+                                    <option value="food" @selected(old('item_type') === 'food')>Add a Food</option>
                                 </select>
                                 @error('item_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
                             </div>
-                            <div class="mb-3">
-                                <label for="item_id" class="form-label">Stall or Food</label>
-                                <select id="item_id" name="item_id"
-                                    class="form-select @error('item_id') is-invalid @enderror" required>
-                                    <option value="">Select an item</option>
-                                    @foreach ($eligibleStalls as $stall)
-                                        <option value="{{ $stall->id }}" data-item-type="stall">{{ $stall->name }}</option>
-                                    @endforeach
-                                    @foreach ($eligibleFoods as $food)
-                                        <option value="{{ $food->id }}" data-item-type="food">
-                                            {{ $food->name }} &mdash; {{ $food->stall->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('item_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            <div id="stall-picker" class="mb-3">
+                                <label for="stall_id" class="form-label">Choose a Stall</label>
+                                @if ($eligibleStalls->isEmpty())
+                                    <p class="text-secondary mb-0">All eligible stalls have already been added.</p>
+                                @else
+                                    <select id="stall_id" name="stall_id"
+                                        class="form-select @error('stall_id') is-invalid @enderror" required>
+                                        <option value="">Choose a Stall</option>
+                                        @foreach ($eligibleStalls as $stall)
+                                            <option value="{{ $stall->id }}" @selected(old('item_type', 'stall') === 'stall' && (string) old('stall_id') === (string) $stall->id)>{{ $stall->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('stall_id')<div class="invalid-feedback" data-item-error="stall">{{ $message }}</div>@enderror
+                                @endif
+                            </div>
+                            <div id="food-picker" class="mb-3">
+                                <label for="food_id" class="form-label">Choose a Food</label>
+                                @if ($eligibleFoods->isEmpty())
+                                    <p class="text-secondary mb-0">All eligible foods have already been added.</p>
+                                @else
+                                    <select id="food_id" name="food_id"
+                                        class="form-select @error('food_id') is-invalid @enderror" required>
+                                        <option value="">Choose a Food</option>
+                                        @foreach ($eligibleFoods->groupBy(fn ($food) => $food->stall->name) as $stallName => $foods)
+                                            <optgroup label="{{ $stallName }}">
+                                                @foreach ($foods as $food)
+                                                    <option value="{{ $food->id }}" @selected(old('item_type') === 'food' && (string) old('food_id') === (string) $food->id)>{{ $food->name }}</option>
+                                                @endforeach
+                                            </optgroup>
+                                        @endforeach
+                                    </select>
+                                    @error('food_id')<div class="invalid-feedback" data-item-error="food">{{ $message }}</div>@enderror
+                                @endif
                             </div>
                             <div class="mb-3">
                                 <label for="item_notes" class="form-label">Notes <span class="text-secondary">(optional)</span></label>
@@ -245,7 +274,7 @@
                                     class="form-control @error('notes') is-invalid @enderror">{{ old('notes') }}</textarea>
                                 @error('notes')<div class="invalid-feedback">{{ $message }}</div>@enderror
                             </div>
-                            <button type="submit" class="btn btn-market">Add to Plan</button>
+                            <button id="add-plan-item-button" type="submit" class="btn btn-market">Add to Plan</button>
                         </form>
                     @endif
                 </div>
@@ -258,16 +287,37 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const typeSelect = document.getElementById('item_type');
-            const itemSelect = document.getElementById('item_id');
-            if (typeSelect && itemSelect) {
-                const filterItems = () => {
-                    itemSelect.value = '';
-                    itemSelect.querySelectorAll('[data-item-type]').forEach((option) => {
-                        option.hidden = option.dataset.itemType !== typeSelect.value;
-                    });
+            const stallPicker = document.getElementById('stall-picker');
+            const foodPicker = document.getElementById('food-picker');
+            const stallSelect = document.getElementById('stall_id');
+            const foodSelect = document.getElementById('food_id');
+            const itemForm = typeSelect?.closest('form');
+            const submitButton = document.getElementById('add-plan-item-button');
+            if (typeSelect && stallPicker && foodPicker) {
+                const updateItemPicker = (clearSelection = false) => {
+                    const isStall = typeSelect.value === 'stall';
+                    stallPicker.hidden = !isStall;
+                    foodPicker.hidden = isStall;
+                    if (stallSelect) stallSelect.disabled = !isStall;
+                    if (foodSelect) foodSelect.disabled = isStall;
+                    if (submitButton) {
+                        const hasAvailableItem = isStall
+                            ? itemForm?.dataset.stallAvailable === 'true'
+                            : itemForm?.dataset.foodAvailable === 'true';
+                        submitButton.disabled = !hasAvailableItem;
+                        submitButton.setAttribute('aria-disabled', hasAvailableItem ? 'false' : 'true');
+                    }
+
+                    if (clearSelection) {
+                        if (stallSelect) stallSelect.value = '';
+                        if (foodSelect) foodSelect.value = '';
+                        document.querySelectorAll('[data-item-error]').forEach((error) => error.remove());
+                        [stallSelect, foodSelect].forEach((select) => select?.classList.remove('is-invalid'));
+                    }
                 };
-                typeSelect.addEventListener('change', filterItems);
-                filterItems();
+
+                typeSelect.addEventListener('change', () => updateItemPicker(true));
+                updateItemPicker(false);
             }
 
             document.querySelectorAll('[data-calendar-submit]').forEach((form) => {

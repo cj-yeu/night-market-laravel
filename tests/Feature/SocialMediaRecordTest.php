@@ -9,6 +9,7 @@ use App\Models\Stall;
 use App\Models\User;
 use App\Services\SocialMediaDataService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class SocialMediaRecordTest extends TestCase
@@ -131,6 +132,7 @@ class SocialMediaRecordTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('admin.social-media-records.store'), $this->validPayload([
                 'content_summary' => 'Plain public text without any recognizable tags or names.',
+                'original_post_url' => 'https://www.instagram.com/p/no-match-post',
             ]))
             ->assertRedirect(route('admin.social-media-records.index'));
 
@@ -294,10 +296,13 @@ class SocialMediaRecordTest extends TestCase
         $this->actingAs($this->admin)
             ->patch(route('admin.social-media-records.moderate', $rejectedRecord), [
                 'status' => SocialMediaRecord::STATUS_REJECTED,
+                'rejection_reason' => 'The post does not contain enough useful catalog information.',
             ])
             ->assertRedirect(route('admin.social-media-records.index'));
 
         $this->assertSame(SocialMediaRecord::STATUS_REJECTED, $rejectedRecord->refresh()->status);
+        $this->assertSame($this->admin->id, $rejectedRecord->rejected_by);
+        $this->assertNotNull($rejectedRecord->rejected_at);
     }
 
     public function test_relationless_record_cannot_be_approved(): void
@@ -388,6 +393,10 @@ class SocialMediaRecordTest extends TestCase
         $this->actingAs($client)->delete(route('admin.social-media-records.destroy', $record))->assertForbidden();
         $this->actingAs($client)->patch(route('admin.social-media-records.moderate', $record), [
             'status' => SocialMediaRecord::STATUS_APPROVED,
+        ])->assertForbidden();
+        $this->actingAs($client)->patch(route('admin.social-media-records.bulk-moderate'), [
+            'record_ids' => [$record->id],
+            'action' => SocialMediaRecord::STATUS_APPROVED,
         ])->assertForbidden();
     }
 
@@ -524,6 +533,127 @@ class SocialMediaRecordTest extends TestCase
             ->assertOk()
             ->assertSee('Social Media Highlights')
             ->assertSee(route('admin.dashboard'));
+    }
+
+    public function test_canonical_source_url_blocks_tracking_variants_without_a_network_request(): void
+    {
+        Http::fake();
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.social-media-records.store'), $this->validPayload([
+                'original_post_url' => 'https://instagram.com/p/example-post?utm_source=campaign&b=2&a=1#ignored',
+            ]))
+            ->assertRedirect(route('admin.social-media-records.index'));
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.social-media-records.store'), $this->validPayload([
+                'original_post_url' => 'https://www.instagram.com/p/example-post?fbclid=tracking&a=1&b=2',
+            ]))
+            ->assertSessionHasErrors('original_post_url');
+
+        $record = SocialMediaRecord::latest('id')->firstOrFail();
+        $this->assertSame('https://www.instagram.com/p/example-post?a=1&b=2', $record->original_post_url);
+        $this->assertSame(hash('sha256', $record->original_post_url), $record->source_url_fingerprint);
+        Http::assertNothingSent();
+    }
+
+    public function test_legacy_unfingerprinted_source_url_is_still_guarded_against_duplicates(): void
+    {
+        SocialMediaRecord::factory()->create([
+            'original_post_url' => 'https://instagram.com/p/legacy-post?utm_source=old-link',
+            'source_url_fingerprint' => null,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.social-media-records.store'), $this->validPayload([
+                'original_post_url' => 'https://www.instagram.com/p/legacy-post',
+            ]))
+            ->assertSessionHasErrors([
+                'original_post_url' => 'This social media post URL has already been recorded.',
+            ]);
+    }
+
+    public function test_rejection_reason_actor_and_time_are_recorded_and_rendered_for_administrators(): void
+    {
+        $record = SocialMediaRecord::factory()->create(['night_market_id' => $this->market->id]);
+
+        $this->actingAs($this->admin)
+            ->patch(route('admin.social-media-records.moderate', $record), [
+                'status' => SocialMediaRecord::STATUS_REJECTED,
+                'rejection_reason' => '<strong>Missing enough context</strong>',
+            ])
+            ->assertRedirect(route('admin.social-media-records.index'));
+
+        $record->refresh();
+        $this->assertSame('Missing enough context', $record->rejection_reason);
+        $this->assertSame($this->admin->id, $record->rejected_by);
+        $this->assertNotNull($record->rejected_at);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.social-media-records.index'))
+            ->assertOk()
+            ->assertSee('Missing enough context')
+            ->assertSee($this->admin->name);
+    }
+
+    public function test_bulk_moderation_approves_only_eligible_pending_records_and_records_rejections(): void
+    {
+        $approvable = SocialMediaRecord::factory()->create([
+            'night_market_id' => $this->market->id,
+            'food_id' => $this->food->id,
+        ]);
+        $relationless = SocialMediaRecord::factory()->create([
+            'night_market_id' => null,
+            'food_id' => null,
+        ]);
+        $alreadyApproved = SocialMediaRecord::factory()->approved()->create(['night_market_id' => $this->market->id]);
+        $rejected = SocialMediaRecord::factory()->create(['night_market_id' => $this->market->id]);
+
+        $this->actingAs($this->admin)
+            ->patch(route('admin.social-media-records.bulk-moderate'), [
+                'record_ids' => [$approvable->id, $relationless->id, $alreadyApproved->id],
+                'action' => SocialMediaRecord::STATUS_APPROVED,
+            ])
+            ->assertRedirect(route('admin.social-media-records.index'))
+            ->assertSessionHas('status', 'Bulk moderation complete: 1 approved, 0 rejected, 2 skipped.');
+
+        $this->assertSame(SocialMediaRecord::STATUS_APPROVED, $approvable->refresh()->status);
+        $this->assertSame(SocialMediaRecord::STATUS_PENDING, $relationless->refresh()->status);
+
+        $this->actingAs($this->admin)
+            ->patch(route('admin.social-media-records.bulk-moderate'), [
+                'record_ids' => [$rejected->id],
+                'action' => SocialMediaRecord::STATUS_REJECTED,
+                'rejection_reason' => 'The duplicate post adds no new information.',
+            ])
+            ->assertRedirect(route('admin.social-media-records.index'));
+
+        $rejected->refresh();
+        $this->assertSame(SocialMediaRecord::STATUS_REJECTED, $rejected->status);
+        $this->assertSame($this->admin->id, $rejected->rejected_by);
+        $this->assertSame('The duplicate post adds no new information.', $rejected->rejection_reason);
+    }
+
+    public function test_administrator_platform_insights_show_record_and_engagement_totals(): void
+    {
+        SocialMediaRecord::factory()->create([
+            'night_market_id' => $this->market->id,
+            'platform' => 'Instagram',
+            'engagement_count' => 42,
+        ]);
+        SocialMediaRecord::factory()->create([
+            'night_market_id' => $this->market->id,
+            'platform' => 'Instagram',
+            'engagement_count' => 8,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.social-media-records.index'))
+            ->assertOk()
+            ->assertSee('Platform Insights')
+            ->assertSee('Instagram')
+            ->assertSee('2 records')
+            ->assertSee('50 total engagement');
     }
 
     /**

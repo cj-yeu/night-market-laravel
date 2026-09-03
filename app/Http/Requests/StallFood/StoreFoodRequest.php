@@ -2,13 +2,16 @@
 
 namespace App\Http\Requests\StallFood;
 
+use App\Models\CatalogCategory;
 use App\Models\Food;
 use App\Models\NightMarket;
 use App\Models\Stall;
+use App\Services\CatalogCategoryService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreFoodRequest extends FormRequest
 {
@@ -42,6 +45,7 @@ class StoreFoodRequest extends FormRequest
             ],
             'description' => ['nullable', 'string', 'max:5000'],
             'category' => ['nullable', 'string', 'max:100'],
+            'new_category' => ['nullable', 'string', 'max:100', 'not_regex:/[\\x00-\\x1F\\x7F]/', 'not_regex:/<[^>]*>/'],
             'price_min' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'price_max' => ['nullable', 'numeric', 'min:0', 'decimal:0,2', 'gte:price_min'],
             'price_display' => ['nullable', 'string', 'max:255'],
@@ -61,12 +65,29 @@ class StoreFoodRequest extends FormRequest
         ];
     }
 
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            if ($this->filled('new_category')) {
+                return;
+            }
+
+            if (! app(CatalogCategoryService::class)->isPermittedSelection(
+                CatalogCategory::TYPE_FOOD,
+                $this->input('category'),
+            )) {
+                $validator->errors()->add('category', 'Choose an active food category or add a new one.');
+            }
+        });
+    }
+
     protected function prepareForValidation(): void
     {
         $this->merge([
             'name' => trim((string) $this->name),
             'description' => $this->filled('description') ? trim((string) $this->description) : null,
             'category' => $this->filled('category') ? trim((string) $this->category) : null,
+            'new_category' => $this->filled('new_category') ? (string) $this->new_category : null,
             'price_min' => $this->filled('price_min') ? trim((string) $this->price_min) : null,
             'price_max' => $this->filled('price_max') ? trim((string) $this->price_max) : null,
             'price_display' => $this->filled('price_display') ? trim((string) $this->price_display) : null,

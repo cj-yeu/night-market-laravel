@@ -2,13 +2,16 @@
 
 namespace App\Http\Requests\StallFood;
 
+use App\Models\CatalogCategory;
 use App\Models\Food;
 use App\Models\NightMarket;
 use App\Models\Stall;
+use App\Services\CatalogCategoryService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdateFoodRequest extends FormRequest
 {
@@ -46,6 +49,7 @@ class UpdateFoodRequest extends FormRequest
             ],
             'description' => ['nullable', 'string', 'max:5000'],
             'category' => ['nullable', 'string', 'max:100'],
+            'new_category' => ['nullable', 'string', 'max:100', 'not_regex:/[\\x00-\\x1F\\x7F]/', 'not_regex:/<[^>]*>/'],
             'price_min' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'price_max' => ['nullable', 'numeric', 'min:0', 'decimal:0,2', 'gte:price_min'],
             'price_display' => ['nullable', 'string', 'max:255'],
@@ -64,6 +68,26 @@ class UpdateFoodRequest extends FormRequest
         ];
     }
 
+    public function withValidator(Validator $validator): void
+    {
+        /** @var Food $food */
+        $food = $this->route('food');
+
+        $validator->after(function (Validator $validator) use ($food): void {
+            if ($this->filled('new_category')) {
+                return;
+            }
+
+            if (! app(CatalogCategoryService::class)->isPermittedSelection(
+                CatalogCategory::TYPE_FOOD,
+                $this->input('category'),
+                $food->category,
+            )) {
+                $validator->errors()->add('category', 'Choose an active food category or add a new one.');
+            }
+        });
+    }
+
     protected function prepareForValidation(): void
     {
         /** @var Food $food */
@@ -73,6 +97,7 @@ class UpdateFoodRequest extends FormRequest
             'name' => str((string) $this->name)->squish()->value(),
             'description' => $this->filled('description') ? trim((string) $this->description) : null,
             'category' => $this->filled('category') ? str($this->category)->squish()->value() : null,
+            'new_category' => $this->filled('new_category') ? (string) $this->new_category : null,
             'price_min' => $this->has('price_min')
                 ? ($this->filled('price_min') ? trim((string) $this->price_min) : null)
                 : $food->price_min,
