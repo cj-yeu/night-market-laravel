@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Home | Night Market Selangor')
+@section('title', 'Home | '.config('app.name'))
 
 @section('content')
     <section class="row align-items-center g-4 py-lg-4" aria-labelledby="welcome-heading">

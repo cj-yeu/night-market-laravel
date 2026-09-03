@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Create Automation Import Draft | Night Market Selangor')
+@section('title', 'Create Automation Import Draft | '.config('app.name'))
 
 @section('content')
     <div class="row justify-content-center">

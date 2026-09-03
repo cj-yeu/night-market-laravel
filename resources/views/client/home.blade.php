@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Client Home | Night Market Selangor')
+@section('title', 'Client Home | '.config('app.name'))
 
 @section('content')
     <section class="card market-card mb-4">

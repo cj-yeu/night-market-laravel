@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Add Stall | Night Market Selangor')
+@section('title', 'Add Stall | '.config('app.name'))
 
 @section('content')
     <div class="row justify-content-center">

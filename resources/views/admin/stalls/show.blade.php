@@ -8,6 +8,9 @@
         <div class="d-flex gap-2 align-self-start">
             <a href="{{ route('admin.stalls.index') }}" class="btn btn-outline-secondary">Back</a>
             <a href="{{ route('admin.stalls.edit', $stall) }}" class="btn btn-market">Edit</a>
+            @if ($stall->status === 'inactive')
+                <form method="POST" action="{{ route('admin.stalls.destroy', $stall) }}" onsubmit="return confirm('Permanently delete {{ addslashes($stall->name) }}? This cannot be undone.');">@csrf @method('DELETE')<button type="submit" class="btn btn-outline-danger">Delete</button></form>
+            @endif
         </div>
     </div>
 

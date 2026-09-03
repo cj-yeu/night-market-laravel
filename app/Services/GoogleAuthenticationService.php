@@ -98,6 +98,7 @@ class GoogleAuthenticationService
                     }
 
                     $this->markEmailVerified($lockedUser);
+                    $this->storeGoogleAvatarWhenSafe($lockedUser, $identity['avatar_url']);
 
                     return $providerAccount;
                 }
@@ -121,6 +122,7 @@ class GoogleAuthenticationService
                 ]);
 
                 $this->markEmailVerified($lockedUser);
+                $this->storeGoogleAvatarWhenSafe($lockedUser, $identity['avatar_url']);
 
                 return $account;
             }, 3);
@@ -162,7 +164,7 @@ class GoogleAuthenticationService
     }
 
     /**
-     * @param  array{provider_user_id: string, email: string, name: string}  $identity
+     * @param  array{provider_user_id: string, email: string, name: string, avatar_url: string|null}  $identity
      */
     private function resolveLoginIdentity(array $identity): User
     {
@@ -187,6 +189,7 @@ class GoogleAuthenticationService
             }
 
             $this->markEmailVerified($user);
+            $this->storeGoogleAvatarWhenSafe($user, $identity['avatar_url']);
 
             return $user;
         }
@@ -223,6 +226,7 @@ class GoogleAuthenticationService
                 'provider_email' => $identity['email'],
             ]);
             $this->markEmailVerified($user);
+            $this->storeGoogleAvatarWhenSafe($user, $identity['avatar_url']);
 
             return $user;
         }
@@ -236,6 +240,7 @@ class GoogleAuthenticationService
         ]);
         $user->email_verified_at = now();
         $user->save();
+        $this->storeGoogleAvatarWhenSafe($user, $identity['avatar_url']);
 
         $user->socialAccounts()->create([
             'provider' => SocialAccount::PROVIDER_GOOGLE,
@@ -247,7 +252,7 @@ class GoogleAuthenticationService
     }
 
     /**
-     * @return array{provider_user_id: string, email: string, name: string}
+     * @return array{provider_user_id: string, email: string, name: string, avatar_url: string|null}
      */
     private function validatedIdentity(SocialiteUser $providerUser): array
     {
@@ -285,7 +290,24 @@ class GoogleAuthenticationService
             'provider_user_id' => $providerUserId,
             'email' => $email,
             'name' => $name !== '' ? $name : 'Google User',
+            'avatar_url' => $this->safeGoogleAvatarUrl((string) $providerUser->getAvatar()),
         ];
+    }
+
+    private function storeGoogleAvatarWhenSafe(User $user, ?string $avatarUrl): void
+    {
+        if ($user->avatar_path !== null || $avatarUrl === null || $user->google_avatar_url === $avatarUrl) {
+            return;
+        }
+
+        $user->forceFill(['google_avatar_url' => $avatarUrl])->save();
+    }
+
+    private function safeGoogleAvatarUrl(string $url): ?string
+    {
+        $url = trim($url);
+
+        return User::isTrustedGoogleAvatarUrl($url) ? $url : null;
     }
 
     private function markEmailVerified(User $user): void

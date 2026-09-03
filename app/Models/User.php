@@ -211,7 +211,37 @@ class User extends Authenticatable implements MustVerifyEmailContract
 
     public function avatarUrl(): ?string
     {
-        return $this->avatar_path ? Storage::disk('public')->url($this->avatar_path) : null;
+        if ($this->avatar_path) {
+            return Storage::disk('public')->url($this->avatar_path);
+        }
+
+        return self::isTrustedGoogleAvatarUrl($this->google_avatar_url ?? null)
+            ? $this->google_avatar_url
+            : null;
+    }
+
+    public static function isTrustedGoogleAvatarUrl(?string $url): bool
+    {
+        if (! is_string($url) || ! filter_var($url, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        if (strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https') {
+            return false;
+        }
+
+        if (parse_url($url, PHP_URL_USER) !== null || parse_url($url, PHP_URL_PASS) !== null) {
+            return false;
+        }
+
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+
+        return $host !== '' && (
+            $host === 'googleusercontent.com'
+            || str_ends_with($host, '.googleusercontent.com')
+            || $host === 'ggpht.com'
+            || str_ends_with($host, '.ggpht.com')
+        );
     }
 
     public function initials(): string

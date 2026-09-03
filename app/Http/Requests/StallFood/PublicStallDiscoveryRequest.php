@@ -3,6 +3,7 @@
 namespace App\Http\Requests\StallFood;
 
 use App\Models\Stall;
+use App\Support\CatalogCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
@@ -35,7 +36,7 @@ class PublicStallDiscoveryRequest extends FormRequest
         $this->merge([
             'search' => $this->filled('search') ? Str::squish((string) $this->search) : null,
             'city' => $this->filled('city') ? Str::squish((string) $this->city) : null,
-            'category' => $this->filled('category') ? Str::squish((string) $this->category) : null,
+            'category' => $this->filled('category') ? CatalogCategory::main((string) $this->category) : null,
             'halal_status' => $this->filled('halal_status') ? trim((string) $this->halal_status) : null,
             'sort' => $this->filled('sort') ? trim((string) $this->sort) : null,
         ]);

@@ -82,19 +82,27 @@ class DailyReviewsAndTagsTest extends TestCase
         }
     }
 
-    public function test_review_tags_are_whitelisted_persisted_and_shown_in_public_and_profile_views(): void
+    public function test_target_specific_review_tags_are_whitelisted_persisted_and_shown_in_public_and_profile_views(): void
     {
         $client = $this->client();
         $market = NightMarket::factory()->create();
-        $tags = ReviewTag::query()->whereIn('name', ['Tasty', 'Clean'])->pluck('id')->all();
+        $food = $this->food($market);
+        $marketTag = ReviewTag::query()->where('name', 'Clean')->firstOrFail();
+        $foodTag = ReviewTag::query()->where('name', 'Tasty')->firstOrFail();
 
-        $this->actingAs($client)->post(route('client.night-markets.reviews.store', $market), $this->payload(['tags' => $tags]))->assertRedirect();
+        $this->actingAs($client)->get(route('client.night-markets.reviews.create', $market))
+            ->assertSee('Clean')->assertDontSee('Tasty');
+        $this->actingAs($client)->get(route('client.foods.reviews.create', $food))
+            ->assertSee('Tasty')->assertDontSee('Clean');
+
+        $this->actingAs($client)->post(route('client.night-markets.reviews.store', $market), $this->payload(['tags' => [$marketTag->id]]))->assertRedirect();
         $review = Review::query()->firstOrFail();
-        $this->assertSame(['Clean', 'Tasty'], $review->tags()->orderBy('name')->pluck('name')->all());
-        $this->get(route('night-markets.show', $market))->assertSee('Tasty')->assertSee('Clean');
-        $this->actingAs($client)->get(route('profile.edit'))->assertSee('Market Reviews')->assertSee('Tasty');
+        $this->assertSame(['Clean'], $review->tags()->orderBy('name')->pluck('name')->all());
+        $this->get(route('night-markets.show', $market))->assertSee('Clean')->assertDontSee('Tasty');
+        $this->actingAs($client)->post(route('client.foods.reviews.store', $food), $this->payload(['tags' => [$foodTag->id]]))->assertRedirect();
+        $this->actingAs($client)->get(route('profile.edit'))->assertSee('Market Reviews')->assertSee('Clean')->assertSee('Tasty');
 
-        $this->actingAs($client)->post(route('client.night-markets.reviews.store', NightMarket::factory()->create()), $this->payload(['tags' => [999999]]))->assertSessionHasErrors('tags.0');
+        $this->actingAs($client)->post(route('client.night-markets.reviews.store', NightMarket::factory()->create()), $this->payload(['tags' => [$foodTag->id]]))->assertSessionHasErrors('tags.0');
     }
 
     public function test_profile_only_shows_the_current_clients_market_and_food_reviews_and_guests_are_redirected(): void

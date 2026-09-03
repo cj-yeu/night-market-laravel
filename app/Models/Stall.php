@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\CatalogCategory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -74,6 +75,11 @@ class Stall extends Model
     public function halalStatusLabel(): string
     {
         return self::halalStatusOptions()[$this->halal_status] ?? self::halalStatusOptions()[self::HALAL_UNKNOWN];
+    }
+
+    public function categoryLabel(): ?string
+    {
+        return CatalogCategory::main($this->category);
     }
 
     public function halalPublicLabel(): string

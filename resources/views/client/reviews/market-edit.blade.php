@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Edit Review for '.$nightMarket->name.' | Night Market Selangor')
+@section('title', 'Edit Review for '.$nightMarket->name.' | '.config('app.name'))
 
 @section('content')
     <div class="row justify-content-center"><div class="col-12 col-lg-7">

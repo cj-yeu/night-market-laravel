@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Manage Night Markets | Night Market Selangor')
+@section('title', 'Manage Night Markets | '.config('app.name'))
 
 @section('content')
     <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
@@ -87,6 +87,13 @@
                                                 {{ $nightMarket->status === 'active' ? 'Deactivate' : 'Activate' }}
                                             </button>
                                         </form>
+                                        @if ($nightMarket->status === 'inactive')
+                                            <form method="POST" action="{{ route('admin.night-markets.destroy', $nightMarket) }}"
+                                                onsubmit="return confirm('Permanently delete {{ addslashes($nightMarket->name) }}? This cannot be undone.');">
+                                                @csrf @method('DELETE')
+                                                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                                            </form>
+                                        @endif
                                     </div>
                                 </td>
                             </tr>

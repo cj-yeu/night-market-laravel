@@ -5,7 +5,7 @@
             href="{{ route('admin.dashboard') }}">
             <span class="admin-brand-mark" aria-hidden="true"><i class="bi bi-shop-window"></i></span>
             <span>
-                <span class="d-block">Night Market</span>
+                <span class="d-block">{{ config('app.name') }}</span>
                 <span class="admin-supporting-text d-block small fw-normal">Admin Portal</span>
             </span>
         </a>
@@ -69,10 +69,9 @@
 
         </nav>
 
-        @php($adminInitial = mb_strtoupper(mb_substr(trim(auth()->user()->name), 0, 1)))
         <div class="admin-account mt-auto p-2">
             <div class="d-flex align-items-center gap-2 px-2 py-2">
-                <span class="admin-avatar" aria-hidden="true">{{ $adminInitial }}</span>
+                <x-user-avatar :user="auth()->user()" size="md" />
                 <div class="min-w-0 flex-grow-1">
                     <div class="small fw-semibold text-white text-truncate">{{ auth()->user()->name }}</div>
                     <div class="admin-supporting-text small">Administrator</div>

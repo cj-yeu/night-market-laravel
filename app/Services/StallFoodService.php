@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Food;
 use App\Models\NightMarket;
 use App\Models\Stall;
+use App\Support\CatalogCategory;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -30,7 +31,7 @@ class StallFoodService
                 ->where('night_market_id', $marketId))
             ->when($filters['city'] ?? null, fn ($query, string $city) => $query
                 ->whereHas('nightMarket', fn ($query) => $query->publiclyVisible()->where('city', $city)))
-            ->when($filters['category'] ?? null, fn ($query, string $category) => $query->where('category', $category))
+            ->when($filters['category'] ?? null, fn ($query, string $category) => $this->applyMainCategoryFilter($query, $category))
             ->when($filters['halal_status'] ?? null, fn ($query, string $status) => $query->where('halal_status', $status));
 
         match ($filters['sort'] ?? 'name_asc') {
@@ -46,7 +47,7 @@ class StallFoodService
     }
 
     /**
-     * @return array{nightMarkets: Collection<int, NightMarket>, cities: Collection<int, NightMarket>, stallCategories: Collection<int, Stall>}
+     * @return array{nightMarkets: Collection<int, NightMarket>, cities: Collection<int, NightMarket>, stallCategories: Collection<int, string>}
      */
     public function publicStallFilterOptions(): array
     {
@@ -55,7 +56,9 @@ class StallFoodService
             'cities' => NightMarket::query()->publiclyVisible()
                 ->whereNotNull('city')->where('city', '!=', '')->select('city')->distinct()->orderBy('city')->get(),
             'stallCategories' => Stall::query()->publiclyVisible()
-                ->whereNotNull('category')->where('category', '!=', '')->select('category')->distinct()->orderBy('category')->get(),
+                ->whereNotNull('category')->where('category', '!=', '')->select('category')->distinct()->orderBy('category')->get()
+                ->map(fn (Stall $stall) => CatalogCategory::main($stall->category))
+                ->filter()->unique(fn (string $category) => CatalogCategory::key($category))->sort()->values(),
         ];
     }
 
@@ -533,6 +536,15 @@ class StallFoodService
                 ->orWhere(function ($query) use ($minimum) {
                     $query->whereNull('price_max')->where('price_min', '>=', $minimum);
                 });
+        });
+    }
+
+    private function applyMainCategoryFilter($query, string $category): void
+    {
+        $key = CatalogCategory::key($category);
+        $query->where(function ($query) use ($key): void {
+            $query->whereRaw('LOWER(TRIM(category)) = ?', [$key])
+                ->orWhereRaw('LOWER(TRIM(category)) LIKE ?', [$key.' / %']);
         });
     }
 
