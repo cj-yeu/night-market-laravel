@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Visit Plans | Night Market Selangor')
+@section('title', 'Visit Plans | '.config('app.name'))
 
 @section('content')
     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">

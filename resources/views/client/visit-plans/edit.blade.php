@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Edit Visit Plan | Night Market Selangor')
+@section('title', 'Edit Visit Plan | '.config('app.name'))
 
 @section('content')
     @php($planIsPast = $visitPlan->visit_status === 'Past')

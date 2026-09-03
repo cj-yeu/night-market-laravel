@@ -28,7 +28,7 @@ class ProductionErrorPagesTest extends TestCase
         foreach ([403, 419, 429, 500, 503] as $status) {
             $html = view("errors.$status")->render();
 
-            $this->assertStringContainsString('Night Market Selangor', $html);
+            $this->assertStringContainsString('NightBite', $html);
             $this->assertStringNotContainsString('Stack trace', $html);
             $this->assertStringNotContainsString(base_path(), $html);
         }
@@ -50,7 +50,7 @@ class ProductionErrorPagesTest extends TestCase
             $response = $handler->render($request, $exception);
 
             $this->assertSame($status, $response->getStatusCode());
-            $this->assertStringContainsString('Night Market Selangor', $response->getContent());
+            $this->assertStringContainsString('NightBite', $response->getContent());
             $this->assertStringNotContainsString('Stack trace', $response->getContent());
         }
     }

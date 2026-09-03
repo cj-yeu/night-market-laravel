@@ -47,7 +47,7 @@ class GoogleSocialLoginTest extends TestCase
             'id' => 'google-new-client',
             'name' => 'Google New Client',
             'email' => 'google-new@example.test',
-            'avatar' => 'https://google.example/private-avatar.jpg',
+            'avatar' => 'https://lh3.googleusercontent.com/a/safe-avatar.jpg',
         ]);
 
         $response = $this->googleLoginCallback();
@@ -62,6 +62,8 @@ class GoogleSocialLoginTest extends TestCase
         $this->assertTrue($user->hasVerifiedEmail());
         $this->assertNull($user->password);
         $this->assertNull($user->avatar_path);
+        $this->assertSame('https://lh3.googleusercontent.com/a/safe-avatar.jpg', $user->google_avatar_url);
+        $this->assertSame($user->google_avatar_url, $user->avatarUrl());
         $this->assertDatabaseCount('social_accounts', 1);
         $this->assertDatabaseHas('social_accounts', [
             'user_id' => $user->id,
@@ -88,6 +90,19 @@ class GoogleSocialLoginTest extends TestCase
             'Missing Name User',
             User::where('email', 'missing.name-user@example.test')->firstOrFail()->name,
         );
+    }
+
+    public function test_google_avatar_url_must_use_a_trusted_https_google_host(): void
+    {
+        $this->fakeGoogle([
+            'id' => 'google-unsafe-avatar',
+            'email' => 'unsafe-avatar@example.test',
+            'avatar' => 'https://example.test/private-avatar.jpg',
+        ]);
+
+        $this->googleLoginCallback()->assertRedirect(route('client.home'));
+
+        $this->assertNull(User::where('email', 'unsafe-avatar@example.test')->firstOrFail()->google_avatar_url);
     }
 
     public function test_intended_destination_is_preserved_through_google_login(): void

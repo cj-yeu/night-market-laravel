@@ -6,10 +6,12 @@ use App\Models\Food;
 use App\Models\MarketOperatingDay;
 use App\Models\NightMarket;
 use App\Models\Stall;
+use App\Support\SelangorCities;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class NightMarketService
 {
@@ -60,6 +62,14 @@ class NightMarketService
             ->distinct()
             ->orderBy('city')
             ->get();
+    }
+
+    /** @return array<int, string> */
+    public function cityOptions(): array
+    {
+        return SelangorCities::withExisting(
+            NightMarket::query()->select('city')->distinct()->orderBy('city')->get(),
+        );
     }
 
     public function adminDetails(NightMarket $nightMarket): NightMarket
@@ -199,6 +209,7 @@ class NightMarketService
     public function create(array $data): NightMarket
     {
         return DB::transaction(function () use ($data) {
+            $this->assertSupportedCity($data['city']);
             $nightMarket = NightMarket::create([
                 'name' => $data['name'],
                 'address' => $data['address'],
@@ -222,6 +233,7 @@ class NightMarketService
     public function update(NightMarket $nightMarket, array $data): NightMarket
     {
         return DB::transaction(function () use ($nightMarket, $data) {
+            $this->assertSupportedCity($data['city'], $nightMarket->city);
             $nightMarket->update([
                 'name' => $data['name'],
                 'address' => $data['address'],
@@ -268,5 +280,20 @@ class NightMarketService
         }
 
         return '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value).'%';
+    }
+
+    private function assertSupportedCity(string $city, ?string $currentCity = null): void
+    {
+        $normalized = SelangorCities::normalize($city);
+        $allowed = SelangorCities::CANONICAL;
+        if ($currentCity !== null) {
+            $allowed[] = SelangorCities::normalize($currentCity);
+        }
+
+        if (! in_array($normalized, $allowed, true)) {
+            throw ValidationException::withMessages([
+                'city' => 'Please select a supported Selangor city or town.',
+            ]);
+        }
     }
 }

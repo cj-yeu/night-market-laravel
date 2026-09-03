@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Explore Stalls | Night Market Selangor')
+@section('title', 'Explore Stalls | '.config('app.name'))
 
 @section('content')
     <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
@@ -44,7 +44,7 @@
                 <select id="stall-category" name="category" class="form-select @error('category') is-invalid @enderror">
                     <option value="">All categories</option>
                     @foreach ($stallCategories as $category)
-                        <option value="{{ $category->category }}" @selected(($filters['category'] ?? '') === $category->category)>{{ $category->category }}</option>
+                        <option value="{{ $category }}" @selected(($filters['category'] ?? '') === $category)>{{ $category }}</option>
                     @endforeach
                 </select>
                 @error('category')<div class="invalid-feedback">{{ $message }}</div>@enderror

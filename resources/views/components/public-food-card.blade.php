@@ -1,7 +1,7 @@
 @props(['food', 'showRecommendation' => false])
 
-<article class="card market-card h-100 overflow-hidden" data-food-id="{{ $food->id }}">
-    <x-food-image :food="$food" />
+<article class="card market-card h-100 overflow-hidden must-try-card" data-food-id="{{ $food->id }}">
+    <x-food-image :food="$food" class="must-try-card-image" />
     <div class="card-body p-4 d-flex flex-column">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
             <h2 class="h4 fw-bold text-break mb-0">{{ $food->name }}</h2>
@@ -27,9 +27,9 @@
             <x-halal-status :stall="$food->stall" />
         </div>
         <x-food-price :food="$food" class="text-market fw-bold d-block mb-2" />
-        <p class="text-secondary text-break">{{ str($food->description ?: 'No food description available.')->limit(150) }}</p>
+        <p class="text-secondary text-break text-clamp-3">{{ $food->description ?: 'No food description available.' }}</p>
         @if ($showRecommendation && $food->is_must_try && $food->recommendation_reason)
-            <p class="small border-start border-warning border-3 ps-3 text-break">
+            <p class="small border-start border-warning border-3 ps-3 text-break text-clamp-3">
                 <strong>Why try it:</strong> {{ $food->recommendation_reason }}
             </p>
         @endif

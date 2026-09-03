@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Admin Dashboard | Night Market Selangor')
+@section('title', 'Admin Dashboard | '.config('app.name'))
 
 @section('content')
     <header class="mb-4">

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', $nightMarket->name.' | Night Market Selangor')
+@section('title', $nightMarket->name.' | '.config('app.name'))
 
 @section('content')
     <div class="row justify-content-center">
@@ -8,11 +8,13 @@
             <a href="{{ route('night-markets.index') }}"
                 class="btn btn-outline-secondary mb-4">Back to Night Markets</a>
 
-            <div class="card market-card overflow-hidden mb-4">
-                <x-night-market-image :night-market="$nightMarket" loading="eager" />
+            <div class="card market-card mb-4">
                 <div class="card-body p-4 p-md-5">
+                    <div class="catalog-detail-header">
+                        <x-night-market-image :night-market="$nightMarket" class="night-market-detail-image-frame" loading="eager" />
+                        <div class="catalog-detail-copy">
                     <span class="badge text-bg-warning mb-3">{{ $nightMarket->city }}</span>
-                    <h1 class="display-6 fw-bold text-market">{{ $nightMarket->name }}</h1>
+                    <h1 class="h2 fw-bold text-market">{{ $nightMarket->name }}</h1>
 
                     <div class="d-flex flex-wrap gap-2 mt-3">
                         @if (Route::has('night-markets.stalls.index'))
@@ -45,6 +47,8 @@
                         <dt class="col-sm-3">Description</dt>
                         <dd class="col-sm-9 mb-0">{{ $nightMarket->description ?: 'No description available.' }}</dd>
                     </dl>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -97,8 +101,8 @@
                             @else
                                 <div class="vstack gap-3">
                                     @foreach ($mustTryFoods as $food)
-                                        <article class="border rounded-3 bg-white p-3">
-                                            <x-food-image :food="$food" class="rounded-3 mb-3" />
+                                        <article class="border rounded-3 bg-white p-3 must-try-mini-card">
+                                            <x-food-image :food="$food" class="rounded-3 mb-3 must-try-mini-image" />
                                             <div class="d-flex justify-content-between gap-2 mb-1">
                                                 <h3 class="h6 fw-bold mb-0">{{ $food->name }}</h3>
                                                 <span class="badge text-bg-warning">Must-Try</span>
@@ -106,11 +110,11 @@
                                             @if ($food->category)
                                                 <div class="small text-market fw-semibold mb-1">{{ $food->category }}</div>
                                             @endif
-                                            <p class="text-secondary mb-0">
+                                            <p class="text-secondary mb-0 text-clamp-3">
                                                 {{ $food->description ?: 'No food description available.' }}
                                             </p>
                                             @if ($food->recommendation_reason)
-                                                <p class="small border-start border-warning border-3 ps-3 mt-2 mb-0">
+                                                <p class="small border-start border-warning border-3 ps-3 mt-2 mb-0 text-clamp-3">
                                                     <strong>Why try it:</strong> {{ $food->recommendation_reason }}
                                                 </p>
                                             @endif

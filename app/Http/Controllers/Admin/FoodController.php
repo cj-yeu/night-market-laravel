@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\DeleteCatalogRecordRequest;
 use App\Http\Requests\Admin\OperationalStatusRequest;
 use App\Http\Requests\StallFood\AdminFoodFilterRequest;
 use App\Http\Requests\StallFood\DeleteFoodImageRequest;
@@ -13,6 +14,7 @@ use App\Models\Food;
 use App\Models\User;
 use App\Services\AdminReturnUrlService;
 use App\Services\CatalogAuditLogService;
+use App\Services\CatalogDeletionService;
 use App\Services\NightMarketService;
 use App\Services\StallFoodImageService;
 use App\Services\StallFoodService;
@@ -28,6 +30,7 @@ class FoodController extends Controller
         private readonly StallFoodImageService $stallFoodImageService,
         private readonly AdminReturnUrlService $adminReturnUrlService,
         private readonly CatalogAuditLogService $catalogAuditLogService,
+        private readonly CatalogDeletionService $catalogDeletionService,
     ) {}
 
     public function index(AdminFoodFilterRequest $request): View
@@ -122,6 +125,14 @@ class FoodController extends Controller
 
         return redirect()->route('admin.foods.show', $food)
             ->with('status', 'Food image removed successfully.');
+    }
+
+    public function destroy(DeleteCatalogRecordRequest $request, Food $food): RedirectResponse
+    {
+        $deleted = $this->catalogDeletionService->deleteFood($food);
+        $this->catalogAuditLogService->recordDeleted($request->user(), 'food', $deleted['id'], $deleted['name']);
+
+        return redirect()->route('admin.foods.index')->with('status', $deleted['name'].' was permanently deleted.');
     }
 
     private function updateStatus(User $user, Food $food, string $status): RedirectResponse

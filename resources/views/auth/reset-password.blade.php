@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Reset Password | Night Market Selangor')
+@section('title', 'Reset Password | '.config('app.name'))
 
 @section('content')
     <div class="row justify-content-center">

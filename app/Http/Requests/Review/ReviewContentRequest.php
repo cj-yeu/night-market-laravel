@@ -16,11 +16,17 @@ abstract class ReviewContentRequest extends FormRequest
      */
     public function rules(): array
     {
+        $targetType = $this->reviewTargetType();
+
         return [
             'rating' => ['required', 'integer', 'between:1,5'],
             'comment' => ['required', 'string', 'min:10', 'max:1000'],
             'tags' => ['nullable', 'array'],
-            'tags.*' => ['integer', 'distinct', Rule::exists('review_tags', 'id')->where(fn ($query) => $query->whereIn('name', ReviewTag::NAMES))],
+            'tags.*' => ['integer', 'distinct', Rule::exists('review_tags', 'id')->where(
+                fn ($query) => $query
+                    ->where('target_type', $targetType)
+                    ->whereIn('name', ReviewTag::namesForTarget($targetType)),
+            )],
         ];
     }
 
@@ -64,5 +70,12 @@ abstract class ReviewContentRequest extends FormRequest
         }
 
         RateLimiter::hit($key, 60);
+    }
+
+    private function reviewTargetType(): string
+    {
+        return $this->route('food') === null
+            ? ReviewTag::TARGET_MARKET
+            : ReviewTag::TARGET_FOOD;
     }
 }

@@ -11,7 +11,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>@yield('title', 'Night Market Selangor')</title>
+        <title>@yield('title', config('app.name'))</title>
 
         <link
             href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
@@ -168,6 +168,63 @@
                 object-fit: cover;
             }
 
+            .catalog-detail-header {
+                display: flex;
+                align-items: flex-start;
+                gap: 1.5rem;
+            }
+
+            .catalog-detail-copy {
+                min-width: 0;
+                flex: 1 1 auto;
+            }
+
+            .night-market-detail-image-frame,
+            .catalog-detail-image-frame {
+                width: min(22rem, 38%);
+                max-width: 100%;
+                max-height: 17.5rem;
+                flex: 0 0 auto;
+                border-radius: 0.75rem;
+                background: #fff3df;
+            }
+
+            .night-market-detail-image-frame,
+            .catalog-detail-image-frame {
+                aspect-ratio: auto;
+            }
+
+            .night-market-detail-image-frame img,
+            .catalog-detail-image-frame img {
+                width: auto;
+                max-width: 100%;
+                height: auto;
+                max-height: 17.5rem;
+                margin-inline: auto;
+                object-fit: contain;
+            }
+
+            .must-try-card .must-try-card-image {
+                aspect-ratio: 4 / 3;
+            }
+
+            .must-try-mini-card {
+                display: flex;
+                flex-direction: column;
+                min-height: 100%;
+            }
+
+            .must-try-mini-image {
+                aspect-ratio: 4 / 3;
+            }
+
+            .text-clamp-3 {
+                display: -webkit-box;
+                overflow: hidden;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 3;
+            }
+
             .catalog-thumbnail {
                 width: 7rem;
                 min-width: 7rem;
@@ -188,6 +245,12 @@
                 line-height: 1;
                 object-fit: cover;
                 text-transform: uppercase;
+            }
+
+            .user-avatar-image {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
             }
 
             .user-avatar-sm {
@@ -557,6 +620,22 @@
                     border-bottom-width: 2px;
                 }
 
+                .catalog-detail-header {
+                    flex-direction: column;
+                    gap: 1rem;
+                }
+
+                .night-market-detail-image-frame,
+                .catalog-detail-image-frame {
+                    width: 100%;
+                    max-height: 14rem;
+                }
+
+                .night-market-detail-image-frame img,
+                .catalog-detail-image-frame img {
+                    max-height: 14rem;
+                }
+
                 .navbar-market .container,
                 main.container {
                     padding-right: 0.875rem;
@@ -759,13 +838,13 @@
                             data-bs-target="#adminSidebar" aria-controls="adminSidebar" aria-label="Open admin navigation">
                             <i class="bi bi-list me-1" aria-hidden="true"></i>Menu
                         </button>
-                        <span class="fw-bold text-market text-end">Night Market Admin Portal</span>
+                        <span class="fw-bold text-market text-end">{{ config('app.name') }} Admin Portal</span>
                     </div>
                 </header>
         @else
             <nav class="navbar navbar-expand-lg navbar-light navbar-market">
             <div class="container">
-                <a class="navbar-brand fw-bold" href="{{ $logoUrl }}">Night Market Selangor</a>
+                <a class="navbar-brand fw-bold" href="{{ $logoUrl }}">{{ config('app.name') }}</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNavigation" aria-controls="primaryNavigation" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
                 <div class="collapse navbar-collapse" id="primaryNavigation">
                     <div class="navbar-nav ms-auto align-items-lg-center gap-lg-1 pt-2 pt-lg-0">
@@ -816,6 +895,7 @@
             integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
             crossorigin="anonymous"
         ></script>
+        @stack('scripts')
 
         <script>
             document.querySelectorAll('[data-password-toggle]').forEach((button) => {

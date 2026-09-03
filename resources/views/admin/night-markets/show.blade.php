@@ -11,6 +11,9 @@
         <div class="d-flex gap-2 align-self-start">
             <a href="{{ route('admin.night-markets.index') }}" class="btn btn-outline-secondary">Back</a>
             <a href="{{ route('admin.night-markets.edit', $nightMarket) }}" class="btn btn-market">Edit</a>
+            @if ($nightMarket->status === 'inactive')
+                <form method="POST" action="{{ route('admin.night-markets.destroy', $nightMarket) }}" onsubmit="return confirm('Permanently delete {{ addslashes($nightMarket->name) }}? This cannot be undone.');">@csrf @method('DELETE')<button type="submit" class="btn btn-outline-danger">Delete</button></form>
+            @endif
         </div>
     </div>
 

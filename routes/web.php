@@ -111,6 +111,8 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('nightMarket')->whereNumber('review')->name('night-markets.reviews.edit');
         Route::patch('/night-markets/{nightMarket}/reviews/{review}', [ReviewController::class, 'updateMarket'])
             ->whereNumber('nightMarket')->whereNumber('review')->name('night-markets.reviews.update');
+        Route::delete('/night-markets/{nightMarket}/reviews/{review}', [ReviewController::class, 'destroyMarket'])
+            ->whereNumber('nightMarket')->whereNumber('review')->name('night-markets.reviews.destroy');
 
         Route::get('/foods/{food}/reviews/create', [ReviewController::class, 'create'])
             ->whereNumber('food')->name('foods.reviews.create');
@@ -120,6 +122,8 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('food')->whereNumber('review')->name('foods.reviews.edit');
         Route::patch('/foods/{food}/reviews/{review}', [ReviewController::class, 'update'])
             ->whereNumber('food')->whereNumber('review')->name('foods.reviews.update');
+        Route::delete('/foods/{food}/reviews/{review}', [ReviewController::class, 'destroy'])
+            ->whereNumber('food')->whereNumber('review')->name('foods.reviews.destroy');
 
         Route::get('/visit-plans', [VisitPlanController::class, 'index'])->name('visit-plans.index');
         Route::get('/visit-plans/smart-planner', [SmartVisitPlannerController::class, 'index'])
@@ -187,6 +191,8 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('nightMarket')->name('night-markets.image.update');
         Route::delete('/night-markets/{nightMarket}/image', [NightMarketController::class, 'deleteImage'])
             ->whereNumber('nightMarket')->name('night-markets.image.destroy');
+        Route::delete('/night-markets/{nightMarket}', [NightMarketController::class, 'destroy'])
+            ->whereNumber('nightMarket')->name('night-markets.destroy');
 
         Route::get('/stalls', [StallController::class, 'index'])->name('stalls.index');
         Route::get('/stalls/create', [StallController::class, 'create'])->name('stalls.create');
@@ -205,6 +211,8 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('stall')->name('stalls.image.update');
         Route::delete('/stalls/{stall}/image', [StallController::class, 'deleteImage'])
             ->whereNumber('stall')->name('stalls.image.destroy');
+        Route::delete('/stalls/{stall}', [StallController::class, 'destroy'])
+            ->whereNumber('stall')->name('stalls.destroy');
 
         Route::get('/foods', [FoodController::class, 'index'])->name('foods.index');
         Route::get('/foods/create', [FoodController::class, 'create'])->name('foods.create');
@@ -223,6 +231,8 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('food')->name('foods.image.update');
         Route::delete('/foods/{food}/image', [FoodController::class, 'deleteImage'])
             ->whereNumber('food')->name('foods.image.destroy');
+        Route::delete('/foods/{food}', [FoodController::class, 'destroy'])
+            ->whereNumber('food')->name('foods.destroy');
 
         Route::get('/reviews', [AdminReviewController::class, 'index'])->name('reviews.index');
         Route::delete('/reviews/{review}', [AdminReviewController::class, 'destroy'])

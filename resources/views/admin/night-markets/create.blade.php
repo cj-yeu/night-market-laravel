@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Create Night Market | Night Market Selangor')
+@section('title', 'Create Night Market | '.config('app.name'))
 
 @section('content')
     <div class="mx-auto" style="max-width: 960px;">
@@ -44,8 +44,11 @@
 
                             <div class="col-md-6">
                                 <label for="city" class="form-label">City</label>
-                                <input type="text" class="form-control @error('city') is-invalid @enderror"
-                                    id="city" name="city" value="{{ old('city') }}" required>
+                                <select class="form-select @error('city') is-invalid @enderror" id="city" name="city" required>
+                                    <option value="">Select a Selangor city or town</option>
+                                    @foreach ($cities as $city)<option value="{{ $city }}" @selected(old('city') === $city)>{{ $city }}</option>@endforeach
+                                </select>
+                                <div class="form-text">Choose the controlled Selangor location used for public discovery.</div>
                                 @error('city')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror

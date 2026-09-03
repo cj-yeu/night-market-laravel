@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Manage Stalls | Night Market Selangor')
+@section('title', 'Manage Stalls | '.config('app.name'))
 
 @section('content')
     <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
@@ -43,6 +43,7 @@
                             <a href="{{ route('admin.stalls.show', $stall) }}" class="btn btn-sm btn-outline-secondary">View</a>
                             <a href="{{ route('admin.stalls.edit', $stall) }}" class="btn btn-sm btn-outline-primary">Edit</a>
                             <form method="POST" action="{{ $stall->status === 'active' ? route('admin.stalls.deactivate', $stall) : route('admin.stalls.activate', $stall) }}" onsubmit="return confirm('{{ $stall->status === 'active' ? 'Deactivate this stall?' : 'Activate this stall?' }}');">@csrf @method('PATCH')<button class="btn btn-sm {{ $stall->status === 'active' ? 'btn-outline-danger' : 'btn-outline-success' }}" type="submit">{{ $stall->status === 'active' ? 'Deactivate' : 'Activate' }}</button></form>
+                            @if ($stall->status === 'inactive')<form method="POST" action="{{ route('admin.stalls.destroy', $stall) }}" onsubmit="return confirm('Permanently delete {{ addslashes($stall->name) }}? This cannot be undone.');">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" type="submit">Delete</button></form>@endif
                         </div></td>
                     </tr>
                 @endforeach

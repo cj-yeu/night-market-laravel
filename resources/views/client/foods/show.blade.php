@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', $food->name.' | Night Market Selangor')
+@section('title', $food->name.' | '.config('app.name'))
 
 @section('content')
     <div class="row justify-content-center">
@@ -20,8 +20,10 @@
             </div>
 
             <div class="card market-card">
-                <x-food-image :food="$food" class="rounded-top-3" loading="eager" />
                 <div class="card-body p-4 p-md-5">
+                    <div class="catalog-detail-header">
+                        <x-food-image :food="$food" class="catalog-detail-image-frame" loading="eager" />
+                        <div class="catalog-detail-copy">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
                         @if ($food->category)
                             <span class="badge text-bg-secondary">{{ $food->category }}</span>
@@ -31,7 +33,7 @@
                         @endif
                     </div>
 
-                    <h1 class="display-6 fw-bold text-market">{{ $food->name }}</h1>
+                    <h1 class="h2 fw-bold text-market">{{ $food->name }}</h1>
 
                     <dl class="row mt-4 mb-0">
                         <dt class="col-sm-3">Stall</dt>
@@ -78,6 +80,8 @@
                         <dt class="col-sm-3">Description</dt>
                         <dd class="col-sm-9 mb-0">{{ $food->description ?: 'No description available.' }}</dd>
                     </dl>
+                        </div>
+                    </div>
                 </div>
             </div>
 

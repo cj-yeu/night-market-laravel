@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Smart Visit Planner | Night Market Selangor')
+@section('title', 'Smart Visit Planner | '.config('app.name'))
 
 @section('content')
     @php($activeTemplate = $preferences['template'] ?? null)

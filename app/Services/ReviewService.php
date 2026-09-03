@@ -12,14 +12,19 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class ReviewService
 {
     /** @return Collection<int, ReviewTag> */
-    public function tagOptions(): Collection
+    public function tagOptions(string $targetType): Collection
     {
-        return ReviewTag::query()->whereIn('name', ReviewTag::NAMES)->orderBy('name')->get(['id', 'name']);
+        return ReviewTag::query()
+            ->where('target_type', $targetType)
+            ->whereIn('name', ReviewTag::namesForTarget($targetType))
+            ->orderBy('name')
+            ->get(['id', 'name', 'target_type']);
     }
 
     public function findPubliclyVisibleFood(int $foodId): Food
@@ -87,7 +92,7 @@ class ReviewService
                     'status' => Review::STATUS_APPROVED,
                     'review_date' => now()->toDateString(),
                 ]);
-                $review->tags()->sync($this->validTagIds($data['tags'] ?? []));
+                $review->tags()->sync($this->validTagIds($data['tags'] ?? [], ReviewTag::TARGET_FOOD));
 
                 return $review->load('tags');
             });
@@ -118,7 +123,7 @@ class ReviewService
                     'status' => Review::STATUS_APPROVED,
                     'review_date' => now()->toDateString(),
                 ]);
-                $review->tags()->sync($this->validTagIds($data['tags'] ?? []));
+                $review->tags()->sync($this->validTagIds($data['tags'] ?? [], ReviewTag::TARGET_MARKET));
 
                 return $review->load('tags');
             });
@@ -140,7 +145,7 @@ class ReviewService
             'comment' => $data['comment'],
             'status' => Review::STATUS_APPROVED,
         ]);
-        $review->tags()->sync($this->validTagIds($data['tags'] ?? []));
+        $review->tags()->sync($this->validTagIds($data['tags'] ?? [], ReviewTag::TARGET_FOOD));
 
         return $review->refresh()->load('tags');
     }
@@ -156,7 +161,7 @@ class ReviewService
             'comment' => $data['comment'],
             'status' => Review::STATUS_APPROVED,
         ]);
-        $review->tags()->sync($this->validTagIds($data['tags'] ?? []));
+        $review->tags()->sync($this->validTagIds($data['tags'] ?? [], ReviewTag::TARGET_MARKET));
 
         return $review->refresh()->load('tags');
     }
@@ -177,7 +182,7 @@ class ReviewService
 
         return [
             'reviews' => (clone $base)
-                ->with(['user:id,name,avatar_path', 'tags:id,name'])
+                ->with(['user:id,name,avatar_path,google_avatar_url', 'tags' => fn ($query) => $query->where('target_type', ReviewTag::TARGET_FOOD)])
                 ->latest('updated_at')
                 ->latest('id')
                 ->paginate(10)
@@ -205,7 +210,7 @@ class ReviewService
         $countsByRating = (clone $base)->selectRaw('rating, COUNT(*) AS aggregate')->groupBy('rating')->pluck('aggregate', 'rating');
 
         return [
-            'reviews' => (clone $base)->with(['user:id,name,avatar_path', 'tags:id,name'])->latest('updated_at')->latest('id')->paginate(10, ['*'], 'market_reviews')->withQueryString(),
+            'reviews' => (clone $base)->with(['user:id,name,avatar_path,google_avatar_url', 'tags' => fn ($query) => $query->where('target_type', ReviewTag::TARGET_MARKET)])->latest('updated_at')->latest('id')->paginate(10, ['*'], 'market_reviews')->withQueryString(),
             'averageRating' => (int) $statistics->review_count === 0 ? null : round((float) $statistics->average_rating, 1),
             'reviewCount' => (int) $statistics->review_count,
             'ratingDistribution' => collect(range(5, 1))->mapWithKeys(fn (int $rating) => [$rating => (int) ($countsByRating[$rating] ?? 0)])->all(),
@@ -262,17 +267,62 @@ class ReviewService
 
     public function delete(Review $review): void
     {
+        $this->deleteReviewAndOwnedImages($review);
+    }
+
+    public function deleteForClient(User $user, Review $review, string $targetType, int $targetId): void
+    {
+        $paths = DB::transaction(function () use ($user, $review, $targetType, $targetId): array {
+            $lockedReview = Review::query()->lockForUpdate()->findOrFail($review->id);
+
+            abort_unless($lockedReview->user_id === $user->id, 403);
+            abort_unless(
+                $targetType === ReviewTag::TARGET_MARKET
+                    ? $lockedReview->night_market_id === $targetId && $lockedReview->food_id === null
+                    : $lockedReview->food_id === $targetId && $lockedReview->night_market_id === null,
+                404,
+            );
+
+            return $this->removeRelationsAndReview($lockedReview);
+        });
+
+        foreach ($paths as $path) {
+            Storage::disk('public')->delete($path);
+        }
+    }
+
+    private function deleteReviewAndOwnedImages(Review $review): void
+    {
+        $paths = DB::transaction(function () use ($review): array {
+            $lockedReview = Review::query()->lockForUpdate()->findOrFail($review->id);
+
+            return $this->removeRelationsAndReview($lockedReview);
+        });
+
+        foreach ($paths as $path) {
+            Storage::disk('public')->delete($path);
+        }
+    }
+
+    /** @return array<int, string> */
+    private function removeRelationsAndReview(Review $review): array
+    {
+        $paths = $review->images()->pluck('image_path')->filter()->all();
+        $review->tags()->detach();
+        $review->images()->delete();
         $review->delete();
+
+        return $paths;
     }
 
     /** @return array{marketReviews: Collection<int, Review>, foodReviews: Collection<int, Review>} */
     public function reviewsForProfile(User $user): array
     {
-        $base = Review::query()->where('user_id', $user->id)->with('tags:id,name')->latest('created_at')->latest('id');
+        $base = Review::query()->where('user_id', $user->id)->latest('created_at')->latest('id');
 
         return [
-            'marketReviews' => (clone $base)->whereNotNull('night_market_id')->whereNull('food_id')->with('nightMarket:id,name')->get(),
-            'foodReviews' => (clone $base)->whereNotNull('food_id')->with(['food:id,stall_id,name', 'food.stall:id,night_market_id,name', 'food.stall.nightMarket:id,name'])->get(),
+            'marketReviews' => (clone $base)->whereNotNull('night_market_id')->whereNull('food_id')->with(['nightMarket:id,name', 'tags' => fn ($query) => $query->where('target_type', ReviewTag::TARGET_MARKET)])->get(),
+            'foodReviews' => (clone $base)->whereNotNull('food_id')->with(['food:id,stall_id,name', 'food.stall:id,night_market_id,name', 'food.stall.nightMarket:id,name', 'tags' => fn ($query) => $query->where('target_type', ReviewTag::TARGET_FOOD)])->get(),
         ];
     }
 
@@ -284,9 +334,14 @@ class ReviewService
     }
 
     /** @param array<int, int|string> $tagIds */
-    private function validTagIds(array $tagIds): array
+    private function validTagIds(array $tagIds, string $targetType): array
     {
-        return ReviewTag::query()->whereIn('id', $tagIds)->whereIn('name', ReviewTag::NAMES)->pluck('id')->all();
+        return ReviewTag::query()
+            ->whereIn('id', $tagIds)
+            ->where('target_type', $targetType)
+            ->whereIn('name', ReviewTag::namesForTarget($targetType))
+            ->pluck('id')
+            ->all();
     }
 
     private function dailyLimitMessage(): string

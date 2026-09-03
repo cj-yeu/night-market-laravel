@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\DeleteCatalogRecordRequest;
 use App\Http\Requests\Admin\OperationalStatusRequest;
 use App\Http\Requests\NightMarket\AdminNightMarketFilterRequest;
 use App\Http\Requests\NightMarket\DeleteNightMarketImageRequest;
@@ -14,6 +15,7 @@ use App\Models\NightMarket;
 use App\Models\User;
 use App\Services\AdminReturnUrlService;
 use App\Services\CatalogAuditLogService;
+use App\Services\CatalogDeletionService;
 use App\Services\NightMarketImageService;
 use App\Services\NightMarketService;
 use Illuminate\Http\RedirectResponse;
@@ -27,6 +29,7 @@ class NightMarketController extends Controller
         private readonly NightMarketImageService $nightMarketImageService,
         private readonly AdminReturnUrlService $adminReturnUrlService,
         private readonly CatalogAuditLogService $catalogAuditLogService,
+        private readonly CatalogDeletionService $catalogDeletionService,
     ) {}
 
     public function index(AdminNightMarketFilterRequest $request): View
@@ -45,6 +48,7 @@ class NightMarketController extends Controller
     {
         return view('admin.night-markets.create', [
             'days' => MarketOperatingDay::DAYS,
+            'cities' => $this->nightMarketService->cityOptions(),
         ]);
     }
 
@@ -70,6 +74,7 @@ class NightMarketController extends Controller
         return view('admin.night-markets.edit', [
             'nightMarket' => $this->nightMarketService->adminDetails($nightMarket),
             'days' => MarketOperatingDay::DAYS,
+            'cities' => $this->nightMarketService->cityOptions(),
             'returnTo' => $this->adminReturnUrlService->catalogQualityUrl($request),
         ]);
     }
@@ -127,6 +132,14 @@ class NightMarketController extends Controller
         return redirect()
             ->route('admin.night-markets.show', $nightMarket)
             ->with('status', 'The Night Market cover image was removed.');
+    }
+
+    public function destroy(DeleteCatalogRecordRequest $request, NightMarket $nightMarket): RedirectResponse
+    {
+        $deleted = $this->catalogDeletionService->deleteNightMarket($nightMarket);
+        $this->catalogAuditLogService->recordDeleted($request->user(), 'night_market', $deleted['id'], $deleted['name']);
+
+        return redirect()->route('admin.night-markets.index')->with('status', $deleted['name'].' was permanently deleted.');
     }
 
     private function updateStatus(User $user, NightMarket $nightMarket, string $status): RedirectResponse

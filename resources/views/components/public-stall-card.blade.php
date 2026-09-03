@@ -12,7 +12,7 @@
         </p>
         <div class="d-flex flex-wrap gap-2 mb-3">
             @if ($stall->category)
-                <span class="badge text-bg-light border text-break">{{ $stall->category }}</span>
+                <span class="badge text-bg-light border text-break">{{ $stall->categoryLabel() }}</span>
             @endif
             <x-halal-status :stall="$stall" />
         </div>

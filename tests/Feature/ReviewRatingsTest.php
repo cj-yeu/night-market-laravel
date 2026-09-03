@@ -227,7 +227,7 @@ class ReviewRatingsTest extends TestCase
         $this->assertSame([5 => 1, 4 => 0, 3 => 1, 2 => 0, 1 => 0], $summary['ratingDistribution']);
         foreach ($summary['reviews'] as $review) {
             $this->assertTrue($review->relationLoaded('user'));
-            $this->assertEqualsCanonicalizing(['id', 'name', 'avatar_path'], array_keys($review->user->getAttributes()));
+            $this->assertEqualsCanonicalizing(['id', 'name', 'avatar_path', 'google_avatar_url'], array_keys($review->user->getAttributes()));
         }
     }
 
@@ -347,13 +347,13 @@ class ReviewRatingsTest extends TestCase
             ->assertRedirect(route('foods.show', $food));
     }
 
-    public function test_approve_reject_and_get_mutation_routes_do_not_exist(): void
+    public function test_approval_workflow_routes_do_not_exist_while_client_review_deletion_remains_available(): void
     {
         $review = Review::factory()->create();
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
 
         $this->assertFalse(app('router')->has('admin.reviews.update'));
-        $this->assertFalse(app('router')->has('client.foods.reviews.destroy'));
+        $this->assertTrue(app('router')->has('client.foods.reviews.destroy'));
         $this->actingAs($admin)->patch('/admin/reviews/'.$review->id, ['status' => Review::STATUS_APPROVED])->assertMethodNotAllowed();
         $this->actingAs($admin)->get('/admin/reviews/'.$review->id)->assertMethodNotAllowed();
         $this->assertDatabaseHas('reviews', ['id' => $review->id]);

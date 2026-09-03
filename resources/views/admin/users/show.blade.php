@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'User Details | Night Market Selangor')
+@section('title', 'User Details | '.config('app.name'))
 
 @section('content')
     <div class="mb-4">

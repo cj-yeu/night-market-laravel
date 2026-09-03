@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Must-Try Foods | Night Market Selangor')
+@section('title', 'Must-Try Foods | '.config('app.name'))
 
 @section('content')
     <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
@@ -110,3 +110,15 @@
         @endif
     @endif
 @endsection
+
+@push('scripts')
+<script>
+    window.addEventListener('pageshow', function () {
+        const query = new URLSearchParams(window.location.search);
+        ['min_price', 'max_price'].forEach(function (name) {
+            const input = document.querySelector('[name="' + name + '"]');
+            if (input) input.value = query.get(name) || '';
+        });
+    });
+</script>
+@endpush

@@ -32,6 +32,18 @@ class CatalogAuditLogService
         ]);
     }
 
+    public function recordDeleted(User $user, string $entityType, int $entityId, string $name): void
+    {
+        CatalogAuditLog::create([
+            'user_id' => $user->id,
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'action' => 'deleted',
+            'summary' => 'Deleted '.str_replace('_', ' ', $entityType).' “'.str($name)->limit(160, '')->value().'”',
+            'changed_fields' => null,
+        ]);
+    }
+
     /** @param array<string, mixed> $before */
     public function safeChanges(array $before, Model $entity, array $extra = []): array
     {
