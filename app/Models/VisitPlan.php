@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class VisitPlan extends Model
 {
@@ -41,5 +42,10 @@ class VisitPlan extends Model
         return $this->hasMany(VisitPlanItem::class)
             ->orderBy('sort_order')
             ->orderBy('id');
+    }
+
+    public function googleCalendarEvent(): HasOne
+    {
+        return $this->hasOne(GoogleCalendarEvent::class);
     }
 }

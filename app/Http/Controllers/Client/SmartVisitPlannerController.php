@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\VisitPlan\SmartPlannerCreatePlanRequest;
 use App\Http\Requests\VisitPlan\SmartPlannerRecommendationRequest;
+use App\Http\Requests\VisitPlan\SmartPlannerTemplateRequest;
 use App\Services\SmartVisitPlannerService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -13,16 +14,17 @@ class SmartVisitPlannerController extends Controller
 {
     public function __construct(private readonly SmartVisitPlannerService $smartPlannerService) {}
 
-    public function index(): View
+    public function index(SmartPlannerTemplateRequest $request): View
     {
-        return $this->plannerView([
-            'visit_date' => $this->smartPlannerService->defaultVisitDate(),
-        ]);
+        return $this->plannerView($this->smartPlannerService->templateDefaults(
+            $request->validated('template'),
+            $this->smartPlannerService->defaultVisitDate(),
+        ));
     }
 
     public function recommend(SmartPlannerRecommendationRequest $request): View
     {
-        $preferences = $request->validated();
+        $preferences = $this->smartPlannerService->normaliseTemplatePreferences($request->validated());
 
         return $this->plannerView($preferences, $this->smartPlannerService->recommendDateAware($preferences));
     }

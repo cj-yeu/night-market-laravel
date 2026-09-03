@@ -62,6 +62,11 @@
                 <i class="bi bi-megaphone-fill" aria-hidden="true"></i>Social Media
             </a>
 
+            <a class="nav-link admin-sidebar-link {{ request()->routeIs('admin.social-media.automation.*') ? 'active' : '' }}"
+                href="{{ route('admin.social-media.automation.index') }}">
+                <i class="bi bi-diagram-3-fill" aria-hidden="true"></i>Automation Imports
+            </a>
+
         </nav>
 
         @php($adminInitial = mb_strtoupper(mb_substr(trim(auth()->user()->name), 0, 1)))

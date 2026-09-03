@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\CatalogDataQualityController;
 use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
 use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
+use App\Http\Controllers\Admin\SocialMediaAutomationController;
 use App\Http\Controllers\Admin\SocialMediaExtractionController;
 use App\Http\Controllers\Admin\SocialMediaRecordController;
 use App\Http\Controllers\Admin\StallController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Auth\GoogleAuthenticationController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Client\ClientHomeController;
+use App\Http\Controllers\Client\GoogleCalendarController;
 use App\Http\Controllers\Client\NightMarketDiscoveryController;
 use App\Http\Controllers\Client\ReviewController;
 use App\Http\Controllers\Client\SmartVisitPlannerController;
@@ -146,6 +148,17 @@ Route::middleware('auth')->group(function () {
 
     });
 
+    Route::middleware(['role:client', 'verified'])->group(function () {
+        Route::get('/client/visit-plans/{visitPlan}/google-calendar/connect', [GoogleCalendarController::class, 'connect'])
+            ->whereNumber('visitPlan')->name('client.visit-plans.google-calendar.connect');
+        Route::post('/client/visit-plans/{visitPlan}/google-calendar/sync', [GoogleCalendarController::class, 'sync'])
+            ->whereNumber('visitPlan')->name('client.visit-plans.google-calendar.sync');
+        Route::delete('/client/visit-plans/{visitPlan}/google-calendar', [GoogleCalendarController::class, 'destroy'])
+            ->whereNumber('visitPlan')->name('client.visit-plans.google-calendar.destroy');
+        Route::get('/integrations/google-calendar/callback', [GoogleCalendarController::class, 'callback'])
+            ->name('client.google-calendar.callback');
+    });
+
     Route::get('/admin/dashboard', AdminDashboardController::class)
         ->middleware('role:admin')
         ->name('admin.dashboard');
@@ -217,6 +230,51 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/social-media-records', [SocialMediaRecordController::class, 'index'])
             ->name('social-media-records.index');
+        Route::get('/social-media/automation', [SocialMediaAutomationController::class, 'index'])
+            ->name('social-media.automation.index');
+        Route::get('/social-media/automation/create', [SocialMediaAutomationController::class, 'create'])
+            ->name('social-media.automation.create');
+        Route::post('/social-media/automation', [SocialMediaAutomationController::class, 'store'])
+            ->name('social-media.automation.store');
+        Route::post('/social-media/automation/proposals/{catalogImportProposal}/fetch-metadata', [SocialMediaAutomationController::class, 'fetchMetadata'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.proposals.fetch-metadata');
+        Route::post('/social-media/automation/proposals/{catalogImportProposal}/generate-suggestions', [SocialMediaAutomationController::class, 'generateSuggestions'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.proposals.generate-suggestions');
+        Route::post('/social-media/automation/proposals/{catalogImportProposal}/submit', [SocialMediaAutomationController::class, 'submit'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.proposals.submit');
+        Route::post('/social-media/automation/proposals/{catalogImportProposal}/reject', [SocialMediaAutomationController::class, 'reject'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.proposals.reject');
+        Route::post('/social-media/automation/proposals/{catalogImportProposal}/approve-import', [SocialMediaAutomationController::class, 'approveAndImport'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.proposals.approve-import');
+        Route::patch('/social-media/automation/proposals/{catalogImportProposal}/market/{proposalMarket}', [SocialMediaAutomationController::class, 'updateSuggestionMarket'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalMarket')
+            ->name('social-media.automation.proposals.market.update');
+        Route::patch('/social-media/automation/proposals/{catalogImportProposal}/operating-days/{proposalOperatingDay}', [SocialMediaAutomationController::class, 'updateSuggestionOperatingDay'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalOperatingDay')
+            ->name('social-media.automation.proposals.operating-days.update');
+        Route::delete('/social-media/automation/proposals/{catalogImportProposal}/operating-days/{proposalOperatingDay}', [SocialMediaAutomationController::class, 'destroySuggestionOperatingDay'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalOperatingDay')
+            ->name('social-media.automation.proposals.operating-days.destroy');
+        Route::patch('/social-media/automation/proposals/{catalogImportProposal}/stalls/{proposalStall}', [SocialMediaAutomationController::class, 'updateSuggestionStall'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalStall')
+            ->name('social-media.automation.proposals.stalls.update');
+        Route::delete('/social-media/automation/proposals/{catalogImportProposal}/stalls/{proposalStall}', [SocialMediaAutomationController::class, 'destroySuggestionStall'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalStall')
+            ->name('social-media.automation.proposals.stalls.destroy');
+        Route::patch('/social-media/automation/proposals/{catalogImportProposal}/foods/{proposalFood}', [SocialMediaAutomationController::class, 'updateSuggestionFood'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalFood')
+            ->name('social-media.automation.proposals.foods.update');
+        Route::delete('/social-media/automation/proposals/{catalogImportProposal}/foods/{proposalFood}', [SocialMediaAutomationController::class, 'destroySuggestionFood'])
+            ->whereNumber('catalogImportProposal')->whereNumber('proposalFood')
+            ->name('social-media.automation.proposals.foods.destroy');
+        Route::get('/social-media/automation/{catalogImportProposal}', [SocialMediaAutomationController::class, 'show'])
+            ->whereNumber('catalogImportProposal')
+            ->name('social-media.automation.show');
         Route::get('/social-media/extract', [SocialMediaExtractionController::class, 'create'])
             ->name('social-media.extract.create');
         Route::post('/social-media/extract', [SocialMediaExtractionController::class, 'extract'])

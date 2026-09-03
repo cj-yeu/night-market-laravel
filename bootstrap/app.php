@@ -34,7 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             return route('login');
         });
-        $middleware->redirectUsersTo(fn (Request $request) => $request->user()?->role === 'admin'
+        $middleware->redirectUsersTo(fn (Request $request) => $request->user()?->hasAdminAccess()
             ? route('admin.dashboard')
             : route('client.home'));
     })

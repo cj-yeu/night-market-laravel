@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\CatalogMarketIdentity;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -31,13 +32,38 @@ class NightMarket extends Model
 
     protected $hidden = [
         'catalog_code',
+        'catalog_identity_hash',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(static function (NightMarket $market): void {
+            $market->catalog_identity_hash = $market->computedCatalogIdentityHash();
+        });
+
+        static::updating(static function (NightMarket $market): void {
+            if ($market->isDirty(CatalogMarketIdentity::FIELDS)) {
+                $market->catalog_identity_hash = $market->computedCatalogIdentityHash();
+            }
+        });
+    }
 
     public function scopePubliclyVisible(Builder $query): Builder
     {
         return $query
             ->where('status', self::STATUS_ACTIVE)
             ->where('state', 'Selangor');
+    }
+
+    public function scopeEligibleForPlanning(Builder $query): Builder
+    {
+        return $query
+            ->publiclyVisible()
+            ->whereHas('operatingDays')
+            ->whereHas('stalls', fn (Builder $stallQuery) => $stallQuery
+                ->where('status', Stall::STATUS_ACTIVE)
+                ->whereHas('foods', fn (Builder $foodQuery) => $foodQuery
+                    ->where('status', Food::STATUS_ACTIVE)));
     }
 
     public static function isOwnedImagePath(?string $path): bool
@@ -98,5 +124,25 @@ class NightMarket extends Model
     public function socialMediaRecords(): HasMany
     {
         return $this->hasMany(SocialMediaRecord::class);
+    }
+
+    public function catalogImportProposals(): HasMany
+    {
+        return $this->hasMany(CatalogImportProposal::class, 'matched_night_market_id');
+    }
+
+    public function catalogSourceLinks(): HasMany
+    {
+        return $this->hasMany(CatalogSocialMediaSourceLink::class);
+    }
+
+    private function computedCatalogIdentityHash(): string
+    {
+        return CatalogMarketIdentity::hash(
+            $this->name,
+            $this->address,
+            $this->city,
+            $this->state,
+        );
     }
 }

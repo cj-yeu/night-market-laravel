@@ -3,7 +3,10 @@
 namespace App\Http\Requests\StallFood;
 
 use App\Models\Food;
+use App\Models\NightMarket;
+use App\Models\Stall;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -23,7 +26,16 @@ class UpdateFoodRequest extends FormRequest
         $food = $this->route('food');
 
         return [
-            'stall_id' => ['required', 'integer', Rule::exists('stalls', 'id')],
+            'stall_id' => [
+                'required',
+                'integer',
+                Rule::exists('stalls', 'id')
+                    ->where(fn (Builder $query) => $query
+                        ->where('status', Stall::STATUS_ACTIVE)
+                        ->whereIn('night_market_id', NightMarket::query()
+                            ->publiclyVisible()
+                            ->select('id'))),
+            ],
             'name' => [
                 'required',
                 'string',
@@ -42,6 +54,13 @@ class UpdateFoodRequest extends FormRequest
             'source_url' => ['nullable', 'string', 'max:255', 'url:http,https'],
             'price_checked_at' => ['nullable', 'date', 'before_or_equal:today'],
             'verified_at' => ['nullable', 'date', 'before_or_equal:today'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'stall_id.exists' => 'The selected Stall must be active and belong to an active Night Market in Selangor.',
         ];
     }
 

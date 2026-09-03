@@ -119,6 +119,11 @@
                                         </span>
                                     </div>
                                     <p class="mb-1">{{ $review->comment }}</p>
+                                    @if ($review->tags->isNotEmpty())
+                                        <div class="d-flex flex-wrap gap-1 mb-2">
+                                            @foreach ($review->tags as $tag)<span class="badge text-bg-light border text-dark">{{ $tag->name }}</span>@endforeach
+                                        </div>
+                                    @endif
                                     <small class="text-secondary">
                                         {{ $review->created_at->format('M j, Y') }}
                                         @if ($review->updated_at->gt($review->created_at))

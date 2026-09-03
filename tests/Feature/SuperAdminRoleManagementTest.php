@@ -16,9 +16,9 @@ class SuperAdminRoleManagementTest extends TestCase
         $superAdmin = $this->superAdmin();
         $client = User::factory()->create(['role' => User::ROLE_CLIENT]);
 
+        $this->get(route('admin.users.index'))->assertRedirect(route('login'));
         $this->actingAs($superAdmin)->get(route('admin.dashboard'))->assertOk();
         $this->actingAs($superAdmin)->get(route('admin.users.index'))->assertOk();
-        $this->get(route('admin.users.index'))->assertRedirect(route('login'));
         $this->actingAs($client)->get(route('admin.users.index'))->assertForbidden();
         $this->actingAs($client)->patch(route('admin.users.promote', $client))->assertForbidden();
     }

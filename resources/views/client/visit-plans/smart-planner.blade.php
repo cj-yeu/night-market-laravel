@@ -3,6 +3,7 @@
 @section('title', 'Smart Visit Planner | Night Market Selangor')
 
 @section('content')
+    @php($activeTemplate = $preferences['template'] ?? null)
     <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
         <div>
             <h1 class="h2 fw-bold text-market mb-1">Smart Visit Planner</h1>
@@ -11,13 +12,48 @@
         <a href="{{ route('client.visit-plans.index') }}" class="btn btn-outline-secondary align-self-start">Back to My Visit Plans</a>
     </div>
 
+    <section class="mb-4" aria-labelledby="planner-templates-heading">
+        <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
+            <div>
+                <h2 id="planner-templates-heading" class="h4 fw-bold text-market mb-1">Recommended Plan Templates</h2>
+                <p class="text-secondary mb-0">Each template uses the same deterministic public-catalog recommendations. You can adjust the available preferences before generating a plan.</p>
+            </div>
+            @if ($activeTemplate)
+                <a href="{{ route('client.visit-plans.smart-planner.index') }}" class="btn btn-sm btn-outline-secondary align-self-start">Clear Template</a>
+            @endif
+        </div>
+        <div class="row g-3">
+            @foreach ($templates as $key => $template)
+                <div class="col-12 col-md-6 col-xl-3">
+                    <article class="card h-100 market-card {{ $activeTemplate === $key ? 'border border-2 border-warning' : '' }}">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <div class="d-flex justify-content-between gap-2 mb-2">
+                                <h3 class="h5 fw-bold mb-0">{{ $template['name'] }}</h3>
+                                @if ($activeTemplate === $key)<span class="badge text-bg-warning">Active</span>@endif
+                            </div>
+                            <p class="small text-secondary">{{ $template['description'] }}</p>
+                            <p class="small mb-4"><strong>Limit:</strong> {{ $template['limit'] }}</p>
+                            <a href="{{ route('client.visit-plans.smart-planner.index', ['template' => $key]) }}" class="btn {{ $activeTemplate === $key ? 'btn-outline-secondary' : 'btn-market' }} mt-auto">
+                                {{ $activeTemplate === $key ? 'Template Active' : 'Use Template' }}
+                            </a>
+                        </div>
+                    </article>
+                </div>
+            @endforeach
+        </div>
+    </section>
+
     <section class="card market-card mb-4" aria-labelledby="planner-preferences-heading">
         <div class="card-body p-4 p-lg-5">
             <h2 id="planner-preferences-heading" class="h4 fw-bold text-market">Planning Preferences</h2>
             <p class="text-secondary">Only public active Selangor catalog records are considered. No external AI or live data is used.</p>
 
+            @if ($markets->isEmpty())
+                <div class="alert alert-info mb-0">No markets currently have enough schedule, stall, and food data for planning.</div>
+            @else
             <form method="POST" action="{{ route('client.visit-plans.smart-planner.recommend') }}" novalidate>
                 @csrf
+                @if ($activeTemplate)<input type="hidden" name="template" value="{{ $activeTemplate }}">@endif
                 <div class="row g-3">
                     <div class="col-12 col-md-6 col-lg-4">
                         <label for="visit_date" class="form-label">Visit Date</label>
@@ -50,20 +86,32 @@
                         @error('night_market_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="col-6 col-lg-3">
-                        <label for="budget_min" class="form-label">Minimum Budget (RM)</label>
-                        <input id="budget_min" name="budget_min" inputmode="decimal"
-                            value="{{ old('budget_min', $preferences['budget_min'] ?? '') }}"
-                            class="form-control @error('budget_min') is-invalid @enderror" placeholder="e.g. 10">
-                        @error('budget_min')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                    </div>
-                    <div class="col-6 col-lg-3">
-                        <label for="budget_max" class="form-label">Maximum Budget (RM)</label>
-                        <input id="budget_max" name="budget_max" inputmode="decimal"
-                            value="{{ old('budget_max', $preferences['budget_max'] ?? '') }}"
-                            class="form-control @error('budget_max') is-invalid @enderror" placeholder="e.g. 50">
-                        @error('budget_max')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                    </div>
+                    @if ($activeTemplate === 'budget')
+                        <input type="hidden" name="budget_min" value="0">
+                        <div class="col-12 col-lg-3">
+                            <label for="budget_max" class="form-label">Budget Limit (RM)</label>
+                            <input id="budget_max" name="budget_max" inputmode="decimal"
+                                value="{{ old('budget_max', $preferences['budget_max'] ?? 30) }}"
+                                class="form-control @error('budget_max') is-invalid @enderror" placeholder="30">
+                            <div class="form-text">The template uses numeric price maximums only and defaults to RM30.</div>
+                            @error('budget_max')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    @else
+                        <div class="col-6 col-lg-3">
+                            <label for="budget_min" class="form-label">Minimum Budget (RM)</label>
+                            <input id="budget_min" name="budget_min" inputmode="decimal"
+                                value="{{ old('budget_min', $preferences['budget_min'] ?? '') }}"
+                                class="form-control @error('budget_min') is-invalid @enderror" placeholder="e.g. 10">
+                            @error('budget_min')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <label for="budget_max" class="form-label">Maximum Budget (RM)</label>
+                            <input id="budget_max" name="budget_max" inputmode="decimal"
+                                value="{{ old('budget_max', $preferences['budget_max'] ?? '') }}"
+                                class="form-control @error('budget_max') is-invalid @enderror" placeholder="e.g. 50">
+                            @error('budget_max')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    @endif
                     <div class="col-12 col-md-6 col-lg-3">
                         <label for="halal_preference" class="form-label">Stall Halal Preference</label>
                         <select id="halal_preference" name="halal_preference" class="form-select @error('halal_preference') is-invalid @enderror">
@@ -73,15 +121,19 @@
                         </select>
                         @error('halal_preference')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
-                    <div class="col-12 col-md-6 col-lg-3">
-                        <label for="max_markets" class="form-label">Maximum Markets</label>
-                        <select id="max_markets" name="max_markets" class="form-select @error('max_markets') is-invalid @enderror">
-                            @for ($limit = 1; $limit <= 3; $limit++)
-                                <option value="{{ $limit }}" @selected((int) old('max_markets', $preferences['max_markets'] ?? 1) === $limit)>{{ $limit }}</option>
-                            @endfor
-                        </select>
-                        @error('max_markets')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                    </div>
+                    @if ($activeTemplate)
+                        <input type="hidden" name="max_markets" value="1">
+                    @else
+                        <div class="col-12 col-md-6 col-lg-3">
+                            <label for="max_markets" class="form-label">Maximum Markets</label>
+                            <select id="max_markets" name="max_markets" class="form-select @error('max_markets') is-invalid @enderror">
+                                @for ($limit = 1; $limit <= 3; $limit++)
+                                    <option value="{{ $limit }}" @selected((int) old('max_markets', $preferences['max_markets'] ?? 1) === $limit)>{{ $limit }}</option>
+                                @endfor
+                            </select>
+                            @error('max_markets')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    @endif
 
                     <fieldset class="col-12">
                         <legend class="form-label">Preferred Food Categories <span class="text-secondary">(optional)</span></legend>
@@ -100,13 +152,18 @@
                     </fieldset>
 
                     <div class="col-12">
-                        <div class="form-check">
+                        @if ($activeTemplate === 'food_hunting')
                             <input type="hidden" name="must_try" value="0">
-                            <input class="form-check-input" type="checkbox" id="must_try" name="must_try" value="1"
-                                @checked((bool) old('must_try', $preferences['must_try'] ?? false))>
-                            <label class="form-check-label" for="must_try">Recommend Must-Try Foods only</label>
-                        </div>
-                        @error('must_try')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                            <p class="small text-secondary mb-0">Must-Try Foods are prioritised. Other active Foods can fill the plan when Must-Try options are limited.</p>
+                        @else
+                            <div class="form-check">
+                                <input type="hidden" name="must_try" value="0">
+                                <input class="form-check-input" type="checkbox" id="must_try" name="must_try" value="1"
+                                    @checked((bool) old('must_try', $preferences['must_try'] ?? false))>
+                                <label class="form-check-label" for="must_try">Recommend Must-Try Foods only</label>
+                            </div>
+                            @error('must_try')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                        @endif
                     </div>
 
                     <div class="col-12">
@@ -120,12 +177,21 @@
 
                 <button type="submit" class="btn btn-market mt-4">Generate Recommendations</button>
             </form>
+            @endif
         </div>
     </section>
 
     @if ($plannerResult !== null)
         <section aria-labelledby="planner-results-heading" class="vstack gap-4">
             <h2 id="planner-results-heading" class="visually-hidden">Smart Planner Results</h2>
+
+            @if ($plannerResult['template'] ?? null)
+                <div class="alert alert-info mb-0" role="status">
+                    <strong>{{ $plannerResult['template']['name'] }}</strong>: {{ $plannerResult['template']['description'] }}
+                    @if ($plannerResult['template']['notice'])<div class="mt-2">{{ $plannerResult['template']['notice'] }}</div>@endif
+                    <div class="small mt-2">{{ $plannerResult['template']['limit'] }}</div>
+                </div>
+            @endif
 
             <section class="card market-card" aria-labelledby="requested-date-heading">
                 <div class="card-body p-4">
@@ -215,17 +281,19 @@
                                     </div>
                                 @endif
 
-                                <h4 class="h5 fw-bold mt-4">Recommended Stalls</h4>
-                                <div class="d-flex flex-wrap gap-2 mb-4">
-                                    @foreach ($recommendation['stalls'] as $stallRecommendation)
-                                        <span class="border rounded-3 p-2">
-                                            {{ $stallRecommendation['stall']->name }}
-                                            <x-halal-status :stall="$stallRecommendation['stall']" class="ms-1" />
-                                        </span>
-                                    @endforeach
-                                </div>
+                                @if ($recommendation['stalls'] !== [])
+                                    <h4 class="h5 fw-bold mt-4">Recommended Stalls</h4>
+                                    <div class="d-flex flex-wrap gap-2 mb-4">
+                                        @foreach ($recommendation['stalls'] as $stallRecommendation)
+                                            <span class="border rounded-3 p-2">
+                                                {{ $stallRecommendation['stall']->name }}
+                                                <x-halal-status :stall="$stallRecommendation['stall']" class="ms-1" />
+                                            </span>
+                                        @endforeach
+                                    </div>
+                                @endif
 
-                                <h4 class="h5 fw-bold">Recommended Foods</h4>
+                                <h4 class="h5 fw-bold">{{ ($plannerResult['template']['key'] ?? null) === 'quick_visit' ? 'Recommended Stops' : 'Recommended Foods' }}</h4>
                                 <div class="row g-3">
                                     @foreach ($recommendation['foods'] as $foodRecommendation)
                                         <div class="col-12 col-md-6 col-xl-4">
@@ -256,6 +324,7 @@
                                     <input type="hidden" name="requested_date" value="{{ $plannerResult['requested_date'] }}">
                                     <input type="hidden" name="visit_date" value="{{ $plannerResult['recommendation_date'] }}">
                                     <input type="hidden" name="night_market_id" value="{{ $recommendation['market']->id }}">
+                                    @if ($plannerResult['template'] ?? null)<input type="hidden" name="template" value="{{ $plannerResult['template']['key'] }}">@endif
                                     <input type="hidden" name="halal_preference" value="{{ $preferences['halal_preference'] }}">
                                     <input type="hidden" name="must_try" value="{{ $preferences['must_try'] ? 1 : 0 }}">
                                     <input type="hidden" name="max_markets" value="{{ $preferences['max_markets'] }}">

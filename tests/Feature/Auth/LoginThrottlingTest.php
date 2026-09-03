@@ -155,6 +155,93 @@ class LoginThrottlingTest extends TestCase
         $this->login($user->email, 'password')->assertRedirect($intendedUrl);
     }
 
+    public function test_external_intended_destination_is_rejected_after_client_login(): void
+    {
+        $user = $this->activeClient();
+
+        $this->withSession(['url.intended' => 'https://attacker.example/redirect'])
+            ->post(route('login.store'), [
+                'email' => $user->email,
+                'password' => 'password',
+            ])
+            ->assertRedirect(route('client.home'));
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertNull(session('url.intended'));
+    }
+
+    public function test_admin_roles_ignore_intended_urls_and_enter_the_admin_dashboard(): void
+    {
+        foreach ([User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN] as $role) {
+            $user = User::factory()->create([
+                'role' => $role,
+                'is_active' => true,
+                'password' => 'password',
+            ]);
+
+            $this->withSession(['url.intended' => route('client.visit-plans.create')])
+                ->post(route('login.store'), [
+                    'email' => $user->email,
+                    'password' => 'password',
+                ])
+                ->assertRedirect(route('admin.dashboard'));
+
+            $this->assertAuthenticatedAs($user);
+            $this->assertNull(session('url.intended'));
+            $this->post(route('logout'));
+        }
+    }
+
+    public function test_successful_password_login_regenerates_the_session(): void
+    {
+        $user = $this->activeClient();
+        $this->app['session']->start();
+        $sessionIdBeforeLogin = $this->app['session']->getId();
+
+        $this->login($user->email, 'password')->assertRedirect(route('client.home'));
+
+        $this->assertNotSame($sessionIdBeforeLogin, $this->app['session']->getId());
+    }
+
+    public function test_logout_invalidates_session_data_and_rotates_the_csrf_token(): void
+    {
+        $user = $this->activeClient();
+        $this->actingAs($user);
+        $this->app['session']->start();
+        $this->app['session']->put('authentication-test-value', 'sensitive');
+        $tokenBeforeLogout = $this->app['session']->token();
+
+        $this->post(route('logout'))->assertRedirect(route('login'));
+
+        $this->assertGuest();
+        $this->assertNull($this->app['session']->get('authentication-test-value'));
+        $this->assertNotSame($tokenBeforeLogout, $this->app['session']->token());
+    }
+
+    public function test_authenticated_super_admin_is_redirected_away_from_guest_auth_pages(): void
+    {
+        $superAdmin = User::factory()->create(['role' => User::ROLE_SUPER_ADMIN]);
+
+        $this->actingAs($superAdmin)->get(route('login'))
+            ->assertRedirect(route('admin.dashboard'));
+        $this->actingAs($superAdmin)->get(route('register'))
+            ->assertRedirect(route('admin.dashboard'));
+    }
+
+    public function test_unsupported_database_role_cannot_authenticate(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'unsupported-role',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $this->login($user->email, 'password')
+            ->assertSessionHasErrors(['email' => self::FIRST_FAILURE]);
+
+        $this->assertGuest();
+    }
+
     public function test_ordinary_client_and_admin_login_and_logout_still_work(): void
     {
         $users = [

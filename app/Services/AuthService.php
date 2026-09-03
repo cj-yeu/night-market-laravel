@@ -7,6 +7,8 @@ use Illuminate\Auth\AuthManager;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Contracts\Auth\StatefulGuard;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use UnexpectedValueException;
@@ -29,13 +31,19 @@ class AuthService
      */
     public function registerClient(array $data): User
     {
-        $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => $data['password'],
-            'role' => User::ROLE_CLIENT,
-            'is_active' => true,
-        ]);
+        try {
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => $data['password'],
+                'role' => User::ROLE_CLIENT,
+                'is_active' => true,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages([
+                'email' => 'An account already uses this email address.',
+            ]);
+        }
 
         $this->guard()->login($user);
 
@@ -60,7 +68,8 @@ class AuthService
         if (! $user
             || $user->password === null
             || ! Hash::check($credentials['password'], $user->password)
-            || ! $user->is_active) {
+            || ! $user->is_active
+            || ! in_array($user->role, [User::ROLE_CLIENT, User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN], true)) {
             $this->limiter->hit($limiterKey, self::LOGIN_DECAY_SECONDS);
 
             if ($this->limiter->attempts($limiterKey) >= self::LOGIN_MAX_ATTEMPTS) {
@@ -94,6 +103,29 @@ class AuthService
     }
 
     /**
+     * Resolve and consume the safe post-authentication destination.
+     *
+     * Admin roles always enter the Admin Dashboard. Clients may continue only
+     * to a same-origin intended URL recorded by the application.
+     */
+    public function postAuthenticationUrl(Request $request, User $user): string
+    {
+        $fallback = route($this->homeRouteFor($user));
+
+        if ($user->hasAdminAccess()) {
+            $request->session()->forget('url.intended');
+
+            return $fallback;
+        }
+
+        $intended = $request->session()->pull('url.intended');
+
+        return is_string($intended) && $this->isSafeInternalUrl($intended)
+            ? $intended
+            : $fallback;
+    }
+
+    /**
      * Log the current user out of the web guard.
      */
     public function logout(): void
@@ -107,6 +139,41 @@ class AuthService
         $guard = $this->auth->guard('web');
 
         return $guard;
+    }
+
+    private function isSafeInternalUrl(string $url): bool
+    {
+        if ($url === '' || preg_match('/[\x00-\x1F\x7F]/', $url) === 1) {
+            return false;
+        }
+
+        if (str_starts_with($url, '/')) {
+            return ! str_starts_with($url, '//') && ! str_starts_with($url, '/\\');
+        }
+
+        $target = parse_url($url);
+        $application = parse_url((string) config('app.url'));
+
+        if ($target === false || $application === false
+            || isset($target['user']) || isset($target['pass'])
+            || ! isset($target['scheme'], $target['host'], $application['scheme'], $application['host'])) {
+            return false;
+        }
+
+        $targetScheme = mb_strtolower($target['scheme']);
+        $applicationScheme = mb_strtolower($application['scheme']);
+
+        if (! in_array($targetScheme, ['http', 'https'], true)
+            || $targetScheme !== $applicationScheme
+            || ! hash_equals(mb_strtolower($application['host']), mb_strtolower($target['host']))) {
+            return false;
+        }
+
+        $defaultPort = static fn (string $scheme): int => $scheme === 'https' ? 443 : 80;
+        $targetPort = (int) ($target['port'] ?? $defaultPort($targetScheme));
+        $applicationPort = (int) ($application['port'] ?? $defaultPort($applicationScheme));
+
+        return $targetPort === $applicationPort;
     }
 
     /**

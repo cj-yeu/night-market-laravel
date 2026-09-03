@@ -151,6 +151,16 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return $this->hasMany(SocialMediaRecord::class, 'approved_by');
     }
 
+    public function createdCatalogImportProposals(): HasMany
+    {
+        return $this->hasMany(CatalogImportProposal::class, 'created_by');
+    }
+
+    public function reviewedCatalogImportProposals(): HasMany
+    {
+        return $this->hasMany(CatalogImportProposal::class, 'reviewed_by');
+    }
+
     public function socialAccounts(): HasMany
     {
         return $this->hasMany(SocialAccount::class);
@@ -160,6 +170,16 @@ class User extends Authenticatable implements MustVerifyEmailContract
     {
         return $this->hasOne(SocialAccount::class)
             ->where('provider', SocialAccount::PROVIDER_GOOGLE);
+    }
+
+    public function googleCalendarConnection(): HasOne
+    {
+        return $this->hasOne(GoogleCalendarConnection::class);
+    }
+
+    public function googleCalendarEvents(): HasMany
+    {
+        return $this->hasMany(GoogleCalendarEvent::class);
     }
 
     public function authenticationMethod(): string

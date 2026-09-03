@@ -34,6 +34,25 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    // Kept separate from Google sign-in so Calendar consent never expands the
+    // scopes granted to the authentication flow.
+    'google_calendar' => [
+        'client_id' => env('GOOGLE_CALENDAR_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CALENDAR_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_CALENDAR_REDIRECT_URI'),
+    ],
+
+    'youtube' => [
+        'data_api_key' => env('YOUTUBE_DATA_API_KEY'),
+        'base_url' => 'https://www.googleapis.com/youtube/v3',
+    ],
+
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-3.5-flash'),
+        'base_url' => 'https://generativelanguage.googleapis.com',
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

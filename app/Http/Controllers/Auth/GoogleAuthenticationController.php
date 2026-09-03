@@ -5,16 +5,22 @@ namespace App\Http\Controllers\Auth;
 use App\Exceptions\SocialAuthenticationException;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\AuthService;
 use App\Services\GoogleAuthenticationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
 use Throwable;
 
 class GoogleAuthenticationController extends Controller
 {
-    public function __construct(private readonly GoogleAuthenticationService $googleAuthenticationService) {}
+    public function __construct(
+        private readonly GoogleAuthenticationService $googleAuthenticationService,
+        private readonly AuthService $authService,
+    ) {}
 
     public function redirect(Request $request): SymfonyRedirectResponse
     {
@@ -27,13 +33,32 @@ class GoogleAuthenticationController extends Controller
 
     public function callback(Request $request): RedirectResponse
     {
-        $intent = $request->session()->get(GoogleAuthenticationService::SESSION_INTENT);
+        $intent = $request->session()->pull(GoogleAuthenticationService::SESSION_INTENT);
 
         if (! is_array($intent) || ! in_array($intent['purpose'] ?? null, ['login', 'link'], true)) {
             return $this->failureResponse(
                 $request,
                 null,
                 'The Google authentication session expired. Please try again.',
+            );
+        }
+
+        $providerError = $request->query('error');
+
+        if ($providerError !== null) {
+            $cancelled = is_string($providerError) && hash_equals('access_denied', $providerError);
+
+            Log::notice('Google OAuth callback returned a provider error.', [
+                'purpose' => $intent['purpose'],
+                'result' => $cancelled ? 'cancelled' : 'provider_error',
+            ]);
+
+            return $this->failureResponse(
+                $request,
+                $intent,
+                $cancelled
+                    ? 'Google sign-in was cancelled. No changes were made.'
+                    : 'Google could not authorize this request. Please try again.',
             );
         }
 
@@ -52,7 +77,6 @@ class GoogleAuthenticationController extends Controller
                 }
 
                 $this->googleAuthenticationService->link($user, $providerUser);
-                $request->session()->forget(GoogleAuthenticationService::SESSION_INTENT);
 
                 return redirect()
                     ->route('profile.edit')
@@ -66,21 +90,36 @@ class GoogleAuthenticationController extends Controller
             }
 
             $user = $this->googleAuthenticationService->login($providerUser);
-            $request->session()->forget(GoogleAuthenticationService::SESSION_INTENT);
             $request->session()->regenerate();
 
-            if (! $user->hasVerifiedEmail()) {
-                return redirect()
-                    ->route('verification.notice')
-                    ->with('status', 'Verify your email address to continue to trusted Client features.');
-            }
-
             return redirect()
-                ->intended(route('client.home'))
+                ->to($this->authService->postAuthenticationUrl($request, $user))
                 ->with('status', 'Welcome back, '.$user->name.'.');
         } catch (SocialAuthenticationException $exception) {
+            Log::notice('Google authentication was rejected by account policy.', [
+                'exception_class' => $exception::class,
+                'purpose' => $intent['purpose'],
+                'link_user_id' => $intent['purpose'] === 'link' ? (int) ($intent['user_id'] ?? 0) : null,
+            ]);
+
             return $this->failureResponse($request, $intent, $exception->getMessage());
-        } catch (Throwable) {
+        } catch (InvalidStateException $exception) {
+            Log::warning('Google authentication state validation failed.', [
+                'exception_class' => $exception::class,
+                'purpose' => $intent['purpose'],
+            ]);
+
+            return $this->failureResponse(
+                $request,
+                $intent,
+                'The Google authentication session is invalid or expired. Please try again.',
+            );
+        } catch (Throwable $exception) {
+            Log::warning('Google authentication callback failed.', [
+                'exception_class' => $exception::class,
+                'purpose' => $intent['purpose'],
+            ]);
+
             return $this->failureResponse(
                 $request,
                 $intent,
@@ -96,7 +135,7 @@ class GoogleAuthenticationController extends Controller
     {
         $request->session()->forget(GoogleAuthenticationService::SESSION_INTENT);
 
-        $route = ($intent['purpose'] ?? null) === 'link' && $request->user()?->role === User::ROLE_CLIENT
+        $route = ($intent['purpose'] ?? null) === 'link' && $request->user() instanceof User
             ? 'profile.edit'
             : 'login';
 

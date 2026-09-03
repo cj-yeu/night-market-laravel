@@ -33,7 +33,7 @@ class RegisteredUserController extends Controller
 
         $request->session()->regenerate();
 
-        $sent = $this->emailVerificationService->send($user);
+        $sent = $this->emailVerificationService->sendForRegistration($user);
 
         return redirect()
             ->route('verification.notice')

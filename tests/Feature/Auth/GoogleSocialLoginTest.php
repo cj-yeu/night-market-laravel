@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
 use Laravel\Socialite\Two\User as SocialiteUser;
 use RuntimeException;
 use Tests\TestCase;
@@ -139,7 +140,7 @@ class GoogleSocialLoginTest extends TestCase
         $this->assertDatabaseCount('social_accounts', 1);
     }
 
-    public function test_returning_linked_google_client_preserves_unverified_state(): void
+    public function test_verified_google_identity_verifies_the_matching_linked_client(): void
     {
         $user = User::factory()->unverified()->create([
             'role' => User::ROLE_CLIENT,
@@ -155,10 +156,10 @@ class GoogleSocialLoginTest extends TestCase
             'email' => $user->email,
         ]);
 
-        $this->googleLoginCallback()->assertRedirect(route('verification.notice'));
+        $this->googleLoginCallback()->assertRedirect(route('client.home'));
 
         $this->assertAuthenticatedAs($user);
-        $this->assertFalse($user->refresh()->hasVerifiedEmail());
+        $this->assertTrue($user->refresh()->hasVerifiedEmail());
     }
 
     public function test_repeated_callbacks_do_not_create_duplicate_users_or_social_accounts(): void
@@ -176,27 +177,38 @@ class GoogleSocialLoginTest extends TestCase
         $this->assertSame(1, SocialAccount::where('provider_user_id', 'google-repeat-client')->count());
     }
 
-    public function test_existing_unlinked_email_is_not_silently_linked_or_logged_in(): void
+    public function test_existing_password_client_is_safely_linked_by_verified_matching_google_email(): void
     {
-        $existing = User::factory()->create([
+        $existing = User::factory()->unverified()->create([
             'email' => 'existing-local@example.test',
             'role' => User::ROLE_CLIENT,
+            'is_active' => true,
+            'name' => 'Existing Password Client',
+            'password' => 'OriginalPassword123!',
         ]);
+        $originalPasswordHash = $existing->password;
         $this->fakeGoogle([
             'id' => 'google-email-collision',
-            'email' => $existing->email,
+            'email' => '  '.mb_strtoupper($existing->email).'  ',
+            'name' => 'Provider Name Must Not Replace Local Name',
         ]);
 
-        $this->googleLoginCallback()
-            ->assertRedirect(route('login'))
-            ->assertSessionHas(
-                'error',
-                'An account already uses this email address. Log in with your password and connect Google from Profile.',
-            );
+        $this->googleLoginCallback()->assertRedirect(route('client.home'));
 
-        $this->assertGuest();
-        $this->assertDatabaseCount('social_accounts', 0);
+        $this->assertAuthenticatedAs($existing);
         $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseHas('social_accounts', [
+            'user_id' => $existing->id,
+            'provider' => SocialAccount::PROVIDER_GOOGLE,
+            'provider_user_id' => 'google-email-collision',
+        ]);
+        $existing->refresh();
+        $this->assertSame('Existing Password Client', $existing->name);
+        $this->assertSame(User::ROLE_CLIENT, $existing->role);
+        $this->assertTrue($existing->is_active);
+        $this->assertTrue($existing->hasVerifiedEmail());
+        $this->assertSame($originalPasswordHash, $existing->password);
+        $this->assertTrue(Hash::check('OriginalPassword123!', $existing->password));
     }
 
     public function test_missing_provider_email_or_id_is_rejected(): void
@@ -234,6 +246,22 @@ class GoogleSocialLoginTest extends TestCase
         $this->assertDatabaseCount('users', 0);
     }
 
+    public function test_provider_email_without_an_explicit_verified_claim_is_rejected(): void
+    {
+        $providerUser = SocialiteUser::fake([
+            'id' => 'google-missing-verification-claim',
+            'name' => 'Missing Verification Claim',
+            'email' => 'missing-verification@example.test',
+        ]);
+        Socialite::fake('google', $providerUser);
+
+        $this->googleLoginCallback()
+            ->assertRedirect(route('login'))
+            ->assertSessionHas('error', 'Google authentication requires a verified email address.');
+
+        $this->assertDatabaseCount('users', 0);
+    }
+
     public function test_provider_cancellation_is_handled_without_exposing_raw_exception_data(): void
     {
         Socialite::fake('google', function (): never {
@@ -247,6 +275,37 @@ class GoogleSocialLoginTest extends TestCase
             ->assertSessionHas('error', 'Google authentication could not be completed. Please try again.')
             ->assertSessionMissing('secret-token');
         $this->followRedirects($response)->assertDontSee('raw-provider-token');
+    }
+
+    public function test_google_access_denial_is_reported_as_cancellation_without_echoing_provider_details(): void
+    {
+        $response = $this->withSession([
+            GoogleAuthenticationService::SESSION_INTENT => ['purpose' => 'login'],
+        ])->get(route('auth.google.callback', [
+            'error' => 'access_denied',
+            'error_description' => 'secret-provider-description',
+        ]));
+
+        $response
+            ->assertRedirect(route('login'))
+            ->assertSessionHas('error', 'Google sign-in was cancelled. No changes were made.');
+        $this->followRedirects($response)->assertDontSee('secret-provider-description');
+    }
+
+    public function test_invalid_google_oauth_state_has_a_specific_safe_error(): void
+    {
+        Socialite::fake('google', function (): never {
+            throw new InvalidStateException;
+        });
+
+        $this->googleLoginCallback()
+            ->assertRedirect(route('login'))
+            ->assertSessionHas(
+                'error',
+                'The Google authentication session is invalid or expired. Please try again.',
+            );
+
+        $this->assertGuest();
     }
 
     public function test_callback_requires_a_valid_server_side_intent(): void
@@ -278,12 +337,12 @@ class GoogleSocialLoginTest extends TestCase
 
         $this->googleLoginCallback()
             ->assertRedirect(route('login'))
-            ->assertSessionHas('error', 'Google authentication is not available for this account.');
+            ->assertSessionHas('error', 'This account is inactive. Please contact an administrator.');
 
         $this->assertGuest();
     }
 
-    public function test_admin_cannot_be_auto_linked_or_authenticated_through_google(): void
+    public function test_existing_unlinked_admin_is_not_auto_linked_by_matching_email(): void
     {
         $admin = User::factory()->create([
             'role' => User::ROLE_ADMIN,
@@ -294,24 +353,69 @@ class GoogleSocialLoginTest extends TestCase
             'email' => $admin->email,
         ]);
 
-        $this->googleLoginCallback()->assertRedirect(route('login'));
+        $this->googleLoginCallback()
+            ->assertRedirect(route('login'))
+            ->assertSessionHas(
+                'error',
+                'This Admin account is not connected to Google. Sign in with your password instead.',
+            );
         $this->assertGuest();
         $this->assertDatabaseCount('social_accounts', 0);
+    }
+
+    public function test_previously_linked_client_promoted_to_admin_keeps_google_login_and_admin_redirect(): void
+    {
+        $admin = User::factory()->create([
+            'role' => User::ROLE_CLIENT,
+            'email' => 'promoted-google-admin@example.test',
+            'is_active' => true,
+        ]);
 
         $admin->socialAccounts()->create([
             'provider' => SocialAccount::PROVIDER_GOOGLE,
             'provider_user_id' => 'google-admin-linked',
             'provider_email' => $admin->email,
         ]);
+        $admin->forceFill(['role' => User::ROLE_ADMIN])->save();
         $this->fakeGoogle([
             'id' => 'google-admin-linked',
             'email' => $admin->email,
         ]);
 
+        $this->withSession([
+            GoogleAuthenticationService::SESSION_INTENT => ['purpose' => 'login'],
+            'url.intended' => route('client.visit-plans.create'),
+        ])->get(route('auth.google.callback'))
+            ->assertRedirect(route('admin.dashboard'));
+
+        $this->assertAuthenticatedAs($admin);
+        $this->assertSame(User::ROLE_ADMIN, $admin->refresh()->role);
+        $this->assertDatabaseHas('social_accounts', [
+            'user_id' => $admin->id,
+            'provider_user_id' => 'google-admin-linked',
+        ]);
+    }
+
+    public function test_provider_id_conflicting_with_another_local_email_is_rejected(): void
+    {
+        $linkedUser = User::factory()->create(['email' => 'provider-owner@example.test']);
+        $linkedUser->socialAccounts()->create([
+            'provider' => SocialAccount::PROVIDER_GOOGLE,
+            'provider_user_id' => 'google-provider-conflict',
+            'provider_email' => $linkedUser->email,
+        ]);
+        $this->fakeGoogle([
+            'id' => 'google-provider-conflict',
+            'email' => 'different-provider-email@example.test',
+        ]);
+
         $this->googleLoginCallback()
             ->assertRedirect(route('login'))
-            ->assertSessionHas('error', 'Google authentication is not available for this account.');
+            ->assertSessionHas('error', 'This Google identity conflicts with another account.');
+
         $this->assertGuest();
+        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('social_accounts', 1);
     }
 
     public function test_request_input_cannot_create_an_admin(): void

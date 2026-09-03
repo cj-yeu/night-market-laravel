@@ -698,6 +698,131 @@ class VisitPlannerTest extends TestCase
         ]);
     }
 
+    public function test_market_options_require_schedules_and_past_plan_edits_preserve_immutable_fields(): void
+    {
+        [$scheduledMarket, $visitDate] = $this->marketWithUpcomingOperatingDate();
+        $unscheduledMarket = NightMarket::factory()->create(['name' => 'Unscheduled Market']);
+
+        $this->actingAs($this->client)->get(route('client.visit-plans.create'))
+            ->assertOk()
+            ->assertSee($scheduledMarket->name)
+            ->assertDontSee($unscheduledMarket->name);
+
+        $inactiveMarketPlan = VisitPlan::factory()->create([
+            'user_id' => $this->client->id,
+            'night_market_id' => $scheduledMarket->id,
+            'visit_date' => $visitDate->toDateString(),
+        ]);
+        $scheduledMarket->update(['status' => NightMarket::STATUS_INACTIVE]);
+
+        $this->actingAs($this->client)->get(route('client.visit-plans.edit', $inactiveMarketPlan))
+            ->assertOk()
+            ->assertSee('value="'.$scheduledMarket->id.'"', false)
+            ->assertSee($scheduledMarket->name)
+            ->assertSee('no longer publicly available');
+
+        $this->actingAs($this->client)->patch(route('client.visit-plans.update', $inactiveMarketPlan), [
+            'title' => 'Updated Inactive Market Plan',
+            'night_market_id' => $scheduledMarket->id,
+            'visit_date' => $visitDate->toDateString(),
+            'notes' => 'Keep the original Market until I choose otherwise.',
+        ])->assertRedirect(route('client.visit-plans.show', $inactiveMarketPlan));
+
+        [$itemMarket, $itemVisitDate] = $this->marketWithUpcomingOperatingDate();
+        [$replacementMarket] = $this->marketWithUpcomingOperatingDate();
+        $planWithItems = VisitPlan::factory()->create([
+            'user_id' => $this->client->id,
+            'night_market_id' => $itemMarket->id,
+            'visit_date' => $itemVisitDate->toDateString(),
+        ]);
+        $planWithItems->items()->create([
+            'item_type' => 'stall',
+            'item_name' => 'Existing protected item',
+            'sort_order' => 1,
+        ]);
+        $this->actingAs($this->client)->patch(route('client.visit-plans.update', $planWithItems), [
+            'title' => $planWithItems->title,
+            'night_market_id' => $replacementMarket->id,
+            'visit_date' => $itemVisitDate->toDateString(),
+            'notes' => $planWithItems->notes,
+        ])->assertSessionHasErrors([
+            'night_market_id' => 'Remove all plan items before changing the night market.',
+        ]);
+        $this->assertSame($itemMarket->id, $planWithItems->fresh()->night_market_id);
+
+        [$pastMarket] = $this->marketWithUpcomingOperatingDate();
+        $pastPlan = VisitPlan::factory()->create([
+            'user_id' => $this->client->id,
+            'night_market_id' => $pastMarket->id,
+            'visit_date' => now()->subDay()->toDateString(),
+            'title' => 'Past Visit',
+        ]);
+        $pastStall = Stall::factory()->create(['night_market_id' => $pastMarket->id]);
+        $pastItem = $pastPlan->items()->create([
+            'stall_id' => $pastStall->id,
+            'item_type' => 'stall',
+            'item_name' => $pastStall->name,
+            'sort_order' => 1,
+        ]);
+
+        $this->actingAs($this->client)->patch(route('client.visit-plans.update', $pastPlan), [
+            'title' => 'Past Visit Notes Updated',
+            'night_market_id' => $pastMarket->id,
+            'visit_date' => $pastPlan->visit_date->toDateString(),
+            'notes' => 'Remember this visit.',
+        ])->assertRedirect(route('client.visit-plans.show', $pastPlan));
+        $this->actingAs($this->client)->patch(route('client.visit-plans.update', $pastPlan), [
+            'title' => 'Attempt to change past visit',
+            'night_market_id' => $pastMarket->id,
+            'visit_date' => now()->addDay()->toDateString(),
+            'notes' => null,
+        ])->assertSessionHasErrors('visit_date');
+        $this->actingAs($this->client)->post(route('client.visit-plans.items.store', $pastPlan), [
+            'item_type' => 'stall',
+            'item_id' => $pastStall->id,
+        ])->assertSessionHasErrors('item_id');
+        $this->actingAs($this->client)->delete(route('client.visit-plans.items.destroy', [$pastPlan, $pastItem]))
+            ->assertSessionHasErrors('item_id');
+
+        $this->assertDatabaseHas('visit_plan_items', ['id' => $pastItem->id]);
+        $this->assertDatabaseHas('visit_plans', [
+            'id' => $pastPlan->id,
+            'title' => 'Past Visit Notes Updated',
+            'notes' => 'Remember this visit.',
+        ]);
+    }
+
+    public function test_food_plan_items_show_food_stall_category_price_and_must_try_status(): void
+    {
+        [$market] = $this->marketWithUpcomingOperatingDate();
+        $plan = VisitPlan::factory()->create([
+            'user_id' => $this->client->id,
+            'night_market_id' => $market->id,
+        ]);
+        $stall = Stall::factory()->create(['night_market_id' => $market->id, 'name' => 'Context Stall']);
+        $food = Food::factory()->mustTry()->create([
+            'stall_id' => $stall->id,
+            'name' => 'Context Food',
+            'category' => 'Dessert',
+            'price_min' => 8,
+            'price_max' => 12,
+        ]);
+        $plan->items()->create([
+            'food_id' => $food->id,
+            'item_type' => 'food',
+            'item_name' => $food->name,
+            'sort_order' => 1,
+        ]);
+
+        $this->actingAs($this->client)->get(route('client.visit-plans.show', $plan))
+            ->assertOk()
+            ->assertSee($food->name)
+            ->assertSee($stall->name)
+            ->assertSee('Dessert')
+            ->assertSee('RM8.00–RM12.00')
+            ->assertSee('Must-Try');
+    }
+
     private function marketWithUpcomingOperatingDate(): array
     {
         $visitDate = Carbon::now()->addWeek();

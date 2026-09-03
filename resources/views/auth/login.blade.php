@@ -39,17 +39,7 @@
                                     Forgot your password?
                                 </a>
                             </div>
-                            <input
-                                type="password"
-                                class="form-control @error('password') is-invalid @enderror"
-                                id="password"
-                                name="password"
-                                autocomplete="current-password"
-                                required
-                            >
-                            @error('password')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
+                            <div class="input-group"><input type="password" class="form-control @error('password') is-invalid @enderror" id="password" name="password" autocomplete="current-password" required><button class="btn btn-outline-secondary" type="button" data-password-toggle="password" aria-label="Show password"><i class="bi bi-eye" aria-hidden="true"></i></button>@error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
                         </div>
 
                         <button type="submit" class="btn btn-market w-100">Login</button>

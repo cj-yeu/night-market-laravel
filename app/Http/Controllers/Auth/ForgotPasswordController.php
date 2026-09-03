@@ -19,11 +19,13 @@ class ForgotPasswordController extends Controller
 
     public function store(ForgotPasswordRequest $request): RedirectResponse
     {
-        $this->passwordResetService->sendResetLink($request->validated());
+        $sent = $this->passwordResetService->sendResetLink($request->validated());
 
         return back()->with(
-            'status',
-            'If an account exists for this email address, a password reset link has been sent.',
+            $sent ? 'status' : 'error',
+            $sent
+                ? 'If an account exists for this email address, a password reset link has been sent.'
+                : 'The password reset email could not be sent. Please try again later.',
         );
     }
 }

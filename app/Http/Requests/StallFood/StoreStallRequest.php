@@ -26,7 +26,9 @@ class StoreStallRequest extends FormRequest
                 'required',
                 'integer',
                 Rule::exists('night_markets', 'id')
-                    ->where(fn (Builder $query) => $query->where('status', NightMarket::STATUS_ACTIVE)),
+                    ->where(fn (Builder $query) => $query
+                        ->where('status', NightMarket::STATUS_ACTIVE)
+                        ->where('state', 'Selangor')),
             ],
             'name' => [
                 'required',
@@ -58,6 +60,13 @@ class StoreStallRequest extends FormRequest
             'source_url' => ['nullable', 'string', 'max:255', 'url:http,https'],
             'verified_at' => ['nullable', 'date', 'before_or_equal:today'],
             'status' => ['required', Rule::in([Stall::STATUS_ACTIVE, Stall::STATUS_INACTIVE])],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'night_market_id.exists' => 'The selected Night Market must be active and located in Selangor.',
         ];
     }
 
