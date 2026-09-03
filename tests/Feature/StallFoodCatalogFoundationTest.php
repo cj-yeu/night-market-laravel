@@ -329,6 +329,7 @@ class StallFoodCatalogFoundationTest extends TestCase
             'name' => $name,
             'description' => 'Structured stall metadata.',
             'category' => 'Prepared Food',
+            'new_category' => 'Prepared Food',
             'halal_status' => Stall::HALAL_UNKNOWN,
             'status' => Stall::STATUS_ACTIVE,
         ];

@@ -378,7 +378,7 @@ class VisitPlannerTest extends TestCase
         $this->actingAs($this->client)
             ->post(route('client.visit-plans.items.store', $visitPlan), [
                 'item_type' => 'stall',
-                'item_id' => $stall->id,
+                'stall_id' => $stall->id,
                 'notes' => 'Visit first.',
                 'visit_plan_id' => $otherPlan->id,
                 'user_id' => $otherPlan->user_id,
@@ -388,7 +388,7 @@ class VisitPlannerTest extends TestCase
         $this->actingAs($this->client)
             ->post(route('client.visit-plans.items.store', $visitPlan), [
                 'item_type' => 'food',
-                'item_id' => $food->id,
+                'food_id' => $food->id,
             ])
             ->assertRedirect(route('client.visit-plans.show', $visitPlan));
 
@@ -407,7 +407,7 @@ class VisitPlannerTest extends TestCase
         $this->actingAs($this->client)
             ->post(route('client.visit-plans.items.store', $otherPlan), [
                 'item_type' => 'stall',
-                'item_id' => $stall->id,
+                'stall_id' => $stall->id,
             ])
             ->assertNotFound();
         $this->assertDatabaseHas('visit_plan_items', [
@@ -421,9 +421,9 @@ class VisitPlannerTest extends TestCase
         $this->actingAs($this->client)
             ->post(route('client.visit-plans.items.store', $visitPlan), [
                 'item_type' => 'stall',
-                'item_id' => $otherStall->id,
+                'stall_id' => $otherStall->id,
             ])
-            ->assertSessionHasErrors('item_id');
+            ->assertSessionHasErrors('stall_id');
 
         $item = $visitPlan->items()->where('item_name', 'Plan Stall')->firstOrFail();
 
@@ -460,8 +460,8 @@ class VisitPlannerTest extends TestCase
         $inactiveFood = Food::factory()->inactive()->create(['stall_id' => $stall->id]);
 
         foreach ([
-            ['item_type' => 'stall', 'item_id' => $stall->id],
-            ['item_type' => 'food', 'item_id' => $food->id],
+            ['item_type' => 'stall', 'stall_id' => $stall->id],
+            ['item_type' => 'food', 'food_id' => $food->id],
         ] as $itemData) {
             $this->actingAs($this->client)
                 ->post(route('client.visit-plans.items.store', $visitPlan), $itemData)
@@ -470,18 +470,18 @@ class VisitPlannerTest extends TestCase
             $this->actingAs($this->client)
                 ->post(route('client.visit-plans.items.store', $visitPlan), $itemData)
                 ->assertSessionHasErrors([
-                    'item_id' => 'This item has already been added to the visit plan.',
+                    $itemData['item_type'].'_id' => 'This item has already been added to the visit plan.',
                 ]);
         }
 
         foreach ([
-            ['item_type' => 'stall', 'item_id' => $otherStall->id],
-            ['item_type' => 'food', 'item_id' => $otherFood->id],
-            ['item_type' => 'food', 'item_id' => $inactiveFood->id],
+            ['item_type' => 'stall', 'stall_id' => $otherStall->id],
+            ['item_type' => 'food', 'food_id' => $otherFood->id],
+            ['item_type' => 'food', 'food_id' => $inactiveFood->id],
         ] as $invalidItemData) {
             $this->actingAs($this->client)
                 ->post(route('client.visit-plans.items.store', $visitPlan), $invalidItemData)
-                ->assertSessionHasErrors('item_id');
+                ->assertSessionHasErrors($invalidItemData['item_type'].'_id');
         }
 
         $this->assertSame(2, $visitPlan->items()->count());
@@ -592,7 +592,7 @@ class VisitPlannerTest extends TestCase
             ->assertOk()->assertSee($food->name)->assertSee($plan->title)->assertSee('Add to This Plan');
         $this->actingAs($this->client)->post(route('client.visit-plans.items.store', $plan), [
             'item_type' => 'food',
-            'item_id' => $food->id,
+            'food_id' => $food->id,
         ])->assertRedirect(route('client.visit-plans.show', $plan));
         $this->assertDatabaseHas('visit_plan_items', [
             'visit_plan_id' => $plan->id,
@@ -779,10 +779,10 @@ class VisitPlannerTest extends TestCase
         ])->assertSessionHasErrors('visit_date');
         $this->actingAs($this->client)->post(route('client.visit-plans.items.store', $pastPlan), [
             'item_type' => 'stall',
-            'item_id' => $pastStall->id,
-        ])->assertSessionHasErrors('item_id');
+            'stall_id' => $pastStall->id,
+        ])->assertSessionHasErrors('item_type');
         $this->actingAs($this->client)->delete(route('client.visit-plans.items.destroy', [$pastPlan, $pastItem]))
-            ->assertSessionHasErrors('item_id');
+            ->assertSessionHasErrors('item_type');
 
         $this->assertDatabaseHas('visit_plan_items', ['id' => $pastItem->id]);
         $this->assertDatabaseHas('visit_plans', [

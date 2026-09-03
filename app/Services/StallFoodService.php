@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\CatalogCategory;
 use App\Models\Food;
 use App\Models\NightMarket;
 use App\Models\Stall;
-use App\Support\CatalogCategory;
+use App\Models\User;
+use App\Support\CatalogCategory as CatalogCategoryLabel;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +15,14 @@ use Illuminate\Validation\ValidationException;
 
 class StallFoodService
 {
+    public function __construct(private readonly CatalogCategoryService $catalogCategoryService) {}
+
+    /** @return Collection<int, CatalogCategory> */
+    public function activeCatalogCategories(string $type): Collection
+    {
+        return $this->catalogCategoryService->activeForType($type);
+    }
+
     /**
      * @param  array{search?: string|null, night_market_id?: int|null, city?: string|null, category?: string|null, halal_status?: string|null, sort?: string|null}  $filters
      * @return LengthAwarePaginator<Stall>
@@ -57,8 +67,8 @@ class StallFoodService
                 ->whereNotNull('city')->where('city', '!=', '')->select('city')->distinct()->orderBy('city')->get(),
             'stallCategories' => Stall::query()->publiclyVisible()
                 ->whereNotNull('category')->where('category', '!=', '')->select('category')->distinct()->orderBy('category')->get()
-                ->map(fn (Stall $stall) => CatalogCategory::main($stall->category))
-                ->filter()->unique(fn (string $category) => CatalogCategory::key($category))->sort()->values(),
+                ->map(fn (Stall $stall) => CatalogCategoryLabel::main($stall->category))
+                ->filter()->unique(fn (string $category) => CatalogCategoryLabel::key($category))->sort()->values(),
         ];
     }
 
@@ -71,6 +81,7 @@ class StallFoodService
         $search = $this->literalLikePattern($filters['search'] ?? null);
         $query = Food::query()
             ->publiclyVisible()
+            ->withPublicReviewSummary()
             ->with(['stall:id,night_market_id,name,halal_status,status', 'stall.nightMarket:id,name,city,state,status'])
             ->when($search, fn ($query, string $pattern) => $query->where(function ($query) use ($pattern) {
                 $query->where('name', 'like', $pattern)
@@ -127,6 +138,7 @@ class StallFoodService
     public function featuredMustTryFoods(int $limit = 6): Collection
     {
         return Food::query()->publiclyVisible()->where('is_must_try', true)
+            ->withPublicReviewSummary()
             ->with(['stall:id,night_market_id,name,halal_status,status', 'stall.nightMarket:id,name,city,state,status'])
             ->orderBy('name')->orderBy('id')->limit($limit)->get();
     }
@@ -346,6 +358,7 @@ class StallFoodService
     {
         return Food::query()
             ->publiclyVisible()
+            ->withPublicReviewSummary()
             ->with('stall.nightMarket')
             ->findOrFail($foodId);
     }
@@ -374,10 +387,17 @@ class StallFoodService
     /**
      * @param  array<string, mixed>  $data
      */
-    public function createStall(array $data): Stall
+    public function createStall(array $data, ?User $creator = null): Stall
     {
-        return DB::transaction(function () use ($data): Stall {
+        return DB::transaction(function () use ($data, $creator): Stall {
             $this->eligibleNightMarketForCatalog((int) $data['night_market_id']);
+            $data['category'] = $this->catalogCategoryService->resolveForCatalog(
+                CatalogCategory::TYPE_STALL,
+                $data['category'] ?? null,
+                $data['new_category'] ?? null,
+                null,
+                $creator,
+            );
 
             return Stall::create($this->stallAttributes($data, includeStatus: true));
         });
@@ -386,10 +406,17 @@ class StallFoodService
     /**
      * @param  array<string, mixed>  $data
      */
-    public function createFood(array $data): Food
+    public function createFood(array $data, ?User $creator = null): Food
     {
-        return DB::transaction(function () use ($data): Food {
+        return DB::transaction(function () use ($data, $creator): Food {
             $this->eligibleStallForCatalog((int) $data['stall_id']);
+            $data['category'] = $this->catalogCategoryService->resolveForCatalog(
+                CatalogCategory::TYPE_FOOD,
+                $data['category'] ?? null,
+                $data['new_category'] ?? null,
+                null,
+                $creator,
+            );
 
             return Food::create($this->foodAttributes($data, includeStatus: true));
         });
@@ -398,11 +425,18 @@ class StallFoodService
     /**
      * @param  array<string, mixed>  $data
      */
-    public function updateStall(Stall $stall, array $data): Stall
+    public function updateStall(Stall $stall, array $data, ?User $creator = null): Stall
     {
-        return DB::transaction(function () use ($stall, $data): Stall {
+        return DB::transaction(function () use ($stall, $data, $creator): Stall {
             $lockedStall = Stall::query()->lockForUpdate()->findOrFail($stall->id);
             $this->eligibleNightMarketForCatalog((int) $data['night_market_id']);
+            $data['category'] = $this->catalogCategoryService->resolveForCatalog(
+                CatalogCategory::TYPE_STALL,
+                $data['category'] ?? null,
+                $data['new_category'] ?? null,
+                $lockedStall->category,
+                $creator,
+            );
 
             $lockedStall->update($this->stallAttributes($data));
 
@@ -413,11 +447,18 @@ class StallFoodService
     /**
      * @param  array<string, mixed>  $data
      */
-    public function updateFood(Food $food, array $data): Food
+    public function updateFood(Food $food, array $data, ?User $creator = null): Food
     {
-        return DB::transaction(function () use ($food, $data): Food {
+        return DB::transaction(function () use ($food, $data, $creator): Food {
             $lockedFood = Food::query()->lockForUpdate()->findOrFail($food->id);
             $this->eligibleStallForCatalog((int) $data['stall_id']);
+            $data['category'] = $this->catalogCategoryService->resolveForCatalog(
+                CatalogCategory::TYPE_FOOD,
+                $data['category'] ?? null,
+                $data['new_category'] ?? null,
+                $lockedFood->category,
+                $creator,
+            );
 
             $lockedFood->update($this->foodAttributes($data));
 
@@ -541,7 +582,7 @@ class StallFoodService
 
     private function applyMainCategoryFilter($query, string $category): void
     {
-        $key = CatalogCategory::key($category);
+        $key = CatalogCategoryLabel::key($category);
         $query->where(function ($query) use ($key): void {
             $query->whereRaw('LOWER(TRIM(category)) = ?', [$key])
                 ->orWhereRaw('LOWER(TRIM(category)) LIKE ?', [$key.' / %']);

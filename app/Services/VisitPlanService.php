@@ -12,6 +12,7 @@ use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class VisitPlanService
@@ -181,60 +182,65 @@ class VisitPlanService
     /** @param array{title: string, night_market_id: int, visit_date: string, notes?: string|null} $data */
     public function updateForClient(User $user, int $visitPlanId, array $data): VisitPlan
     {
-        $visitPlan = $this->findForClient($user, $visitPlanId);
-        $requestedMarketId = (int) $data['night_market_id'];
-        $requestedVisitDate = Carbon::parse($data['visit_date'])->toDateString();
-        $marketChanged = $visitPlan->night_market_id !== $requestedMarketId;
-        $dateChanged = $visitPlan->visit_date->toDateString() !== $requestedVisitDate;
+        return DB::transaction(function () use ($user, $visitPlanId, $data): VisitPlan {
+            $visitPlan = VisitPlan::query()
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->findOrFail($visitPlanId);
+            $requestedMarketId = (int) $data['night_market_id'];
+            $requestedVisitDate = Carbon::parse($data['visit_date'])->toDateString();
+            $marketChanged = $visitPlan->night_market_id !== $requestedMarketId;
+            $dateChanged = $visitPlan->visit_date->toDateString() !== $requestedVisitDate;
 
-        if ($this->isPastVisitPlan($visitPlan)) {
-            $errors = [];
+            if ($this->isPastVisitPlan($visitPlan)) {
+                $errors = [];
 
-            if ($marketChanged) {
-                $errors['night_market_id'] = 'Past visit plans cannot change the Night Market. You can still update the title or notes.';
+                if ($marketChanged) {
+                    $errors['night_market_id'] = 'Past visit plans cannot change the Night Market. You can still update the title or notes.';
+                }
+
+                if ($dateChanged) {
+                    $errors['visit_date'] = 'Past visit plans cannot change the visit date. You can still update the title or notes.';
+                }
+
+                if ($errors) {
+                    throw ValidationException::withMessages($errors);
+                }
+
+                $visitPlan->update([
+                    'title' => $data['title'],
+                    'notes' => $data['notes'] ?? null,
+                ]);
+
+                return $visitPlan->refresh();
             }
 
-            if ($dateChanged) {
-                $errors['visit_date'] = 'Past visit plans cannot change the visit date. You can still update the title or notes.';
+            if (Carbon::parse($requestedVisitDate)->lt(now()->startOfDay())) {
+                throw ValidationException::withMessages([
+                    'visit_date' => 'Visit plans must use today or a future date.',
+                ]);
             }
 
-            if ($errors) {
-                throw ValidationException::withMessages($errors);
+            if ($marketChanged || $dateChanged) {
+                $nightMarket = $this->eligibleMarket($requestedMarketId);
+                $this->validateOperatingDate($nightMarket, $requestedVisitDate);
+            }
+
+            if ($marketChanged && $visitPlan->items()->exists()) {
+                throw ValidationException::withMessages([
+                    'night_market_id' => 'Remove all plan items before changing the night market.',
+                ]);
             }
 
             $visitPlan->update([
+                'night_market_id' => $requestedMarketId,
                 'title' => $data['title'],
+                'visit_date' => $requestedVisitDate,
                 'notes' => $data['notes'] ?? null,
             ]);
 
             return $visitPlan->refresh();
-        }
-
-        if (Carbon::parse($requestedVisitDate)->lt(now()->startOfDay())) {
-            throw ValidationException::withMessages([
-                'visit_date' => 'Visit plans must use today or a future date.',
-            ]);
-        }
-
-        if ($marketChanged || $dateChanged) {
-            $nightMarket = $this->eligibleMarket($requestedMarketId);
-            $this->validateOperatingDate($nightMarket, $requestedVisitDate);
-        }
-
-        if ($marketChanged && $visitPlan->items()->exists()) {
-            throw ValidationException::withMessages([
-                'night_market_id' => 'Remove all plan items before changing the night market.',
-            ]);
-        }
-
-        $visitPlan->update([
-            'night_market_id' => $requestedMarketId,
-            'title' => $data['title'],
-            'visit_date' => $requestedVisitDate,
-            'notes' => $data['notes'] ?? null,
-        ]);
-
-        return $visitPlan->refresh();
+        });
     }
 
     public function deleteForClient(User $user, int $visitPlanId): void
@@ -242,37 +248,50 @@ class VisitPlanService
         $this->findForClient($user, $visitPlanId)->delete();
     }
 
-    /** @param array{item_type: string, item_id: int, notes?: string|null} $data */
+    /** @param array{item_type: string, stall_id?: int, food_id?: int, notes?: string|null} $data */
     public function addItemForClient(User $user, int $visitPlanId, array $data): VisitPlanItem
     {
-        $visitPlan = $this->findForClient($user, $visitPlanId);
-        $this->ensureItemsCanBeChanged($visitPlan);
-        $item = $this->eligibleItem($visitPlan, $data['item_type'], (int) $data['item_id']);
-        $foreignKey = $data['item_type'] === 'stall' ? 'stall_id' : 'food_id';
+        return DB::transaction(function () use ($user, $visitPlanId, $data): VisitPlanItem {
+            $visitPlan = VisitPlan::query()
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->findOrFail($visitPlanId);
+            $this->ensureItemsCanBeChanged($visitPlan);
 
-        if ($visitPlan->items()->where($foreignKey, $item->id)->exists()) {
-            throw $this->duplicateItemException();
-        }
+            $itemType = $data['item_type'];
+            $itemId = (int) ($itemType === 'stall' ? ($data['stall_id'] ?? 0) : ($data['food_id'] ?? 0));
+            $item = $this->eligibleItem($visitPlan, $itemType, $itemId);
+            $foreignKey = $itemType === 'stall' ? 'stall_id' : 'food_id';
 
-        try {
-            return $visitPlan->items()->create([
-                'stall_id' => $data['item_type'] === 'stall' ? $item->id : null,
-                'food_id' => $data['item_type'] === 'food' ? $item->id : null,
-                'item_type' => $data['item_type'],
-                'item_name' => $item->name,
-                'notes' => $data['notes'] ?? null,
-                'sort_order' => ((int) $visitPlan->items()->max('sort_order')) + 1,
-            ]);
-        } catch (UniqueConstraintViolationException) {
-            throw $this->duplicateItemException();
-        }
+            if ($visitPlan->items()->where($foreignKey, $item->id)->exists()) {
+                throw $this->duplicateItemException($foreignKey);
+            }
+
+            try {
+                return $visitPlan->items()->create([
+                    'stall_id' => $itemType === 'stall' ? $item->id : null,
+                    'food_id' => $itemType === 'food' ? $item->id : null,
+                    'item_type' => $itemType,
+                    'item_name' => $item->name,
+                    'notes' => $data['notes'] ?? null,
+                    'sort_order' => ((int) $visitPlan->items()->max('sort_order')) + 1,
+                ]);
+            } catch (UniqueConstraintViolationException) {
+                throw $this->duplicateItemException($foreignKey);
+            }
+        });
     }
 
     public function removeItemForClient(User $user, int $visitPlanId, int $visitPlanItemId): void
     {
-        $visitPlan = $this->findForClient($user, $visitPlanId);
-        $this->ensureItemsCanBeChanged($visitPlan);
-        $visitPlan->items()->findOrFail($visitPlanItemId)->delete();
+        DB::transaction(function () use ($user, $visitPlanId, $visitPlanItemId): void {
+            $visitPlan = VisitPlan::query()
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->findOrFail($visitPlanId);
+            $this->ensureItemsCanBeChanged($visitPlan);
+            $visitPlan->items()->lockForUpdate()->findOrFail($visitPlanItemId)->delete();
+        });
     }
 
     /** @return Collection<int, NightMarket> */
@@ -341,7 +360,7 @@ class VisitPlanService
     {
         if ($this->isPastVisitPlan($visitPlan)) {
             throw ValidationException::withMessages([
-                'item_id' => 'Past visit plans cannot be changed. You can still update the title or notes.',
+                'item_type' => 'Past visit plans cannot be changed. You can still update the title or notes.',
             ]);
         }
     }
@@ -371,7 +390,7 @@ class VisitPlanService
                 ->where('night_market_id', $visitPlan->night_market_id)
                 ->first()
                 ?? throw ValidationException::withMessages([
-                    'item_id' => 'The selected stall is not available for this night market.',
+                    'stall_id' => 'The selected stall is not available for this night market.',
                 ]);
         }
 
@@ -381,7 +400,7 @@ class VisitPlanService
             ->whereHas('stall', fn ($query) => $query->where('night_market_id', $visitPlan->night_market_id))
             ->first()
             ?? throw ValidationException::withMessages([
-                'item_id' => 'The selected Food is not available for this night market.',
+                'food_id' => 'The selected Food is not available for this night market.',
             ]);
     }
 
@@ -436,10 +455,10 @@ class VisitPlanService
         return $value ? '%'.addcslashes($value, '\\%_').'%' : null;
     }
 
-    private function duplicateItemException(): ValidationException
+    private function duplicateItemException(string $field): ValidationException
     {
         return ValidationException::withMessages([
-            'item_id' => 'This item has already been added to the visit plan.',
+            $field => 'This item has already been added to the visit plan.',
         ]);
     }
 }

@@ -252,14 +252,14 @@ class SmartVisitPlannerService
             foreach ($submittedStallIds as $stallId) {
                 $this->visitPlanService->addItemForClient($user, $visitPlan->id, [
                     'item_type' => 'stall',
-                    'item_id' => $stallId,
+                    'stall_id' => $stallId,
                 ]);
             }
 
             foreach ($submittedFoodIds as $foodId) {
                 $this->visitPlanService->addItemForClient($user, $visitPlan->id, [
                     'item_type' => 'food',
-                    'item_id' => $foodId,
+                    'food_id' => $foodId,
                 ]);
             }
 
@@ -417,8 +417,8 @@ class SmartVisitPlannerService
     }
 
     /**
-     * @param Collection<int, NightMarket> $markets
-     * @param array<string, mixed> $preferences
+     * @param  Collection<int, NightMarket>  $markets
+     * @param  array<string, mixed>  $preferences
      * @return array{recommendations: list<array<string, mixed>>, reason_code: string|null, reason_message: string|null}
      */
     private function evaluateTemplate(string $template, Collection $markets, array $preferences, string $dayOfWeek): array
@@ -432,8 +432,8 @@ class SmartVisitPlannerService
     }
 
     /**
-     * @param Collection<int, NightMarket> $markets
-     * @param array<string, mixed> $preferences
+     * @param  Collection<int, NightMarket>  $markets
+     * @param  array<string, mixed>  $preferences
      * @return array{recommendations: list<array<string, mixed>>, reason_code: string|null, reason_message: string|null}
      */
     private function quickVisitRecommendations(Collection $markets, array $preferences, string $dayOfWeek): array
@@ -460,8 +460,8 @@ class SmartVisitPlannerService
     }
 
     /**
-     * @param Collection<int, NightMarket> $markets
-     * @param array<string, mixed> $preferences
+     * @param  Collection<int, NightMarket>  $markets
+     * @param  array<string, mixed>  $preferences
      * @return array{recommendations: list<array<string, mixed>>, reason_code: string|null, reason_message: string|null}
      */
     private function foodHuntingRecommendations(Collection $markets, array $preferences, string $dayOfWeek): array
@@ -502,8 +502,8 @@ class SmartVisitPlannerService
     }
 
     /**
-     * @param Collection<int, NightMarket> $markets
-     * @param array<string, mixed> $preferences
+     * @param  Collection<int, NightMarket>  $markets
+     * @param  array<string, mixed>  $preferences
      * @return array{recommendations: list<array<string, mixed>>, reason_code: string|null, reason_message: string|null}
      */
     private function familyFriendlyRecommendations(Collection $markets, array $preferences, string $dayOfWeek): array
@@ -552,8 +552,8 @@ class SmartVisitPlannerService
     }
 
     /**
-     * @param Collection<int, NightMarket> $markets
-     * @param array<string, mixed> $preferences
+     * @param  Collection<int, NightMarket>  $markets
+     * @param  array<string, mixed>  $preferences
      * @return array{recommendations: list<array<string, mixed>>, reason_code: string|null, reason_message: string|null}
      */
     private function budgetRecommendations(Collection $markets, array $preferences, string $dayOfWeek): array
@@ -599,7 +599,7 @@ class SmartVisitPlannerService
     }
 
     /**
-     * @param array<string, mixed> $preferences
+     * @param  array<string, mixed>  $preferences
      * @return list<array<string, mixed>>
      */
     private function templateFoodCandidates(NightMarket $market, array $preferences, bool $ignoreMustTryPreference = false): array
@@ -709,7 +709,7 @@ class SmartVisitPlannerService
     }
 
     /**
-     * @param list<array<string, mixed>> $foods
+     * @param  list<array<string, mixed>>  $foods
      * @return array<string, mixed>
      */
     private function templateRecommendation(

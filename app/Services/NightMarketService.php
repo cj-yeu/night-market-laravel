@@ -95,6 +95,7 @@ class NightMarketService
 
         $query = NightMarket::query()
             ->publiclyVisible()
+            ->withPublicReviewSummary()
             ->with(['operatingDays' => fn ($query) => $this->orderOperatingDays($query)])
             ->when($search, function ($query, string $pattern) {
                 $query->where(function ($query) use ($pattern) {
@@ -146,6 +147,7 @@ class NightMarketService
     {
         return NightMarket::query()
             ->publiclyVisible()
+            ->withPublicReviewSummary()
             ->with(['operatingDays' => fn ($query) => $this->orderOperatingDays($query)])
             ->orderBy('name')
             ->orderBy('id')
@@ -157,6 +159,7 @@ class NightMarketService
     {
         return NightMarket::query()
             ->publiclyVisible()
+            ->withPublicReviewSummary()
             ->with([
                 'operatingDays' => fn ($query) => $this->orderOperatingDays($query),
                 'stalls' => fn ($query) => $query
@@ -164,6 +167,7 @@ class NightMarketService
                     ->orderBy('name'),
                 'stalls.foods' => fn ($query) => $query
                     ->publiclyVisible()
+                    ->withPublicReviewSummary()
                     ->where('is_must_try', true)
                     ->orderBy('name'),
             ])

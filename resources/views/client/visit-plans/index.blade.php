@@ -41,7 +41,7 @@
                                     <form method="POST" action="{{ route('client.visit-plans.items.store', $compatiblePlan) }}">
                                         @csrf
                                         <input type="hidden" name="item_type" value="{{ $planningTarget['type'] }}">
-                                        <input type="hidden" name="item_id" value="{{ $planningTarget['id'] }}">
+                                        <input type="hidden" name="{{ $planningTarget['type'] }}_id" value="{{ $planningTarget['id'] }}">
                                         <button type="submit" class="btn btn-sm btn-market">Add to This Plan</button>
                                     </form>
                                 @endif

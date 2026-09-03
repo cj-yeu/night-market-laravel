@@ -162,7 +162,7 @@ class GoogleCalendarVisitPlanTest extends TestCase
 
             return $request->method() === 'POST'
                 && str_starts_with($request->url(), 'https://www.googleapis.com/calendar/v3/calendars/primary/events')
-                && ($data['summary'] ?? null) === 'Night Market Visit — Calendar Test Market'
+                && ($data['summary'] ?? null) === 'Calendar dinner plan — Calendar Test Market'
                 && ($data['location'] ?? null) === '12 Jalan Test, Shah Alam, Selangor'
                 && str_contains((string) ($data['description'] ?? ''), 'Selected Stalls:')
                 && str_contains((string) ($data['description'] ?? ''), 'https://')

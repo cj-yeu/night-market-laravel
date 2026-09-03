@@ -33,7 +33,8 @@
                         @endif
                     </div>
 
-                    <h1 class="h2 fw-bold text-market">{{ $food->name }}</h1>
+                            <h1 class="h2 fw-bold text-market">{{ $food->name }}</h1>
+                            <x-review-rating-summary :reviewable="$food" class="mt-2 mb-3" />
 
                     <dl class="row mt-4 mb-0">
                         <dt class="col-sm-3">Stall</dt>

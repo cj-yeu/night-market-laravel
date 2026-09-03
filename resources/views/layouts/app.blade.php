@@ -882,6 +882,12 @@
                 </div>
             @endif
 
+            @if (session('warning'))
+                <div class="alert alert-warning" role="status" aria-live="polite">
+                    {{ session('warning') }}
+                </div>
+            @endif
+
             @yield('content')
             </div>
         </main>

@@ -86,6 +86,7 @@
                         <div class="card-body p-4 d-flex flex-column">
                             <span class="badge text-bg-warning align-self-start mb-3">{{ $nightMarket->city }}</span>
                             <h2 class="h5 fw-bold">{{ $nightMarket->name }}</h2>
+                            <x-review-rating-summary :reviewable="$nightMarket" compact class="mb-2" />
                             <p class="text-secondary text-break mb-2"><strong>Address:</strong> {{ $nightMarket->address }}</p>
                             <p class="text-secondary mb-3"><strong>City / state:</strong> {{ $nightMarket->city }}, {{ $nightMarket->state }}</p>
                             <div class="mb-3">

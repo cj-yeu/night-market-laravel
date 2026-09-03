@@ -27,6 +27,7 @@
             <x-halal-status :stall="$food->stall" />
         </div>
         <x-food-price :food="$food" class="text-market fw-bold d-block mb-2" />
+        <x-review-rating-summary :reviewable="$food" compact class="mb-2" />
         <p class="text-secondary text-break text-clamp-3">{{ $food->description ?: 'No food description available.' }}</p>
         @if ($showRecommendation && $food->is_must_try && $food->recommendation_reason)
             <p class="small border-start border-warning border-3 ps-3 text-break text-clamp-3">

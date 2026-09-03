@@ -10,7 +10,7 @@
             <div class="card market-card">
                 <div class="card-body p-4 p-md-5">
                     <h1 class="h3 fw-bold text-market">Edit Visit Plan</h1>
-                    <p class="text-secondary mb-4">Update your visit details and confirm the market schedule.</p>
+                    <p class="text-secondary mb-4">Update your visit details and confirm the market schedule. If this plan is synced, saved changes refresh the existing Google Calendar event.</p>
 
                     @if ($planIsPast)
                         <div class="alert alert-secondary">Past plans keep their Night Market, visit date, and items. You can still update the title and notes.</div>

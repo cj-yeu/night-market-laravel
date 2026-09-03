@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Client;
 
+use App\Exceptions\GoogleCalendarIntegrationException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\VisitPlan\CreateVisitPlanRequest;
 use App\Http\Requests\VisitPlan\StoreVisitPlanItemRequest;
@@ -92,9 +93,7 @@ class VisitPlanController extends Controller
             $request->validated(),
         );
 
-        return redirect()
-            ->route('client.visit-plans.show', $visitPlan)
-            ->with('status', 'Your visit plan was updated successfully.');
+        return $this->redirectAfterLocalCalendarSync($request, $visitPlan->id, 'Your visit plan was updated successfully.');
     }
 
     public function destroy(Request $request, int $visitPlan): RedirectResponse
@@ -110,17 +109,32 @@ class VisitPlanController extends Controller
     {
         $this->visitPlanService->addItemForClient($request->user(), $visitPlan, $request->validated());
 
-        return redirect()
-            ->route('client.visit-plans.show', $visitPlan)
-            ->with('status', 'The item was added to your visit plan.');
+        return $this->redirectAfterLocalCalendarSync($request, $visitPlan, 'The item was added to your visit plan.');
     }
 
     public function destroyItem(Request $request, int $visitPlan, int $visitPlanItem): RedirectResponse
     {
         $this->visitPlanService->removeItemForClient($request->user(), $visitPlan, $visitPlanItem);
 
-        return redirect()
-            ->route('client.visit-plans.show', $visitPlan)
-            ->with('status', 'The item was removed from your visit plan.');
+        return $this->redirectAfterLocalCalendarSync($request, $visitPlan, 'The item was removed from your visit plan.');
+    }
+
+    private function redirectAfterLocalCalendarSync(Request $request, int $visitPlanId, string $successMessage): RedirectResponse
+    {
+        if (! $this->googleCalendarService->hasSyncedEventForClient($request->user(), $visitPlanId)) {
+            return redirect()->route('client.visit-plans.show', $visitPlanId)->with('status', $successMessage);
+        }
+
+        try {
+            $this->googleCalendarService->syncForClient($request->user(), $visitPlanId);
+
+            return redirect()
+                ->route('client.visit-plans.show', $visitPlanId)
+                ->with('status', $successMessage.' Your Google Calendar event was updated.');
+        } catch (GoogleCalendarIntegrationException) {
+            return redirect()
+                ->route('client.visit-plans.show', $visitPlanId)
+                ->with('warning', 'Your Visit Plan was updated, but Google Calendar could not be refreshed. Try again.');
+        }
     }
 }
