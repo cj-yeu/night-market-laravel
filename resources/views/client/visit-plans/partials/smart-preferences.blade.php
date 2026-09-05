@@ -9,7 +9,8 @@
     @endif
     <form id="night-out-form" method="POST" action="{{ route('client.visit-plans.smart-planner.recommend') }}" class="night-out-layout" novalidate
         data-today="{{ now('Asia/Kuala_Lumpur')->toDateString() }}" data-tomorrow="{{ now('Asia/Kuala_Lumpur')->addDay()->toDateString() }}"
-        data-parse-url="{{ route('client.visit-plans.smart-planner.parse') }}">
+        data-parse-url="{{ route('client.visit-plans.smart-planner.parse') }}"
+        data-current-snapshot="{{ $currentResultId ?? '' }}" data-invalidate-url="{{ route('client.visit-plans.smart-planner.invalidate') }}">
         @csrf
         <div class="night-out-main">
             <section class="night-out-panel" aria-labelledby="when-heading">
@@ -64,7 +65,7 @@
 
             <section class="night-out-panel" aria-labelledby="food-heading">
                 <h3 id="food-heading" class="h4"><i class="bi bi-heart" aria-hidden="true"></i> What would you like to eat?</h3>
-                <p class="text-secondary small">Choose any interests, or leave everything clear for Any food. Groups use actual catalog categories, including legacy aliases.</p>
+                <p class="text-secondary small">Choose your interests, or leave everything clear for Any food. A recommendation may cover only some interests when choices are limited.</p>
                 <div id="food-selected" class="d-flex flex-wrap gap-2 mb-3" aria-label="Selected food interests"></div>
                 <button type="button" id="clear-food" class="btn btn-sm btn-outline-secondary mb-3">Clear selections</button>
                 <fieldset>
@@ -165,8 +166,8 @@
             <p class="small text-secondary">Regular schedules are not live opening guarantees. Budget uses numeric price upper bounds. You choose when to save.</p>
             <label for="recommendation_mode" class="form-label">Recommendation method</label>
             <select id="recommendation_mode" name="recommendation_mode" class="form-select mb-3">
-                <option value="ai" @selected(($preferences['recommendation_mode'] ?? 'ai') === 'ai')>AI-assisted selection</option>
-                <option value="basic" @selected(($preferences['recommendation_mode'] ?? '') === 'basic')>Basic catalog rules (no AI)</option>
+                <option value="ai" @selected(old('recommendation_mode', $preferences['recommendation_mode'] ?? 'ai') === 'ai')>AI-assisted selection</option>
+                <option value="basic" @selected(old('recommendation_mode', $preferences['recommendation_mode'] ?? '') === 'basic')>Basic catalog rules (no AI)</option>
             </select>
             <button type="submit" class="btn btn-market w-100" @disabled($markets->isEmpty())>Generate Recommendations</button>
             <p id="generate-status" class="small mt-2 mb-0" role="status"></p>

@@ -2,7 +2,10 @@
     'use strict';
     const start = () => {
         const form = document.getElementById('night-out-form');
-        if (!form) return;
+        let stale = false;
+        const dirtyKey = token => `nightbite-planner-dirty:${token}`;
+        const isDirty = token => { try { return sessionStorage.getItem(dirtyKey(token)) === '1'; } catch { return false; } };
+        if (form) {
         const field = name => form.querySelector(`[name="${name}"]`);
         const boxes = () => [...form.querySelectorAll('[name="interests[]"], [name="categories[]"]')];
         const label = input => input.labels?.[0]?.textContent.replace('✓', '').trim() || input.value;
@@ -13,16 +16,20 @@
             if (!response.ok) throw new Error(response.status === 429 ? 'Please wait a minute before asking again.' : 'This request could not be completed. Review your preferences or refresh the page.');
             return response.json();
         };
-        let stale = false;
         const invalidate = () => {
-            if (stale || !document.querySelector('[data-snapshot]')) return;
+            const tokens = new Set([...document.querySelectorAll('[data-snapshot]')].map(panel => panel.dataset.snapshot));
+            if (form.dataset.currentSnapshot) tokens.add(form.dataset.currentSnapshot);
+            if (stale || !tokens.size) return;
             stale = true;
             document.getElementById('planner-stale').hidden = false;
+            document.querySelector('[data-existing-result]')?.setAttribute('hidden', '');
             document.querySelectorAll('[data-snapshot-save] button[type="submit"]').forEach(button => button.disabled = true);
-            const tokens = new Set([...document.querySelectorAll('[data-snapshot]')].map(panel => panel.dataset.snapshot));
-            tokens.forEach(snapshot_id => jsonPost(document.getElementById('planner-results').dataset.invalidateUrl, {snapshot_id}).catch(() => {
+            tokens.forEach(snapshot_id => {
+                try { sessionStorage.setItem(dirtyKey(snapshot_id), '1'); } catch { /* Server invalidation still applies. */ }
+                jsonPost(form.dataset.invalidateUrl, {snapshot_id}).catch(() => {
                 document.getElementById('planner-stale').textContent = 'Your preferences changed. Generate again before saving. The old recommendation could not be invalidated on the server; do not reuse it.';
-            }));
+                });
+            });
         };
         const update = () => {
             const date = field('visit_date').value;
@@ -67,7 +74,8 @@
             }
         });
         form.addEventListener('input', event => {if (event.target.name) {invalidate(); update();}});
-        form.addEventListener('submit', () => {
+        form.addEventListener('submit', event => {
+            if (form.getAttribute('aria-busy') === 'true') { event.preventDefault(); return; }
             const button = form.querySelector('button[type="submit"]'); button.disabled = true; form.setAttribute('aria-busy','true');
             document.getElementById('generate-status').textContent = 'Finding eligible foods and checking your plan…';
         });
@@ -115,8 +123,20 @@
             invalidate();update();document.getElementById('parse-status').textContent='Selected suggestions applied. Review your preferences, then generate when ready.';
             document.getElementById('parsed-preferences').hidden=true;
         });
+        update();
+        if (form.dataset.currentSnapshot && isDirty(form.dataset.currentSnapshot)) invalidate();
+        window.addEventListener('pageshow', event => {
+            if (!event.persisted) return;
+            update();
+            if (form.dataset.currentSnapshot && isDirty(form.dataset.currentSnapshot)) invalidate();
+            form.removeAttribute('aria-busy'); form.querySelector('button[type="submit"]').disabled=false;
+            document.getElementById('generate-status').textContent='';
+        });
+        }
         document.querySelectorAll('[data-plan-result]').forEach(panel => {
             const save = panel.querySelector('[data-snapshot-save]');
+            let saving = false;
+            stale = stale || isDirty(panel.dataset.snapshot);
             const catalog = new Map([...panel.querySelectorAll('template[data-food]')].map(template => [template.dataset.food, template]));
             const rows = () => [...panel.querySelectorAll('[data-food-row]')];
             const selectedIds = () => rows().map(row => row.querySelector('[data-selected-food]').value);
@@ -129,10 +149,18 @@
             const refresh = () => {
                 const ids=selectedIds(), total=cost(ids), budget=panel.dataset.budget;
                 const over = budget!=='' && (total.unknown || total.high>Math.round(Number(budget)*100));
-                panel.querySelector('[data-total]').textContent=total.unknown ? 'Total unavailable — some prices are unknown' : total.lowerUnknown ? `Up to ${format(total.high)}` : total.low===total.high ? format(total.high) : `${format(total.low)}–${format(total.high)}`;
-                panel.querySelector('[data-count]').textContent=String(ids.length);
-                save.querySelector('button[type="submit"]').disabled=stale || !ids.length || over;
-                panel.querySelector('[data-save-notice]').textContent=!ids.length ? 'No food stops selected. Generate again to start a new combination.' : over ? 'This combination exceeds the food budget or contains unknown prices. Remove or replace a food.' : 'Costs are checked again when saving. Replacements keep the same market and preferences.';
+                const priceLabel=total.unknown ? 'Total unavailable — some prices are unknown' : total.lowerUnknown ? `Up to ${format(total.high)}` : total.low===total.high ? format(total.high) : `${format(total.low)}–${format(total.high)}`;
+                panel.querySelectorAll('[data-total]').forEach(node => node.textContent=priceLabel);
+                panel.querySelectorAll('[data-count]').forEach(node => node.textContent=String(ids.length));
+                panel.querySelectorAll('[data-stop-label]').forEach(node => node.textContent=ids.length===1 ? 'food stop' : 'food stops');
+                const confirmation = save.querySelector('[name="confirmed_fallback_date"]');
+                const unconfirmed = confirmation && !confirmation.checked;
+                save.querySelector('button[type="submit"]').disabled=stale || saving || !ids.length || over || unconfirmed;
+                panel.querySelector('[data-save-notice]').textContent=stale ? 'Your preferences changed. Return to Edit preferences and generate again.' : !ids.length ? 'No food stops selected. Edit preferences and generate a new recommendation.' : over ? 'This combination exceeds the food budget or contains unknown prices. Remove or replace a food.' : unconfirmed ? 'Confirm the suggested date before saving this plan.' : 'Costs are checked again when saving. Replacements keep the same market and preferences.';
+                panel.querySelectorAll('[data-interest-status]').forEach(node => {
+                    const included = ids.some(id => (catalog.get(id)?.dataset.interests || '').split('|').includes(node.dataset.interestStatus));
+                    node.textContent = included ? 'Included' : node.dataset.available === '1' ? 'Available in replacements, not selected' : 'No matching eligible food at this market on this date';
+                });
             };
             rows().forEach(row => {
                 row.querySelector('[data-remove]').addEventListener('click', () => {row.remove();refresh();panel.querySelector('[data-save-notice]').setAttribute('tabindex','-1');panel.querySelector('[data-save-notice]').focus();});
@@ -166,11 +194,17 @@
                     row.querySelector('[data-replace-panel]').hidden=true;row.querySelector('[data-replace]').setAttribute('aria-expanded','false');row.querySelector('[data-replace]').focus();refresh();
                 });
             });
-            save.addEventListener('submit', () => {save.querySelector('button[type="submit"]').disabled=true;save.setAttribute('aria-busy','true');});
+            save.querySelector('[name="confirmed_fallback_date"]')?.addEventListener('change', refresh);
+            save.addEventListener('submit', event => {
+                if (saving || stale || save.querySelector('button[type="submit"]').disabled) {event.preventDefault();return;}
+                saving=true;save.querySelector('button[type="submit"]').disabled=true;save.setAttribute('aria-busy','true');
+            });
             refresh();
         });
-        update();
-        window.addEventListener('pageshow', event => {if (event.persisted) {update();invalidate();form.removeAttribute('aria-busy');form.querySelector('button[type="submit"]').disabled=false;document.getElementById('generate-status').textContent='';}});
+        // Revalidate restored result documents with a GET, never replay generation POST.
+        if (document.querySelector('[data-result-page]')) window.addEventListener('pageshow', event => {
+            if (event.persisted) window.location.reload();
+        });
     };
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();

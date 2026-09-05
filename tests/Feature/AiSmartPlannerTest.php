@@ -317,12 +317,17 @@ class AiSmartPlannerTest extends TestCase
 
     public function test_new_recommendation_page_renders_server_snapshot_and_replacements(): void
     {
-        $this->fakeSelection();
         $this->food->update(['name' => 'Planner fixture dessert']);
-        Food::factory()->create(['stall_id' => $this->food->stall_id, 'name' => 'Planner fixture drink', 'category' => 'Beverage / Drink', 'price_min' => 4, 'price_max' => 6]);
+        $drink = Food::factory()->create(['stall_id' => $this->food->stall_id, 'name' => 'Planner fixture drink', 'category' => 'Beverage / Drink', 'price_min' => 4, 'price_max' => 6]);
+        Food::factory()->create(['stall_id' => $this->food->stall_id, 'name' => 'Planner fixture replacement', 'category' => 'Dessert', 'price_min' => 6, 'price_max' => 8]);
+        $this->fakeSelection([['market_id' => $this->market->id, 'foods' => [
+            ['food_id' => $this->food->id, 'reason' => 'known_price'], ['food_id' => $drink->id, 'reason' => 'known_price'],
+        ]]]);
         $response = $this->actingAs($this->client)->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences);
-        $response->assertOk()->assertSee('AI-selected')->assertSee('Save Visit Plan')->assertSee('Replace')->assertSee('Remove')
-            ->assertSee('Planner fixture dessert')->assertSee('Planner fixture drink')->assertDontSee('Score ');
+        $response->assertStatus(303);
+        $response = $this->get($response->headers->get('Location'));
+        $response->assertOk()->assertSee('Your recommended night out')->assertSee('AI-assisted')->assertSee('Save Visit Plan')->assertSee('Replace')->assertSee('Remove')
+            ->assertSee('Planner fixture dessert')->assertSee('Planner fixture drink')->assertSee('Planner fixture replacement')->assertSee('RM12.00–RM16.00')->assertDontSee('Score ');
         Http::assertSentCount(1);
         // Optional local visual artifact, never a production route or auth bypass.
         // The transaction rolls back all synthetic fixture records after the test.
@@ -401,8 +406,134 @@ class AiSmartPlannerTest extends TestCase
         $drink = Food::factory()->create(['stall_id' => $this->food->stall_id, 'category' => ' Beverage  / Drink ', 'price_min' => 4, 'price_max' => 6]);
         $this->fakeSelection([['market_id' => $this->market->id, 'foods' => [['food_id' => $drink->id, 'reason' => 'known_price']]]]);
         $response = $this->actingAs($this->client)->post(route('client.visit-plans.smart-planner.recommend'), [...$this->preferences, 'interests' => ['drinks']]);
-        $response->assertOk()->assertViewHas('preferences', fn ($preferences) => $preferences['categories'] === ['Beverage'] && $preferences['explicit_categories'] === [])
+        $response->assertStatus(303);
+        $response = $this->get($response->headers->get('Location'));
+        $response->assertOk()->assertViewHas('preferences', fn ($preferences) => $preferences['categories'] === [] && $preferences['interests'] === ['drinks'])
             ->assertViewHas('plannerResult', fn ($result) => $result['source'] === 'ai' && $result['recommendations'][0]['foods'][0]['food']->id === $drink->id);
         $this->assertSame(' Beverage  / Drink ', $drink->fresh()->category);
+    }
+
+    public function test_result_get_refresh_and_edit_do_not_call_ai_or_extend_snapshot(): void
+    {
+        $this->fakeSelection();
+        $this->preferences['budget_min'] = 5;
+        $this->preferences['interests'] = ['desserts'];
+        $this->preferences['preference_notes'] = 'PRIVATE preference retained locally';
+        $post = $this->actingAs($this->client)->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences)->assertStatus(303);
+        $url = $post->headers->get('Location');
+        $this->assertStringNotContainsString('PRIVATE', $url);
+        $token = basename($url);
+        $key = 'planner-snapshot:'.$this->client->id.':'.$token;
+        $before = app(PlannerRequestGuard::class)->cache()->get($key);
+        for ($i = 0; $i < 3; $i++) {
+            $this->get($url)->assertOk()->assertSee('Your recommended night out')->assertSee('Desserts')
+                ->assertDontSee('Generate Recommendations')->assertHeader('Cache-Control', 'no-store, private');
+        }
+        $this->get(route('client.visit-plans.smart-planner.index', ['recommendation' => $token]))->assertOk()
+            ->assertSee('View existing recommendation')->assertDontSee('Save Visit Plan')
+            ->assertViewHas('preferences', fn ($prefs) => $prefs['interests'] === ['desserts'] && $prefs['categories'] === []
+                && $prefs['budget_min'] == 5 && $prefs['visit_date'] === '2026-10-05' && $prefs['preference_notes'] === 'PRIVATE preference retained locally');
+        $this->assertSame($before, app(PlannerRequestGuard::class)->cache()->get($key));
+        Http::assertSentCount(1);
+    }
+
+    public function test_results_are_owner_only_and_expired_results_have_safe_recovery(): void
+    {
+        $this->fakeSelection();
+        $result = $this->generate();
+        $token = $result['recommendations'][0]['snapshot_id'];
+        $url = route('client.visit-plans.smart-planner.result', ['snapshot' => $token]);
+        $this->get($url)->assertRedirect(route('login'));
+        $this->actingAs(User::factory()->create(['role' => 'admin']))->get($url)->assertForbidden();
+        $other = User::factory()->create(['role' => 'client']);
+        $this->actingAs($other)->get($url)->assertStatus(410)->assertSee('Edit preferences')->assertDontSee($this->food->name)->assertDontSee($this->market->name);
+        $key = 'planner-snapshot:'.$this->client->id.':'.$token;
+        $cache = app(PlannerRequestGuard::class)->cache();
+        $snapshot = $cache->get($key);
+        $snapshot['expires_at'] = time() - 1;
+        $cache->put($key, $snapshot, 1200);
+        $this->actingAs($this->client)->get($url)->assertStatus(410)->assertSee('My Visit Plans')->assertDontSee('Save Visit Plan');
+        Http::assertSentCount(1);
+    }
+
+    public function test_edit_invalidation_and_regeneration_make_old_results_unsaveable(): void
+    {
+        $this->fakeSelection();
+        $first = $this->actingAs($this->client)->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences)->assertStatus(303);
+        $oldUrl = $first->headers->get('Location');
+        $token = basename($oldUrl);
+        $this->postJson(route('client.visit-plans.smart-planner.invalidate'), ['snapshot_id' => $token])->assertOk();
+        $this->get($oldUrl)->assertStatus(410)->assertDontSee('Save Visit Plan');
+        $this->post(route('client.visit-plans.smart-planner.save'), ['snapshot_id' => $token, 'night_market_id' => $this->market->id,
+            'title' => 'Old conditions', 'food_ids' => [$this->food->id]])->assertSessionHasErrors('snapshot_id');
+        $second = $this->post(route('client.visit-plans.smart-planner.recommend'), [...$this->preferences, 'budget_max' => 25])->assertStatus(303);
+        $newUrl = $second->headers->get('Location');
+        $this->assertNotSame($oldUrl, $newUrl);
+        $this->get($oldUrl)->assertStatus(410);
+        $this->get($newUrl)->assertOk()->assertSee('Up to RM25.00');
+        $this->assertSame(0, $this->client->visitPlans()->count());
+        Http::assertSentCount(2);
+    }
+
+    public function test_result_get_rechecks_catalog_change_without_generating(): void
+    {
+        $this->fakeSelection();
+        $post = $this->actingAs($this->client)->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences)->assertStatus(303);
+        $this->food->update(['status' => 'inactive']);
+        $this->get($post->headers->get('Location'))->assertStatus(410)->assertSee('Catalog information changed')->assertDontSee('Save Visit Plan');
+        Http::assertSentCount(1);
+    }
+
+    public function test_alternate_result_requires_confirmation_through_http_save_and_is_idempotent(): void
+    {
+        $this->fakeSelection();
+        $post = $this->actingAs($this->client)->post(route('client.visit-plans.smart-planner.recommend'), [...$this->preferences, 'visit_date' => '2026-10-06'])->assertStatus(303);
+        $url = $post->headers->get('Location');
+        $this->get($url)->assertOk()->assertSee('Requested date')->assertSee('Suggested date')->assertSee('Monday, 12 Oct 2026')
+            ->assertSee('name="confirmed_fallback_date" value="1" required', false)->assertDontSee('value="1" required checked', false);
+        $data = ['snapshot_id' => basename($url), 'title' => 'Confirmed alternative', 'night_market_id' => $this->market->id, 'food_ids' => [$this->food->id]];
+        $this->from($url)->post(route('client.visit-plans.smart-planner.save'), $data)->assertRedirect($url)->assertSessionHasErrors('confirmed_fallback_date');
+        $this->assertSame(0, $this->client->visitPlans()->count());
+        $save = $this->post(route('client.visit-plans.smart-planner.save'), [...$data, 'confirmed_fallback_date' => true]);
+        $plan = $this->client->visitPlans()->sole();
+        $save->assertRedirect(route('client.visit-plans.show', $plan));
+        $this->assertSame('2026-10-12', $plan->visit_date->toDateString());
+        $this->assertSame([$this->food->id], $plan->items->pluck('food_id')->all());
+        // Emulate the post-commit receipt; this test's outer transaction defers it.
+        app(PlannerRequestGuard::class)->cache()->put('planner-snapshot:'.$this->client->id.':'.$data['snapshot_id'].':receipt', $plan->id, 86400);
+        $this->post(route('client.visit-plans.smart-planner.save'), [...$data, 'confirmed_fallback_date' => true])->assertRedirect(route('client.visit-plans.show', $plan));
+        $this->assertSame(1, $this->client->visitPlans()->count());
+        Http::assertSentCount(1);
+        Mail::assertNothingSent();
+        Notification::assertNothingSent();
+    }
+
+    public function test_no_results_redirect_to_preferences_and_basic_fallback_get_is_free(): void
+    {
+        $this->fakeOutput(['broken' => true]);
+        $post = $this->actingAs($this->client)->post(route('client.visit-plans.smart-planner.recommend'), $this->preferences)->assertStatus(303);
+        $this->get($post->headers->get('Location'))->assertOk()->assertSee('Basic recommendations')->assertDontSee('AI-assisted</span>', false);
+        $empty = $this->post(route('client.visit-plans.smart-planner.recommend'), [...$this->preferences, 'halal_preference' => Stall::HALAL_NON_HALAL]);
+        $empty->assertStatus(303)->assertRedirect(route('client.visit-plans.smart-planner.index'))->assertSessionHas('planner_notice');
+        $this->get(route('client.visit-plans.smart-planner.index'))->assertOk()->assertSee('No matching recommendation')->assertDontSee('Save Visit Plan');
+        Http::assertSentCount(1);
+    }
+
+    public function test_quality_reports_available_and_missing_interests_without_filling_the_budget(): void
+    {
+        $rice = Food::factory()->create(['stall_id' => $this->food->stall_id, 'category' => 'Main Dish / Rice', 'price_min' => 6, 'price_max' => 8]);
+        $this->preferences['budget_max'] = 200;
+        $this->preferences['interests'] = ['meals', 'desserts', 'drinks'];
+        $this->fakeSelection();
+        $result = $this->generate();
+        $plan = $result['recommendations'][0];
+        $this->assertSame(2, $plan['quality']['candidate_count']);
+        $this->assertCount(1, $plan['foods']);
+        $this->assertSame('RM8.00–RM10.00', $plan['estimated_price_label']);
+        $statuses = collect($plan['quality']['interests'])->pluck('status', 'key')->all();
+        $this->assertSame('Included', $statuses['desserts']);
+        $this->assertSame('Available in replacements, not selected', $statuses['meals']);
+        $this->assertSame('No matching eligible food at this market on this date', $statuses['drinks']);
+        Http::assertSentCount(1);
     }
 }

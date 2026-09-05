@@ -15,6 +15,9 @@ use App\Support\SmartPlannerTemplate;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -26,9 +29,39 @@ class SmartVisitPlannerTest extends TestCase
 
     private Carbon $visitDate;
 
+    public function createApplication()
+    {
+        $app = parent::createApplication();
+        $connection = config('database.connections.'.config('database.default'));
+        if (! $app->environment('testing') || config('database.default') !== 'mysql'
+            || $connection['database'] !== 'night_market_laravel_testing' || $connection['host'] !== '127.0.0.1'
+            || (string) $connection['port'] !== '3306' || ! empty($connection['url']) || ! empty($connection['unix_socket'])
+            || ! empty($connection['read']) || ! empty($connection['write'])) {
+            throw new \RuntimeException('Isolated local testing database required. No schema commands are allowed.');
+        }
+        if (DB::selectOne('SELECT DATABASE() AS db')->db !== 'night_market_laravel_testing') {
+            throw new \RuntimeException('Actual testing database does not match.');
+        }
+
+        return $app;
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        Http::preventStrayRequests();
+        Http::fake([]);
+        Mail::fake();
+        Notification::fake();
+        config(['cache.stores.file.driver' => 'array']);
+
+        // DatabaseTransactions has already begun. Isolate every test's catalog
+        // from retained acceptance records without deleting them or changing
+        // timestamps/events. The normal teardown rolls this update back too.
+        $this->assertGreaterThan(0, DB::connection()->transactionLevel());
+        DB::table('night_markets')->where('status', NightMarket::STATUS_ACTIVE)
+            ->update(['status' => NightMarket::STATUS_INACTIVE]);
 
         Carbon::setTestNow('2026-08-20 10:00:00');
         $this->visitDate = now()->next('Sunday');
