@@ -19,7 +19,7 @@
     <div class="card market-card mb-4"><div class="card-body p-4">
         <dl class="row mb-0">
             <dt class="col-sm-3">Night Market</dt><dd class="col-sm-9"><a href="{{ route('admin.night-markets.show', $stall->nightMarket) }}">{{ $stall->nightMarket->name }}</a></dd>
-            <dt class="col-sm-3">Category</dt><dd class="col-sm-9">{{ $stall->category ?: 'Not specified' }}</dd>
+            <dt class="col-sm-3">Category</dt><dd class="col-sm-9">{{ $stall->categoryLabel() ?: 'Not specified' }}</dd>
             <dt class="col-sm-3">Halal classification</dt><dd class="col-sm-9"><span class="badge {{ $stall->halalBadgeClass() }}">{{ $stall->halalStatusLabel() }}</span></dd>
             <dt class="col-sm-3">Halal evidence</dt><dd class="col-sm-9">
                 @if ($stall->halalEvidenceUrl())
@@ -46,7 +46,7 @@
         <div class="list-group">
             @foreach ($stall->foods as $food)
                 <a href="{{ route('admin.foods.show', $food) }}" class="list-group-item list-group-item-action d-flex justify-content-between gap-3">
-                    <span>{{ $food->name }} @if ($food->category)<small class="text-secondary">— {{ $food->category }}</small>@endif</span>
+                    <span>{{ $food->name }} @if ($food->category)<small class="text-secondary">— {{ \App\Support\CatalogCategory::canonical($food->category, 'food') }}</small>@endif</span>
                     <span class="badge {{ $food->status === 'active' ? 'text-bg-success' : 'text-bg-secondary' }}">{{ ucfirst($food->status) }}</span>
                 </a>
             @endforeach

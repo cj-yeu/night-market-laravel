@@ -20,7 +20,7 @@
         <dl class="row mb-0">
             <dt class="col-sm-3">Stall</dt><dd class="col-sm-9"><a href="{{ route('admin.stalls.show', $food->stall) }}">{{ $food->stall->name }}</a></dd>
             <dt class="col-sm-3">Night Market</dt><dd class="col-sm-9"><a href="{{ route('admin.night-markets.show', $food->stall->nightMarket) }}">{{ $food->stall->nightMarket->name }}</a></dd>
-            <dt class="col-sm-3">Category</dt><dd class="col-sm-9">{{ $food->category ?: 'Not specified' }}</dd>
+            <dt class="col-sm-3">Category</dt><dd class="col-sm-9">{{ \App\Support\CatalogCategory::canonical($food->category, 'food') ?: 'Not specified' }}</dd>
             <dt class="col-sm-3">Price</dt><dd class="col-sm-9"><x-food-price :food="$food" /></dd>
             <dt class="col-sm-3">Price checked</dt><dd class="col-sm-9">{{ $food->price_checked_at?->format('M j, Y') ?? 'Not recorded' }}</dd>
             <dt class="col-sm-3">Must-Try</dt><dd class="col-sm-9">{{ $food->is_must_try ? 'Yes' : 'No' }}</dd>

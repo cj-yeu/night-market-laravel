@@ -18,7 +18,7 @@
         </div>
         <p class="text-secondary text-break">{{ str($stall->description ?: 'No stall description available.')->limit(150) }}</p>
         <div class="d-flex flex-wrap gap-2 mt-auto">
-            <a href="{{ route('foods.index', ['stall_id' => $stall->id]) }}" class="btn btn-market">Browse Foods</a>
+            <a href="{{ route('foods.index', ['stall_id' => $stall->id, 'night_market_id' => $stall->night_market_id]) }}" class="btn btn-market">Browse Foods</a>
             <a href="{{ route('client.visit-plans.index', ['item_type' => 'stall', 'item_id' => $stall->id]) }}"
                 class="btn btn-outline-secondary">Add to Visit Plan</a>
         </div>

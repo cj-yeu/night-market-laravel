@@ -3,6 +3,7 @@
 namespace App\Http\Requests\StallFood;
 
 use App\Models\Stall;
+use App\Support\CatalogCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -32,7 +33,7 @@ class AdminStallFilterRequest extends FormRequest
     {
         $this->merge([
             'search' => $this->filled('search') ? str($this->search)->squish()->value() : null,
-            'category' => $this->filled('category') ? str($this->category)->squish()->value() : null,
+            'category' => $this->filled('category') ? CatalogCategory::canonical((string) $this->category, 'stall') : null,
         ]);
     }
 }

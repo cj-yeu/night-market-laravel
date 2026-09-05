@@ -90,7 +90,7 @@ class StallFoodService
             ->when($filters['night_market_id'] ?? null, fn ($query, int $marketId) => $query
                 ->whereHas('stall', fn ($query) => $query->publiclyVisible()->where('night_market_id', $marketId)))
             ->when($filters['stall_id'] ?? null, fn ($query, int $stallId) => $query->where('stall_id', $stallId))
-            ->when($filters['category'] ?? null, fn ($query, string $category) => $query->where('category', $category))
+            ->when($filters['category'] ?? null, fn ($query, string $category) => CatalogCategoryLabel::applyFilter($query, $category, $query->getModel() instanceof Food ? 'food' : 'stall'))
             ->when($filters['halal_status'] ?? null, fn ($query, string $status) => $query
                 ->whereHas('stall', fn ($query) => $query->publiclyVisible()->where('halal_status', $status)))
             ->when(array_key_exists('is_must_try', $filters) && $filters['is_must_try'] !== null,
@@ -123,7 +123,8 @@ class StallFoodService
             'publicStalls' => Stall::query()->publiclyVisible()
                 ->with('nightMarket:id,name')->select(['id', 'night_market_id', 'name'])->orderBy('name')->get(),
             'foodCategories' => Food::query()->publiclyVisible()
-                ->whereNotNull('category')->where('category', '!=', '')->select('category')->distinct()->orderBy('category')->get(),
+                ->whereNotNull('category')->where('category', '!=', '')->select('category')->distinct()->orderBy('category')->get()
+                ->each(fn (Food $food) => $food->setAttribute('category', CatalogCategoryLabel::canonical($food->category, 'food')))->unique('category')->values(),
             'halalStatuses' => collect(Stall::halalStatusOptions())->only(
                 Stall::query()->publiclyVisible()
                     ->whereHas('foods', fn ($query) => $query->where('status', Food::STATUS_ACTIVE))
@@ -160,7 +161,7 @@ class StallFoodService
             }))
             ->when($filters['night_market_id'] ?? null, fn ($query, int $marketId) => $query
                 ->where('night_market_id', $marketId))
-            ->when($filters['category'] ?? null, fn ($query, string $category) => $query->where('category', $category))
+            ->when($filters['category'] ?? null, fn ($query, string $category) => CatalogCategoryLabel::applyFilter($query, $category, $query->getModel() instanceof Food ? 'food' : 'stall'))
             ->when($filters['halal_status'] ?? null, fn ($query, string $halalStatus) => $query
                 ->where('halal_status', $halalStatus))
             ->when($filters['status'] ?? null, fn ($query, string $status) => $query->where('status', $status))
@@ -191,7 +192,7 @@ class StallFoodService
             ->when($filters['night_market_id'] ?? null, fn ($query, int $marketId) => $query
                 ->whereHas('stall', fn ($query) => $query->where('night_market_id', $marketId)))
             ->when($filters['stall_id'] ?? null, fn ($query, int $stallId) => $query->where('stall_id', $stallId))
-            ->when($filters['category'] ?? null, fn ($query, string $category) => $query->where('category', $category))
+            ->when($filters['category'] ?? null, fn ($query, string $category) => CatalogCategoryLabel::applyFilter($query, $category, $query->getModel() instanceof Food ? 'food' : 'stall'))
             ->when(array_key_exists('is_must_try', $filters) && $filters['is_must_try'] !== null,
                 fn ($query) => $query->where('is_must_try', $filters['is_must_try'] === '1'))
             ->when($filters['status'] ?? null, fn ($query, string $status) => $query->where('status', $status))
@@ -248,7 +249,7 @@ class StallFoodService
             ->select('category')
             ->distinct()
             ->orderBy('category')
-            ->get();
+            ->get()->each(fn (Food $food) => $food->setAttribute('category', CatalogCategoryLabel::canonical($food->category, 'food')))->unique('category')->values();
     }
 
     /**
@@ -262,7 +263,7 @@ class StallFoodService
             ->select('category')
             ->distinct()
             ->orderBy('category')
-            ->get();
+            ->get()->each(fn (Stall $stall) => $stall->setAttribute('category', CatalogCategoryLabel::canonical($stall->category, 'stall')))->unique('category')->values();
     }
 
     public function findPubliclyVisibleMarket(int $nightMarketId): NightMarket
@@ -314,7 +315,7 @@ class StallFoodService
     {
         $query->whereHas('foods', fn ($query) => $query
             ->where('status', Food::STATUS_ACTIVE)
-            ->where('category', $category));
+            ->tap(fn ($foodQuery) => CatalogCategoryLabel::applyFilter($foodQuery, $category, 'food')));
     }
 
     private function applyCombinedSearchAndCategory($query, string $search, string $category): void
@@ -328,7 +329,7 @@ class StallFoodService
                 $this->applyCategoryFilter($query, $category);
             })->orWhereHas('foods', fn ($query) => $query
                 ->where('status', Food::STATUS_ACTIVE)
-                ->where('category', $category)
+                ->tap(fn ($foodQuery) => CatalogCategoryLabel::applyFilter($foodQuery, $category, 'food'))
                 ->where(function ($query) use ($search) {
                     $query->where('name', 'like', $search)
                         ->orWhere('description', 'like', $search);
@@ -351,7 +352,7 @@ class StallFoodService
             ->select('category')
             ->distinct()
             ->orderBy('category')
-            ->get();
+            ->get()->each(fn (Food $food) => $food->setAttribute('category', CatalogCategoryLabel::canonical($food->category, 'food')))->unique('category')->values();
     }
 
     public function findPubliclyVisibleFood(int $foodId): Food
@@ -582,11 +583,7 @@ class StallFoodService
 
     private function applyMainCategoryFilter($query, string $category): void
     {
-        $key = CatalogCategoryLabel::key($category);
-        $query->where(function ($query) use ($key): void {
-            $query->whereRaw('LOWER(TRIM(category)) = ?', [$key])
-                ->orWhereRaw('LOWER(TRIM(category)) LIKE ?', [$key.' / %']);
-        });
+        CatalogCategoryLabel::applyFilter($query, $category, 'stall');
     }
 
     private function applyMaximumPrice($query, string|int|float $maximum): void

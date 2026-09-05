@@ -2,12 +2,15 @@
 
 namespace App\Http\Requests\VisitPlan;
 
+use App\Http\Requests\Concerns\ValidatesCatalogSelection;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateVisitPlanRequest extends FormRequest
 {
+    use ValidatesCatalogSelection;
+
     public function authorize(): bool
     {
         return $this->user()?->role === User::ROLE_CLIENT;
@@ -19,6 +22,7 @@ class UpdateVisitPlanRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'city' => ['nullable', 'string', 'max:100'],
             'title' => ['required', 'string', 'max:255'],
             'night_market_id' => ['required', 'integer', 'exists:night_markets,id'],
             'visit_date' => ['required', 'date'],

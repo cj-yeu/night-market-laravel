@@ -824,6 +824,7 @@
             }
         </style>
 
+        <link rel="stylesheet" href="{{ asset('assets/catalog-ux.css') }}">
         @stack('styles')
     </head>
     <body class="{{ $isAdmin ? 'admin-layout' : '' }}">
@@ -835,7 +836,7 @@
                 <header class="admin-mobile-header d-lg-none px-3 py-2">
                     <div class="d-flex align-items-center justify-content-between gap-3">
                         <button class="btn btn-market" type="button" data-bs-toggle="offcanvas"
-                            data-bs-target="#adminSidebar" aria-controls="adminSidebar" aria-label="Open admin navigation">
+                            data-bs-target="#adminSidebar" aria-controls="adminSidebar" aria-expanded="false" aria-label="Open admin navigation">
                             <i class="bi bi-list me-1" aria-hidden="true"></i>Menu
                         </button>
                         <span class="fw-bold text-market text-end">{{ config('app.name') }} Admin Portal</span>
@@ -849,14 +850,16 @@
                 <div class="collapse navbar-collapse" id="primaryNavigation">
                     <div class="navbar-nav ms-auto align-items-lg-center gap-lg-1 pt-2 pt-lg-0">
                         @if (! $currentUser)
-                            @foreach ([['Home', 'home', 'home'], ['Discover Markets', 'night-markets.index', 'night-markets.*'], ['Explore Stalls', 'stalls.index', 'stalls.*'], ['Must-Try Foods', 'foods.index', 'foods.*']] as [$label, $routeName, $routePattern])
-                                <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs($routePattern) ? 'active' : '' }}" href="{{ route($routeName, $routeName === 'foods.index' ? ['is_must_try' => '1'] : []) }}" @if(request()->routeIs($routePattern)) aria-current="page" @endif>{{ $label }}</a>
+                            @foreach ([['Home', 'home', 'home'], ['Discover Markets', 'night-markets.index', 'night-markets.*'], ['Explore Stalls', 'stalls.index', 'stalls.*'], ['Explore Foods', 'foods.index', 'foods.*']] as [$label, $routeName, $routePattern])
+                                @php($isCurrentCatalogPage = (($label === 'Explore Stalls' && request()->routeIs('night-markets.stalls.*')) || (request()->routeIs($routePattern) && ! ($label === 'Discover Markets' && request()->routeIs('night-markets.stalls.*')))))
+                                <a class="nav-link fw-semibold px-lg-2 {{ $isCurrentCatalogPage ? 'active' : '' }}" href="{{ route($routeName, []) }}" @if($isCurrentCatalogPage) aria-current="page" @endif>{{ $label }}</a>
                             @endforeach
                             <a class="btn btn-sm {{ request()->routeIs('login') ? 'btn-market' : 'btn-outline-secondary' }} ms-lg-2" href="{{ route('login') }}">Login</a>
                             <a class="btn btn-sm btn-market ms-lg-1" href="{{ route('register') }}">Register</a>
                         @elseif ($isClient)
-                            @foreach ([['Home', 'client.home'], ['Discover Markets', 'night-markets.*'], ['Explore Stalls', 'stalls.*'], ['Must-Try Foods', 'foods.*'], ['My Visit Plans', 'client.visit-plans.*']] as [$label, $routePattern])
-                                <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs($routePattern) ? 'active' : '' }}" href="{{ route(match($label) {'Home' => 'client.home', 'Discover Markets' => 'night-markets.index', 'Explore Stalls' => 'stalls.index', 'Must-Try Foods' => 'foods.index', default => 'client.visit-plans.index'}, $label === 'Must-Try Foods' ? ['is_must_try' => '1'] : []) }}" @if(request()->routeIs($routePattern)) aria-current="page" @endif>{{ $label }}</a>
+                            @foreach ([['Home', 'client.home'], ['Discover Markets', 'night-markets.*'], ['Explore Stalls', 'stalls.*'], ['Explore Foods', 'foods.*'], ['My Visit Plans', 'client.visit-plans.*']] as [$label, $routePattern])
+                                @php($isCurrentCatalogPage = (($label === 'Explore Stalls' && request()->routeIs('night-markets.stalls.*')) || (request()->routeIs($routePattern) && ! ($label === 'Discover Markets' && request()->routeIs('night-markets.stalls.*')))))
+                                <a class="nav-link fw-semibold px-lg-2 {{ $isCurrentCatalogPage ? 'active' : '' }}" href="{{ route(match($label) {'Home' => 'client.home', 'Discover Markets' => 'night-markets.index', 'Explore Stalls' => 'stalls.index', 'Explore Foods' => 'foods.index', default => 'client.visit-plans.index'}, []) }}" @if($isCurrentCatalogPage) aria-current="page" @endif>{{ $label }}</a>
                             @endforeach
                             <a class="nav-link fw-semibold px-lg-2 {{ request()->routeIs('profile.*') ? 'active' : '' }}" href="{{ route('profile.edit') }}" @if(request()->routeIs('profile.*')) aria-current="page" @endif><x-user-avatar :user="$currentUser" size="sm" /> <span>Profile</span></a>
                             <form method="POST" action="{{ route('logout') }}" class="ms-lg-1">@csrf<button type="submit" class="btn btn-sm btn-outline-danger w-100">Logout</button></form>
@@ -901,7 +904,7 @@
             integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
             crossorigin="anonymous"
         ></script>
-        @stack('scripts')
+        <script src="{{ asset('assets/catalog-ux.js') }}" defer></script>
 
         <script>
             document.querySelectorAll('[data-password-toggle]').forEach((button) => {

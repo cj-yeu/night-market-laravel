@@ -1,0 +1,34 @@
+@media (min-width: 992px) {
+    .navbar-market.navbar-expand-lg .navbar-toggler { display: none; }
+    .catalog-detail-page { max-width: 1200px; margin-inline: auto; }
+    .catalog-detail-page > .row > .col-lg-8 { width: 100%; }
+    .catalog-detail-page .catalog-detail-header { display: grid; grid-template-columns: minmax(220px, .8fr) minmax(0, 1.5fr); gap: 2rem; }
+    .catalog-detail-page .catalog-detail-header > :first-child { width: 100%; max-width: 26rem; max-height: 25rem; }
+    .catalog-detail-page .catalog-detail-header img { max-height: 25rem; }
+    .planner-form-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 1.5rem; align-items: start; }
+    .planner-summary { position: sticky; top: 5.5rem; }
+}
+.catalog-facts { display: grid; grid-template-columns: minmax(9rem, 11rem) minmax(0, 1fr); gap: .65rem 1rem; margin: 1.25rem 0 0; }
+.catalog-facts > dt, .catalog-facts > dd { width: auto; padding: 0; margin: 0; }
+.catalog-facts > dt { overflow-wrap: normal; word-break: normal; }
+.planner-summary { padding: 1.25rem; border: 1px solid #f0c99a; border-radius: .8rem; background: #fff8eb; }
+.planner-summary p { overflow-wrap: anywhere; }
+.planner-options { max-height: 16rem; overflow-y: auto; padding: .25rem; }
+.planner-options .form-check { margin: 0; padding: 0; }
+.planner-options .form-check-input { position: absolute; opacity: 0; }
+.planner-options .form-check-label { display: inline-flex; align-items: center; min-height: 44px; border: 1px solid #aaa; border-radius: 2rem; padding: .4rem .85rem; cursor: pointer; }
+.planner-options .form-check-input:checked + label { border-color: #ad430b; background: #fff0d7; color: #873208; font-weight: 600; }
+.planner-options .form-check-input:checked + label::before { content: '✓ '; margin-right: .4rem; }
+.planner-options .form-check-input:focus-visible + label { outline: 3px solid #ad430b; outline-offset: 2px; }
+.social-record-table { min-width: 760px; }
+.social-record-table .record-context { min-width: 12rem; }
+.social-record-table .record-actions { min-width: 15rem; }
+.social-record-table details > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.social-record-table .badge, .review-rating { align-self: flex-start; }
+[data-planner-summary], [data-schedule-hint] { overflow-wrap: anywhere; }
+@media (max-width: 991.98px) { .planner-summary { margin-top: 1rem; } }
+@media (max-width: 575.98px) {
+    .catalog-facts { grid-template-columns: 1fr; gap: .2rem; }
+    .catalog-facts > dd { margin-bottom: .8rem; }
+    .planner-form-layout .btn { min-height: 44px; }
+}

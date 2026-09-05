@@ -116,7 +116,7 @@
                                                 <div>
                                                     <span class="fw-semibold">{{ $food->name }}</span>
                                                     @if ($food->category)
-                                                        <span class="text-secondary d-block small">{{ $food->category }}</span>
+                                                        <span class="text-secondary d-block small">{{ \App\Support\CatalogCategory::canonical($food->category, 'food') }}</span>
                                                     @endif
                                                     <x-food-price :food="$food" class="small text-market fw-semibold d-block mt-1" />
                                                     @if ($food->is_must_try && $food->recommendation_reason)

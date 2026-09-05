@@ -3,8 +3,8 @@
 @section('title', $nightMarket->name.' | '.config('app.name'))
 
 @section('content')
-    <div class="row justify-content-center">
-        <div class="col-12 col-xl-9">
+    <div class="row justify-content-center catalog-detail-page">
+        <div class="col-12">
             <a href="{{ route('night-markets.index') }}"
                 class="btn btn-outline-secondary mb-4">Back to Night Markets</a>
 
@@ -33,11 +33,11 @@
                         @endif
                     </div>
 
-                    <dl class="row mt-4 mb-0">
+                    <dl class="catalog-facts">
                         <dt class="col-sm-3">Address</dt>
                         <dd class="col-sm-9">{{ $nightMarket->address }}</dd>
 
-                        <dt class="col-sm-3">District</dt>
+                        <dt class="col-sm-3">City</dt>
                         <dd class="col-sm-9">{{ $nightMarket->city }}, {{ $nightMarket->state }}</dd>
 
                         @if ($nightMarket->verified_at)
@@ -109,7 +109,7 @@
                                                 <span class="badge text-bg-warning">Must-Try</span>
                                             </div>
                                             @if ($food->category)
-                                                <div class="small text-market fw-semibold mb-1">{{ $food->category }}</div>
+                                                <div class="small text-market fw-semibold mb-1">{{ \App\Support\CatalogCategory::canonical($food->category, 'food') }}</div>
                                             @endif
                                             <x-review-rating-summary :reviewable="$food" compact class="mb-2" />
                                             <p class="text-secondary mb-0 text-clamp-3">

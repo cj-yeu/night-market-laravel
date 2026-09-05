@@ -534,6 +534,14 @@ class SocialMediaDataService
         string $status,
         ?string $rejectionReason,
     ): SocialMediaRecord {
+        if ($socialMediaRecord->status !== SocialMediaRecord::STATUS_PENDING) {
+            throw ValidationException::withMessages(['status' => 'This record has already been reviewed. Edit it to return it to Pending before reviewing again.']);
+        }
+        if (! in_array($status, [SocialMediaRecord::STATUS_APPROVED, SocialMediaRecord::STATUS_REJECTED], true)
+            || ($status === SocialMediaRecord::STATUS_REJECTED && mb_strlen(trim((string) $rejectionReason)) < 3)) {
+            throw ValidationException::withMessages(['status' => 'Choose Approve or Reject, with a reason when rejecting.']);
+        }
+
         if ($status === SocialMediaRecord::STATUS_APPROVED) {
             $this->validateEligibility([
                 'night_market_id' => $socialMediaRecord->night_market_id,

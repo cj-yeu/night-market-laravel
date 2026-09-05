@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CatalogCategory;
 use App\Models\User;
+use App\Support\CatalogCategory as CategoryLabel;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -15,11 +16,14 @@ class CatalogCategoryService
     {
         $this->assertType($type);
 
-        return CatalogCategory::query()
-            ->forType($type)
-            ->active()
-            ->orderBy('name')
-            ->get(['id', 'category_type', 'name', 'normalized_name']);
+        $categories = CatalogCategory::query()->forType($type)->orderBy('name')->get();
+        $blockedNames = $categories->where('is_active', false)
+            ->map(fn ($category) => CategoryLabel::key($category->name));
+
+        return $categories->where('is_active', true)
+            ->reject(fn ($category) => $blockedNames->contains(CategoryLabel::key(CategoryLabel::canonical($category->name, $type))))
+            ->each(fn (CatalogCategory $category) => $category->setAttribute('name', CategoryLabel::canonical($category->name, $type)))
+            ->unique('name')->values();
     }
 
     public function isPermittedSelection(string $type, ?string $category, ?string $legacyCategory = null): bool
@@ -31,20 +35,7 @@ class CatalogCategoryService
             return true;
         }
 
-        if ($normalized === $this->normalize($legacyCategory)) {
-            $registeredLegacyCategory = CatalogCategory::query()
-                ->forType($type)
-                ->where('normalized_name', $normalized)
-                ->first();
-
-            return $registeredLegacyCategory?->is_active ?? true;
-        }
-
-        return CatalogCategory::query()
-            ->forType($type)
-            ->active()
-            ->where('normalized_name', $normalized)
-            ->exists();
+        return $this->permittedCategory($type, $category, $legacyCategory) !== false;
     }
 
     public function resolveForCatalog(
@@ -55,59 +46,69 @@ class CatalogCategoryService
         ?User $creator,
     ): ?string {
         $this->assertType($type);
-
         if ($this->normalize($newCategory) !== null) {
             return $this->createOrFind($type, (string) $newCategory, $creator)->name;
         }
-
-        $normalized = $this->normalize($category);
-        if ($normalized === null) {
+        if ($this->normalize($category) === null) {
             return null;
         }
-
-        if ($normalized === $this->normalize($legacyCategory)) {
-            $registeredLegacyCategory = CatalogCategory::query()
-                ->forType($type)
-                ->where('normalized_name', $normalized)
-                ->first();
-
-            if (! $registeredLegacyCategory) {
-                return $this->displayName($legacyCategory);
-            }
-
-            if ($registeredLegacyCategory->is_active) {
-                return $registeredLegacyCategory->name;
-            }
-
+        $resolved = $this->permittedCategory($type, $category, $legacyCategory);
+        if ($resolved === false) {
             throw ValidationException::withMessages([
                 'category' => 'Choose an active '.$type.' category or add a new one.',
             ]);
         }
 
-        $managedCategory = CatalogCategory::query()
-            ->forType($type)
-            ->active()
-            ->where('normalized_name', $normalized)
-            ->first();
+        return $resolved;
+    }
 
-        if (! $managedCategory) {
-            throw ValidationException::withMessages([
-                'category' => 'Choose an active '.$type.' category or add a new one.',
-            ]);
+    private function permittedCategory(string $type, ?string $category, ?string $legacyCategory): string|false
+    {
+        $all = CatalogCategory::query()->forType($type)->get();
+        $exact = $all->first(fn ($item) => $this->normalize($item->name) === $this->normalize($category));
+        if ($exact && ! $exact->is_active) {
+            return false;
+        }
+        $label = CategoryLabel::canonical($category, $type);
+        $canonicalRecord = $all->first(fn ($item) => $this->normalize($item->name) === $this->normalize($label));
+        if ($canonicalRecord && ! $canonicalRecord->is_active) {
+            return false;
+        }
+        $matches = $all->filter(fn ($item) => CategoryLabel::canonical($item->name, $type) === $label);
+        $active = $matches->first(fn ($item) => $item->is_active);
+        $legacyMatches = filled($legacyCategory) && CategoryLabel::canonical($legacyCategory, $type) === $label;
+        $legacyRecord = $all->first(fn ($item) => $this->normalize($item->name) === $this->normalize($legacyCategory));
+        if ($legacyMatches && $legacyRecord && ! $legacyRecord->is_active) {
+            return false;
+        }
+        if ($legacyMatches && (! $legacyRecord || $legacyRecord->is_active) && ($matches->isEmpty() || $active)) {
+            // Retain the exact original value when only unrelated fields were edited.
+            return $legacyCategory;
         }
 
-        return $managedCategory->name;
+        return $active ? $label : false;
     }
 
     private function createOrFind(string $type, string $newCategory, ?User $creator): CatalogCategory
     {
-        $name = $this->displayName($newCategory);
+        $name = CategoryLabel::canonical($newCategory, $type);
         $normalized = $this->normalize($name);
 
         if ($name === null || $normalized === null || preg_match('/[\x00-\x1F\x7F]/u', $newCategory) === 1 || preg_match('/<[^>]*>/', $newCategory) === 1) {
             throw ValidationException::withMessages([
                 'new_category' => 'Enter a safe category name without HTML or control characters.',
             ]);
+        }
+
+        $existing = CatalogCategory::query()->forType($type)->get();
+        $exact = $existing->first(fn ($item) => $this->normalize($item->name) === $this->normalize($newCategory));
+        $matches = $existing->filter(fn ($item) => CategoryLabel::canonical($item->name, $type) === $name);
+        $canonicalRecord = $existing->first(fn ($item) => $this->normalize($item->name) === $normalized);
+        if (($canonicalRecord && ! $canonicalRecord->is_active) || ($exact && ! $exact->is_active) || ($matches->isNotEmpty() && ! $matches->contains(fn ($item) => $item->is_active))) {
+            throw ValidationException::withMessages(['new_category' => 'Choose a different active '.$type.' category.']);
+        }
+        if ($active = $matches->first(fn ($item) => $item->is_active)) {
+            return $active;
         }
 
         try {

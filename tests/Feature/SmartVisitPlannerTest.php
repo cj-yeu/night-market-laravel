@@ -71,7 +71,7 @@ class SmartVisitPlannerTest extends TestCase
         $this->actingAs($admin)->post(route('client.visit-plans.smart-planner.store'), [])->assertForbidden();
 
         $this->actingAs($this->client)->get($url)
-            ->assertOk()->assertSee('Smart Visit Planner')->assertSee('No external AI or live data is used.');
+            ->assertOk()->assertSee('Smart Visit Planner')->assertSee('Suggestions use catalog information and fixed rules.');
     }
 
     public function test_first_load_defaults_to_the_nearest_active_public_market_date(): void

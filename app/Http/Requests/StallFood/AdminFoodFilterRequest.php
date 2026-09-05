@@ -2,13 +2,17 @@
 
 namespace App\Http\Requests\StallFood;
 
+use App\Http\Requests\Concerns\ValidatesCatalogSelection;
 use App\Models\Food;
+use App\Support\CatalogCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class AdminFoodFilterRequest extends FormRequest
 {
+    use ValidatesCatalogSelection;
+
     public function authorize(): bool
     {
         return $this->user()?->hasAdminAccess() ?? false;
@@ -33,7 +37,7 @@ class AdminFoodFilterRequest extends FormRequest
     {
         $this->merge([
             'search' => $this->filled('search') ? str($this->search)->squish()->value() : null,
-            'category' => $this->filled('category') ? str($this->category)->squish()->value() : null,
+            'category' => $this->filled('category') ? CatalogCategory::canonical((string) $this->category, 'food') : null,
         ]);
     }
 }

@@ -259,9 +259,9 @@ class ReviewService
     public function managementFilterOptions(): array
     {
         return [
-            'markets' => NightMarket::query()->whereHas('reviews')->select(['id', 'name'])->orderBy('name')->get(),
-            'stalls' => Stall::query()->whereHas('foods.reviews')->select(['id', 'name'])->orderBy('name')->get(),
-            'foods' => Food::query()->whereHas('reviews')->select(['id', 'name'])->orderBy('name')->get(),
+            'markets' => NightMarket::query()->where(fn ($query) => $query->whereHas('reviews')->orWhereHas('stalls.foods.reviews'))->select(['id', 'name'])->orderBy('name')->get(),
+            'stalls' => Stall::query()->whereHas('foods.reviews')->with('nightMarket:id,name')->select(['id', 'night_market_id', 'name'])->orderBy('name')->get(),
+            'foods' => Food::query()->whereHas('reviews')->with('stall:id,night_market_id,name')->select(['id', 'stall_id', 'name'])->orderBy('name')->get(),
         ];
     }
 

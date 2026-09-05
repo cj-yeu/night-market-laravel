@@ -10,7 +10,7 @@
             @endif
         </div>
         <p class="small text-market fw-semibold mb-1">
-            <a href="{{ route('foods.index', ['stall_id' => $food->stall->id]) }}" class="text-reset">
+            <a href="{{ route('foods.index', ['stall_id' => $food->stall->id, 'night_market_id' => $food->stall->night_market_id]) }}" class="text-reset">
                 {{ $food->stall->name }}
             </a>
         </p>
@@ -22,7 +22,7 @@
         </p>
         <div class="d-flex flex-wrap gap-2 mb-3">
             @if ($food->category)
-                <span class="badge text-bg-light border text-break">{{ $food->category }}</span>
+                <span class="badge text-bg-light border text-break">{{ \App\Support\CatalogCategory::canonical($food->category, 'food') }}</span>
             @endif
             <x-halal-status :stall="$food->stall" />
         </div>

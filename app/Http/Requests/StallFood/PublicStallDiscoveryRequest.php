@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\StallFood;
 
+use App\Http\Requests\Concerns\ValidatesCatalogSelection;
 use App\Models\Stall;
 use App\Support\CatalogCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -11,6 +12,8 @@ use Illuminate\Validation\Rule;
 
 class PublicStallDiscoveryRequest extends FormRequest
 {
+    use ValidatesCatalogSelection;
+
     public function authorize(): bool
     {
         return true;

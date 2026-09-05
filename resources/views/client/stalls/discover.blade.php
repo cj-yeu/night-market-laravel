@@ -21,10 +21,10 @@
             </div>
             <div class="col-12 col-md-6 col-lg-4">
                 <label for="stall-market" class="form-label">Night Market</label>
-                <select id="stall-market" name="night_market_id" class="form-select @error('night_market_id') is-invalid @enderror">
+                <select id="stall-market" name="night_market_id" data-parent-select="stall-city" data-searchable class="form-select @error('night_market_id') is-invalid @enderror">
                     <option value="">All public markets</option>
                     @foreach ($nightMarkets as $market)
-                        <option value="{{ $market->id }}" @selected((string) ($filters['night_market_id'] ?? '') === (string) $market->id)>{{ $market->name }}</option>
+                        <option data-parent="{{ $market->city }}" value="{{ $market->id }}" @selected((string) ($filters['night_market_id'] ?? '') === (string) $market->id)>{{ $market->name }}</option>
                     @endforeach
                 </select>
                 @error('night_market_id')<div class="invalid-feedback">{{ $message }}</div>@enderror

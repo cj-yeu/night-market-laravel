@@ -28,6 +28,7 @@
         </div>
     </div>
 
+    @if ($errors->any())<div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>@endif
     <div class="row g-4">
         <div class="col-12 col-lg-7">
             <div class="card market-card mb-4">
@@ -73,7 +74,7 @@
                                             onsubmit="return confirm('Remove this stall from your visit plan?');">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Remove Item</button>
                                         </form>
                                     @endif
                                 </div>
@@ -97,7 +98,7 @@
                                         @if ($item->is_available && $item->food)
                                             <div class="small text-secondary">
                                                 {{ $item->food->stall?->name ?: 'Stall unavailable' }}
-                                                @if ($item->food->category) · {{ $item->food->category }} @endif
+                                                @if ($item->food->category) · {{ \App\Support\CatalogCategory::canonical($item->food->category, 'food') }} @endif
                                             </div>
                                             <div class="small text-secondary">
                                                 <x-food-price :food="$item->food" />
@@ -128,7 +129,7 @@
         <div class="col-12 col-lg-5">
             <div class="card market-card mb-4">
                 <div class="card-body p-4">
-                    <h2 class="h4 fw-bold text-market">Operating Schedule</h2>
+                    <h2 class="h4 fw-bold text-market">Operating Schedule</h2><p class="small text-secondary">Regular schedule, not a live opening update.</p>
                     @if (! $visitPlan->market_is_available)
                         <div class="alert alert-secondary mb-0">This Night Market is no longer publicly available.</div>
                     @elseif ($visitPlan->nightMarket->operatingDays->isEmpty())
@@ -138,7 +139,7 @@
                             @foreach ($visitPlan->nightMarket->operatingDays as $operatingDay)
                                 <li class="mb-1">
                                     <strong>{{ $operatingDay->day_of_week }}</strong>:
-                                    {{ $operatingDay->opening_time->format('g:i A') }}&ndash;{{ $operatingDay->closing_time->format('g:i A') }}
+                                    {{ $operatingDay->opening_time?->format('g:i A') ?? 'Time not available' }}&ndash;{{ $operatingDay->closing_time?->format('g:i A') ?? 'Time not available' }}
                                 </li>
                             @endforeach
                         </ul>
@@ -157,7 +158,13 @@
                     @if ($calendarEvent)
                         <div class="alert {{ $calendarState === 'Synced' ? 'alert-success' : 'alert-warning' }} mb-3" role="status">
                             <i class="bi bi-calendar-check me-1" aria-hidden="true"></i>
-                            @if ($calendarState === 'Synced')
+                            @if ($planIsPast)
+                                @if ($calendarState === 'Synced')
+                                    Synced to Google Calendar. Only the title and notes can be edited for past plans.
+                                @else
+                                    Your plan is saved here, but its Calendar event needs attention. Calendar retry controls are not available on this past-plan page.
+                                @endif
+                            @elseif ($calendarState === 'Synced')
                                 Synced to Google Calendar. Editing this plan updates the existing event.
                             @elseif ($calendarState === 'Reconnect Required')
                                 Reconnect Google Calendar before retrying this event update.
@@ -214,7 +221,7 @@
 
             <div class="card market-card">
                 <div class="card-body p-4">
-                    <h2 class="h4 fw-bold text-market">Add a Plan Item</h2>
+                    <h2 class="h4 fw-bold text-market">Add a Plan Item</h2><p class="small text-secondary">{{ $visitPlan->market_display_name }} · {{ $visitPlan->visit_date->format('d M Y') }} · {{ $visitPlan->items_count }} items selected</p>
                     @if ($planIsPast)
                         <div class="alert alert-secondary mb-0">Past visit plans cannot change items. You can still update the title or notes.</div>
                     @elseif ($eligibleStalls->isEmpty() && $eligibleFoods->isEmpty())
@@ -239,7 +246,7 @@
                                 @if ($eligibleStalls->isEmpty())
                                     <p class="text-secondary mb-0">All eligible stalls have already been added.</p>
                                 @else
-                                    <select id="stall_id" name="stall_id"
+                                    <select id="stall_id" name="stall_id" data-searchable
                                         class="form-select @error('stall_id') is-invalid @enderror" required>
                                         <option value="">Choose a Stall</option>
                                         @foreach ($eligibleStalls as $stall)
@@ -254,13 +261,13 @@
                                 @if ($eligibleFoods->isEmpty())
                                     <p class="text-secondary mb-0">All eligible foods have already been added.</p>
                                 @else
-                                    <select id="food_id" name="food_id"
+                                    <select id="food_id" name="food_id" data-searchable
                                         class="form-select @error('food_id') is-invalid @enderror" required>
                                         <option value="">Choose a Food</option>
                                         @foreach ($eligibleFoods->groupBy(fn ($food) => $food->stall->name) as $stallName => $foods)
                                             <optgroup label="{{ $stallName }}">
                                                 @foreach ($foods as $food)
-                                                    <option value="{{ $food->id }}" @selected(old('item_type') === 'food' && (string) old('food_id') === (string) $food->id)>{{ $food->name }}</option>
+                                                    <option value="{{ $food->id }}" @selected(old('item_type') === 'food' && (string) old('food_id') === (string) $food->id)>{{ $food->name }} · {{ \App\Support\CatalogCategory::canonical($food->category, 'food') ?: 'Uncategorized' }} · {{ $food->price_display ?: ($food->price_max !== null ? 'Up to RM'.number_format($food->price_max, 2) : ($food->price_min !== null ? 'From RM'.number_format($food->price_min, 2) : 'Price not available')) }}{{ $food->is_must_try ? ' · Must-Try' : '' }}</option>
                                                 @endforeach
                                             </optgroup>
                                         @endforeach

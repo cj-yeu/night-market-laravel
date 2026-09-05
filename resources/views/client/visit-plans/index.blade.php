@@ -6,7 +6,7 @@
     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
         <div>
             <h1 class="h3 fw-bold text-market mb-1">My Visit Plans</h1>
-            <p class="text-secondary mb-0">Organize upcoming visits and revisit past itineraries.</p>
+            <p class="text-secondary mb-0">Manual Plan lets you choose each stop. Smart Planner suggests an editable itinerary from your preferences.</p>
         </div>
         <div class="d-flex flex-wrap gap-2 align-self-start">
             <a href="{{ route('client.visit-plans.smart-planner.index') }}" class="btn btn-outline-secondary">Smart Planner</a>
@@ -80,7 +80,7 @@
                     <div class="col-12 col-sm-6 col-lg-3 d-flex flex-wrap gap-2">
                         <button type="submit" class="btn btn-market">Apply Filters</button>
                         @if ($hasFilters)
-                            <a href="{{ route('client.visit-plans.index', $targetQuery) }}"
+                            <a href="{{ route('client.visit-plans.index') }}"
                                 class="btn btn-outline-secondary">Reset Filters</a>
                         @endif
                     </div>
