@@ -17,6 +17,7 @@ class SmartPlannerTemplateRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'recommendation' => ['nullable', 'uuid'],
             'template' => ['nullable', 'string', Rule::in(SmartPlannerTemplate::KEYS)],
         ];
     }

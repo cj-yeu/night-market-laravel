@@ -1,11 +1,12 @@
 <article class="night-out-panel" data-plan-result data-snapshot="{{ $recommendation['snapshot_id'] }}" data-budget="{{ $preferences['budget_max'] ?? '' }}">
     <header class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-3">
-        <div><span class="badge text-bg-warning mb-2">{{ $plannerResult['source'] === 'ai' ? 'AI-selected' : 'Basic recommendation' }}</span>
-            <h3 class="h3 text-market">{{ $recommendation['market']->name }}</h3><p>{{ $recommendation['market']->city }}, Selangor</p>
+        <div><span class="badge text-bg-warning mb-2">{{ $plannerResult['source'] === 'ai' ? 'AI-assisted' : 'Basic recommendations' }}</span>
+            <h2 class="h3 text-market">{{ $recommendation['market']->name }}</h2><p>{{ $recommendation['market']->city }}, Selangor</p>
+            <p class="fw-semibold mb-0">{{ $plannerResult['recommendation_date_label'] }}</p>
         </div>
-        <div><strong>Estimated food cost</strong><p data-total>{{ $recommendation['estimated_price_label'] }}</p></div>
+        <div><strong>Estimated food cost</strong><p class="fs-4 mb-1" data-total>{{ $recommendation['estimated_price_label'] }}</p><p><strong data-count>{{ count($recommendation['foods']) }}</strong> <span data-stop-label>food stops</span></p></div>
     </header>
-    <h4 class="h5">Why this fits</h4><p>{{ $recommendation['explanation'] }}</p>
+    <h3 class="h5">Why this fits</h3><p>{{ $recommendation['explanation'] }}</p>
     @if ($recommendation['template_notice'])<p class="alert alert-info small">{{ $recommendation['template_notice'] }}</p>@endif
     <p class="small text-secondary">{{ $plannerResult['recommendation_date_label'] }} · Regular schedule:
         @foreach ($recommendation['market']->operatingDays as $day)
@@ -14,7 +15,16 @@
             @endif
         @endforeach
     </p>
-    <form method="POST" action="{{ route('client.visit-plans.smart-planner.save') }}" data-snapshot-save>
+    <details class="mb-3 preference-details">
+        <summary>Food choices & interest coverage</summary>
+        <p class="small">{{ $recommendation['quality']['candidate_count'] }} eligible foods at this market match your date, preferences and individual price ceiling. This plan allows up to {{ $recommendation['quality']['stop_limit'] }} stops, subject to the combined food budget. You do not need to spend the whole budget.</p>
+        <dl class="small">
+            @foreach ($recommendation['quality']['interests'] as $interest)
+                <dt>{{ $interest['label'] }}</dt><dd data-interest-status="{{ $interest['key'] }}" data-available="{{ $interest['status'] === 'No matching eligible food at this market on this date' ? '0' : '1' }}">{{ $interest['status'] }}</dd>
+            @endforeach
+        </dl>
+    </details>
+    <form method="POST" action="{{ route('client.visit-plans.smart-planner.save') }}" data-snapshot-save class="night-out-result-layout">
         @csrf
         <input type="hidden" name="snapshot_id" value="{{ $recommendation['snapshot_id'] }}">
         <input type="hidden" name="night_market_id" value="{{ $recommendation['market']->id }}">
@@ -23,7 +33,7 @@
                 <div class="night-out-food" data-food-row>
                     <div data-food-image><x-food-image :food="$item['food']" /></div>
                     <div class="p-3">
-                        <h4 class="h5" data-food-name>{{ $item['food']->name }}</h4>
+                        <h3 class="h5" data-food-name>{{ $item['food']->name }}</h3>
                         <p class="small mb-1" data-food-stall>{{ $item['stall']->name }}</p>
                         <p class="small" data-food-halal>{{ $item['stall']->halalPublicLabel() }}</p>
                         <p class="small text-secondary" data-food-category>{{ \App\Support\CatalogCategory::canonical($item['food']->category, 'food') }}</p>
@@ -47,24 +57,27 @@
                 </div>
             @endforeach
         </div>
-        <div class="planner-summary mt-4">
+        <aside class="planner-summary night-out-save-summary" aria-label="Itinerary summary">
+            <h3 class="h5">Your itinerary</h3>
+            <p class="fw-semibold" data-total>{{ $recommendation['estimated_price_label'] }}</p>
             <label class="form-label" for="plan-title-{{ $recommendation['market']->id }}">Plan title</label>
             <input class="form-control mb-3" id="plan-title-{{ $recommendation['market']->id }}" name="title" maxlength="255" required value="Smart visit to {{ $recommendation['market']->name }}">
-            <p><strong data-count>{{ count($recommendation['foods']) }}</strong> food stops · {{ $recommendation['market']->name }}</p>
+            <p><strong data-count>{{ count($recommendation['foods']) }}</strong> <span data-stop-label>food stops</span> · {{ $recommendation['market']->name }}</p>
             <p class="small">Plan date{{ $plannerResult['uses_fallback'] ? ' if confirmed' : '' }}: {{ $plannerResult['recommendation_date_label'] }}</p>
             @if ($plannerResult['uses_fallback'])
                 <label class="category-choice mb-3"><input type="checkbox" name="confirmed_fallback_date" value="1" required> Use recommended date: {{ $plannerResult['recommendation_date_label'] }}</label>
             @endif
             <p data-save-notice class="small" role="status">Costs are checked again when saving. Replacements keep the same market and preferences.</p>
-            <button type="submit" class="btn btn-market">Save Visit Plan</button>
+            <button type="submit" class="btn btn-market w-100">Save Visit Plan</button>
             <p class="small mt-2 mb-0">One saved plan per generation. Generate again to save a different itinerary.</p>
             <p class="small text-secondary mt-2 mb-0">Editable after saving. Google Calendar is available on Plan Details; nothing is synced now.</p>
             <p class="small text-secondary mt-2 mb-0">Allergens, spice levels, facilities and live opening are not verified by this planner.</p>
-        </div>
+            <p class="small text-secondary mt-2 mb-0">Refresh restores the original food selection. Save your plan to keep food changes.</p>
+        </aside>
     </form>
     <div hidden data-food-catalog>
         @foreach ($recommendation['replacements'] as $food)
-            <template data-food="{{ $food->id }}" data-name="{{ $food->name }}" data-stall="{{ $food->stall->name }}" data-halal="{{ $food->stall->halalPublicLabel() }}" data-category="{{ \App\Support\CatalogCategory::canonical($food->category, 'food') }}" data-min="{{ $food->price_min }}" data-max="{{ $food->price_max }}"><x-food-image :food="$food" /></template>
+            <template data-food="{{ $food->id }}" data-name="{{ $food->name }}" data-stall="{{ $food->stall->name }}" data-halal="{{ $food->stall->halalPublicLabel() }}" data-category="{{ \App\Support\CatalogCategory::canonical($food->category, 'food') }}" data-interests="{{ implode('|', array_keys(\App\Support\PlannerFoodInterests::options([\App\Support\CatalogCategory::canonical($food->category, 'food')]))) }}" data-min="{{ $food->price_min }}" data-max="{{ $food->price_max }}"><x-food-image :food="$food" /></template>
         @endforeach
     </div>
 </article>

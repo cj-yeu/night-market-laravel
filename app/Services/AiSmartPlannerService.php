@@ -9,6 +9,7 @@ use App\Models\NightMarket;
 use App\Models\Stall;
 use App\Models\User;
 use App\Models\VisitPlan;
+use App\Support\CatalogCategory;
 use App\Support\PlannerFoodInterests;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -38,6 +39,8 @@ class AiSmartPlannerService
     public function recommend(User $user, array $preferences): array
     {
         return $this->guard->run($user->id, function () use ($user, $preferences) {
+            $inputPreferences = [...$preferences, 'categories' => $preferences['explicit_categories'] ?? $preferences['categories'] ?? []];
+            $this->guard->cache()->put('planner-draft:'.$user->id, $inputPreferences, 1200);
             // Notes stay local. A minimum is a soft preference, not a spending floor.
             $effective = $preferences;
             $effective['budget_min'] = isset($preferences['budget_max']) ? 0 : null;
@@ -63,7 +66,7 @@ class AiSmartPlannerService
                         $result['recommendation_date'] = $date;
                         $result['recommendation_date_label'] = Carbon::parse($date)->format('l, j M Y');
                         $result['uses_fallback'] = $date !== $preferences['visit_date'];
-                        $result['requested_reason_message'] = 'No qualifying food combination fits your food budget on the requested date.';
+                        $result['requested_reason_message'] = 'No eligible food combination meets these preferences and food budget on the requested date. This does not mean every market is closed.';
                         break;
                     }
                 }
@@ -107,7 +110,7 @@ class AiSmartPlannerService
             $result['recommendations'] = [];
             if ($selections === []) {
                 $result['uses_fallback'] = false;
-                $result['requested_reason_message'] = 'Not enough eligible foods with numeric prices fit this food budget. Try another date, city or budget.';
+                $result['requested_reason_message'] = 'No eligible food combination meets these preferences and food budget. Try another date, city, food interest or budget.';
                 $this->invalidate($user);
 
                 return $result;
@@ -118,31 +121,100 @@ class AiSmartPlannerService
                 'preferences' => $effective, 'date' => $date, 'requested_date' => $preferences['visit_date'],
                 'candidate_ids' => $candidates->keys()->all(), 'version' => $version,
                 'markets' => array_column($selections, 'market_id'),
+                'input_preferences' => $inputPreferences,
+                'selections' => $selections,
+                'result_meta' => array_diff_key($result, ['recommendations' => true]),
             ];
             if (! $this->guard->cache()->put($this->key($user, $token), $snapshot, 1200)
                 || ! $this->guard->cache()->put('planner-active:'.$user->id, $token, 1200)) {
                 throw ValidationException::withMessages(['planner' => 'Could not safely retain your recommendation. Please try again.']);
             }
-            foreach ($selections as $selection) {
-                $selected = $this->catalog->validateSelection(array_column($selection['foods'], 'food_id'), $selection['market_id'], $candidates, $effective);
-                $market = $selected->first()->stall->nightMarket;
-                $replacements = $candidates->filter(fn ($food) => $food->stall->night_market_id === $market->id)->values();
-                $result['recommendations'][] = [
-                    'market' => $market, 'foods' => $selected->map(fn ($food) => $this->foodCard($food, $selection, $effective))->all(),
-                    'stalls' => [], 'snapshot_id' => $token, 'replacements' => $replacements,
-                    'estimated_price_label' => $this->catalog->cost($selected)['label'],
-                    'unknown_price_count' => $this->catalog->cost($selected)['unknown'],
-                    'explanation' => 'Matches the confirmed date, location and food preferences. Costs cover one serving of each selected food, not transport or multiple people.',
-                    'template_notice' => $this->templateNotice($effective, $selected),
-                ];
-            }
-            // Template notices are recomputed from the actual chosen combination.
-            if (isset($result['template'])) {
-                $result['template']['notice'] = $result['recommendations'][0]['template_notice'];
-            }
+            $result = $this->renderSelections($result, $selections, $candidates, $effective, $token);
 
             return $result;
         });
+    }
+
+    // GET results rebuild display data from the bound snapshot. No provider call,
+    // generation, TTL extension or new snapshot happens during a read.
+    public function resultFor(User $user, string $token): array
+    {
+        $snapshot = $this->guard->cache()->get($this->key($user, $token));
+        if (! $snapshot || $snapshot['user_id'] !== $user->id || $snapshot['expires_at'] < time()
+            || $this->guard->cache()->get('planner-active:'.$user->id) !== $token
+            || $snapshot['date'] < now('Asia/Kuala_Lumpur')->toDateString()
+            || ! isset($snapshot['selections'], $snapshot['result_meta'])) {
+            throw ValidationException::withMessages(['snapshot_id' => 'This recommendation has expired or changed. Review your preferences and generate a new plan.']);
+        }
+        $candidates = $this->catalog->candidates($snapshot['preferences'], $snapshot['date'], $snapshot['candidate_ids']);
+        if ($this->catalog->version($candidates) !== $snapshot['version']) {
+            throw ValidationException::withMessages(['snapshot_id' => 'Catalog information changed. Review your preferences and generate again for current prices and availability.']);
+        }
+
+        return $this->renderSelections($snapshot['result_meta'], $snapshot['selections'], $candidates, $snapshot['preferences'], $token);
+    }
+
+    public function preferencesFor(User $user, ?string $token = null): ?array
+    {
+        if ($token !== null) {
+            $snapshot = $this->guard->cache()->get($this->key($user, $token));
+
+            return $snapshot && $snapshot['user_id'] === $user->id && $snapshot['expires_at'] >= time()
+                ? ($snapshot['input_preferences'] ?? null) : null;
+        }
+
+        return $this->guard->cache()->get('planner-draft:'.$user->id);
+    }
+
+    public function currentResultId(User $user): ?string
+    {
+        $token = $this->guard->cache()->get('planner-active:'.$user->id);
+        if (! is_string($token)) {
+            return null;
+        }
+        $snapshot = $this->guard->cache()->get($this->key($user, $token));
+
+        return $snapshot && $snapshot['user_id'] === $user->id && $snapshot['expires_at'] >= time() ? $token : null;
+    }
+
+    private function renderSelections(array $result, array $selections, $candidates, array $effective, string $token): array
+    {
+        $result['recommendations'] = [];
+        foreach ($selections as $selection) {
+            $selected = $this->catalog->validateSelection(array_column($selection['foods'], 'food_id'), $selection['market_id'], $candidates, $effective);
+            $market = $selected->first()->stall->nightMarket;
+            $replacements = $candidates->filter(fn ($food) => $food->stall->night_market_id === $market->id)->values();
+            $result['recommendations'][] = [
+                'market' => $market, 'foods' => $selected->map(fn ($food) => $this->foodCard($food, $selection, $effective))->all(),
+                'stalls' => [], 'snapshot_id' => $token, 'replacements' => $replacements,
+                'estimated_price_label' => $this->catalog->cost($selected)['label'],
+                'unknown_price_count' => $this->catalog->cost($selected)['unknown'],
+                'explanation' => 'Selected for the suggested date, location and food preferences. The food budget is a ceiling, not a spending target.',
+                'template_notice' => $this->templateNotice($effective, $selected),
+                'quality' => $this->selectionQuality($effective, $selected, $replacements),
+            ];
+        }
+        // Template notices are recomputed from the actual chosen combination.
+        if (isset($result['template'])) {
+            $result['template']['notice'] = $result['recommendations'][0]['template_notice'];
+        }
+
+        return $result;
+    }
+
+    private function selectionQuality(array $preferences, $selected, $candidates): array
+    {
+        $groupsFor = fn ($foods) => array_keys(PlannerFoodInterests::options($foods->map(fn ($food) => CatalogCategory::canonical($food->category, 'food'))->unique()->all()));
+        $available = $groupsFor($candidates);
+        $covered = $groupsFor($selected);
+        $interests = [];
+        foreach ($preferences['interests'] ?? [] as $key) {
+            $interests[] = ['key' => $key, 'label' => PlannerFoodInterests::GROUPS[$key]['label'],
+                'status' => in_array($key, $covered, true) ? 'Included'
+                    : (in_array($key, $available, true) ? 'Available in replacements, not selected' : 'No matching eligible food at this market on this date')];
+        }
+
+        return ['candidate_count' => $candidates->count(), 'stop_limit' => $this->catalog->limit($preferences), 'interests' => $interests];
     }
 
     private function validateAi(array $selections, $candidates, array $preferences): void

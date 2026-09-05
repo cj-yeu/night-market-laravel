@@ -138,6 +138,8 @@ Route::middleware('auth')->group(function () {
             ->name('visit-plans.smart-planner.save');
         Route::post('/visit-plans/smart-planner/invalidate', [SmartVisitPlannerController::class, 'invalidate'])
             ->name('visit-plans.smart-planner.invalidate');
+        Route::get('/visit-plans/smart-planner/results/{snapshot}', [SmartVisitPlannerController::class, 'result'])
+            ->whereUuid('snapshot')->name('visit-plans.smart-planner.result');
         Route::get('/visit-plans/create', [VisitPlanController::class, 'create'])->name('visit-plans.create');
         Route::post('/visit-plans', [VisitPlanController::class, 'store'])->name('visit-plans.store');
         Route::get('/visit-plans/{visitPlan}', [VisitPlanController::class, 'show'])
