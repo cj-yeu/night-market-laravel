@@ -4,7 +4,7 @@
 
 @section('content')
     <div class="row justify-content-center">
-        <div class="col-12 col-lg-7">
+        <div class="col-12 col-xl-10 col-xxl-8">
             <div class="card market-card">
                 <div class="card-body p-4 p-md-5">
                     <h1 class="h3 fw-bold text-market">Add Stall</h1>
@@ -20,7 +20,7 @@
 
                             <div class="mb-3">
                                 <label for="night_market_id" class="form-label">Night Market</label>
-                                <select class="form-select @error('night_market_id') is-invalid @enderror"
+                                <select data-searchable class="form-select @error('night_market_id') is-invalid @enderror"
                                     id="night_market_id" name="night_market_id" required>
                                     <option value="">Select a night market</option>
                                     @foreach ($nightMarkets as $nightMarket)

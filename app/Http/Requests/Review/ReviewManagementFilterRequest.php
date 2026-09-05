@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests\Review;
 
+use App\Http\Requests\Concerns\ValidatesCatalogSelection;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ReviewManagementFilterRequest extends FormRequest
 {
+    use ValidatesCatalogSelection;
+
     public function authorize(): bool
     {
         return $this->user()?->hasAdminAccess() ?? false;

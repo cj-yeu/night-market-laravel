@@ -1,5 +1,5 @@
 @php
-    $selectedCategory = old('category', $currentCategory ?? null);
+    $selectedCategory = \App\Support\CatalogCategory::canonical(old('category', $currentCategory ?? null), $categoryType);
     $hasLegacyCategory = filled($selectedCategory) && ! $categories->contains(
         fn ($category) => mb_strtolower($category->name) === mb_strtolower($selectedCategory)
     );
@@ -8,7 +8,7 @@
 
 <div class="mb-3">
     <label for="category" class="form-label">{{ $categoryLabel }}</label>
-    <select id="category" name="category" class="form-select @error('category') is-invalid @enderror">
+    <select id="category" name="category" data-searchable class="form-select @error('category') is-invalid @enderror">
         <option value="">No category</option>
         @if ($hasLegacyCategory)
             <option value="{{ $selectedCategory }}" selected>{{ $selectedCategory }} (legacy category)</option>

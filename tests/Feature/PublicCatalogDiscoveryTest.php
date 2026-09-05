@@ -238,7 +238,7 @@ class PublicCatalogDiscoveryTest extends TestCase
             ->assertSee('Log in to Review')->assertSee('Register to Review')->assertSee('Add to Visit Plan');
 
         $this->get(route('foods.index', ['stall_id' => $stall->id, 'night_market_id' => $unrelatedMarket->id]))
-            ->assertOk()->assertDontSee($food->name)->assertSee('No foods found');
+            ->assertRedirect()->assertSessionHasErrors('stall_id');
     }
 
     public function test_public_catalog_queries_eager_load_displayed_parent_relationships(): void

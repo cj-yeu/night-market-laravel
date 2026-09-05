@@ -3,8 +3,8 @@
 @section('title', $food->name.' | '.config('app.name'))
 
 @section('content')
-    <div class="row justify-content-center">
-        <div class="col-12 col-lg-8">
+    <div class="row justify-content-center catalog-detail-page">
+        <div class="col-12">
             <div class="d-flex flex-wrap gap-2 mb-4">
                 <a href="{{ route('foods.index', ['stall_id' => $food->stall->id, 'night_market_id' => $food->stall->night_market_id]) }}"
                     class="btn btn-outline-secondary">Foods at {{ $food->stall->name }}</a>
@@ -26,7 +26,7 @@
                         <div class="catalog-detail-copy">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
                         @if ($food->category)
-                            <span class="badge text-bg-secondary">{{ $food->category }}</span>
+                            <span class="badge text-bg-secondary">{{ \App\Support\CatalogCategory::canonical($food->category, 'food') }}</span>
                         @endif
                         @if ($food->is_must_try)
                             <span class="badge text-bg-warning">Must-Try</span>
@@ -36,16 +36,20 @@
                             <h1 class="h2 fw-bold text-market">{{ $food->name }}</h1>
                             <x-review-rating-summary :reviewable="$food" class="mt-2 mb-3" />
 
-                    <dl class="row mt-4 mb-0">
+                    <h2 class="h6 text-market mt-4">Where to find it</h2>
+                    <dl class="catalog-facts">
                         <dt class="col-sm-3">Stall</dt>
-                        <dd class="col-sm-9"><a href="{{ route('foods.index', ['stall_id' => $food->stall->id]) }}">{{ $food->stall->name }}</a></dd>
+                        <dd class="col-sm-9"><a href="{{ route('foods.index', ['stall_id' => $food->stall->id, 'night_market_id' => $food->stall->night_market_id]) }}">{{ $food->stall->name }}</a></dd>
 
                         <dt class="col-sm-3">Night Market</dt>
                         <dd class="col-sm-9"><a href="{{ route('night-markets.show', $food->stall->nightMarket) }}">{{ $food->stall->nightMarket->name }}</a></dd>
 
                         <dt class="col-sm-3">Category</dt>
-                        <dd class="col-sm-9">{{ $food->category ?: 'Not specified' }}</dd>
+                        <dd class="col-sm-9">{{ \App\Support\CatalogCategory::canonical($food->category, 'food') ?: 'Not specified' }}</dd>
 
+                    </dl>
+                    <h2 class="h6 text-market mt-4">Price and recommendations</h2>
+                    <dl class="catalog-facts">
                         <dt class="col-sm-3">Price</dt>
                         <dd class="col-sm-9"><x-food-price :food="$food" /></dd>
 
@@ -59,6 +63,9 @@
                             <dd class="col-sm-9">{{ $food->recommendation_reason }}</dd>
                         @endif
 
+                    </dl>
+                    <h2 class="h6 text-market mt-4">Evidence and details</h2>
+                    <dl class="catalog-facts">
                         <dt class="col-sm-3">Stall Halal status</dt>
                         <dd class="col-sm-9">
                             <x-halal-status :stall="$food->stall" />

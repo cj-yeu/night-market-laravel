@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\VisitPlan;
 
+use App\Http\Requests\Concerns\ValidatesCatalogSelection;
 use App\Models\NightMarket;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -11,6 +12,8 @@ use Illuminate\Validation\Rule;
 
 class StoreVisitPlanRequest extends FormRequest
 {
+    use ValidatesCatalogSelection;
+
     public function authorize(): bool
     {
         return $this->user()?->role === User::ROLE_CLIENT;
@@ -22,6 +25,7 @@ class StoreVisitPlanRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'city' => ['nullable', 'string', 'max:100'],
             'title' => ['required', 'string', 'max:255'],
             'night_market_id' => [
                 'required',

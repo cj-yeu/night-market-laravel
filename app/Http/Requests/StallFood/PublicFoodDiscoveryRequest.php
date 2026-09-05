@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\StallFood;
 
+use App\Http\Requests\Concerns\ValidatesCatalogSelection;
 use App\Models\Stall;
+use App\Support\CatalogCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
@@ -10,6 +12,8 @@ use Illuminate\Validation\Rule;
 
 class PublicFoodDiscoveryRequest extends FormRequest
 {
+    use ValidatesCatalogSelection;
+
     public function authorize(): bool
     {
         return true;
@@ -49,7 +53,7 @@ class PublicFoodDiscoveryRequest extends FormRequest
     {
         $this->merge([
             'search' => $this->filled('search') ? Str::squish((string) $this->search) : null,
-            'category' => $this->filled('category') ? Str::squish((string) $this->category) : null,
+            'category' => $this->filled('category') ? CatalogCategory::canonical((string) $this->category, 'food') : null,
             'halal_status' => $this->filled('halal_status') ? trim((string) $this->halal_status) : null,
             'is_must_try' => $this->normalizeBooleanFilter($this->input('is_must_try')),
             'sort' => $this->filled('sort') ? trim((string) $this->sort) : null,

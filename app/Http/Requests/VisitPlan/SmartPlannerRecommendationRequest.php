@@ -6,11 +6,13 @@ use App\Models\Food;
 use App\Models\NightMarket;
 use App\Models\Stall;
 use App\Models\User;
+use App\Support\CatalogCategory;
 use App\Support\SmartPlannerTemplate;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class SmartPlannerRecommendationRequest extends FormRequest
 {
@@ -51,7 +53,7 @@ class SmartPlannerRecommendationRequest extends FormRequest
                     ->whereNotNull('category')
                     ->distinct()
                     ->pluck('category')
-                    ->all()),
+                    ->map(fn ($category) => CatalogCategory::canonical($category, 'food'))->unique()->all()),
             ],
             'halal_preference' => ['required', Rule::in([
                 'any',
@@ -64,6 +66,19 @@ class SmartPlannerRecommendationRequest extends FormRequest
             'max_markets' => ['required', 'integer', 'between:1,3'],
             'preference_notes' => ['nullable', 'string', 'max:1000'],
         ];
+    }
+
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            if (! $validator->errors()->isEmpty()) {
+                return;
+            }
+            if ($this->filled('city') && $this->filled('night_market_id')
+                && ! NightMarket::query()->whereKey($this->integer('night_market_id'))->where('city', $this->input('city'))->exists()) {
+                $validator->errors()->add('night_market_id', 'Choose a Night Market in the selected city, or clear the city filter.');
+            }
+        }];
     }
 
     public function messages(): array
@@ -88,7 +103,7 @@ class SmartPlannerRecommendationRequest extends FormRequest
             'template' => is_string($template) && trim($template) !== '' ? trim($template) : null,
             'city' => is_string($city) ? (trim($city) !== '' ? trim($city) : null) : $city,
             'categories' => is_array($categories)
-                ? array_map(fn ($category) => is_string($category) ? trim($category) : $category, $categories)
+                ? array_map(fn ($category) => is_string($category) ? CatalogCategory::canonical($category, 'food') : $category, $categories)
                 : $categories,
             'halal_preference' => $this->input('halal_preference', 'any'),
             'must_try' => $this->has('must_try') ? $this->input('must_try') : false,

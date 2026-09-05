@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\StallFood;
 
+use App\Support\CatalogCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
@@ -28,7 +29,7 @@ class StallFoodFilterRequest extends FormRequest
     {
         $this->merge([
             'search' => $this->filled('search') ? Str::squish((string) $this->search) : null,
-            'category' => $this->filled('category') ? Str::squish((string) $this->category) : null,
+            'category' => $this->filled('category') ? CatalogCategory::canonical((string) $this->category, 'food') : null,
         ]);
     }
 }

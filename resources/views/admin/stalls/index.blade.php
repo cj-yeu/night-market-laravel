@@ -34,7 +34,7 @@
                         <td><x-stall-image :stall="$stall" class="catalog-thumbnail" /></td>
                         <td><strong>{{ $stall->name }}</strong><div class="small text-secondary">{{ str($stall->description)->limit(70) }}</div></td>
                         <td>{{ $stall->nightMarket->name }}<div class="small text-secondary">{{ $stall->nightMarket->city }}</div></td>
-                        <td>{{ $stall->category ?: '—' }}</td>
+                        <td>{{ $stall->categoryLabel() ?: '—' }}</td>
                         <td><span class="badge {{ $stall->halalBadgeClass() }}">{{ $stall->halalStatusLabel() }}</span></td>
                         <td>{{ $stall->foods_count }}</td>
                         <td><span class="badge {{ $stall->status === 'active' ? 'text-bg-success' : 'text-bg-secondary' }}">{{ ucfirst($stall->status) }}</span></td>

@@ -4,7 +4,7 @@
 
 @section('content')
     <div class="row justify-content-center">
-        <div class="col-12 col-lg-8">
+        <div class="col-12 col-xl-10 col-xxl-8">
             <div class="d-flex justify-content-between mb-4">
                 <div>
                     <h1 class="h2 fw-bold mb-1">Edit Food</h1>
@@ -29,7 +29,8 @@
 
                             <div class="mb-3">
                                 <label for="stall_id" class="form-label">Stall</label>
-                                <select id="stall_id" name="stall_id" class="form-select @error('stall_id') is-invalid @enderror" required>
+                                <select data-searchable id="stall_id" name="stall_id" class="form-select @error('stall_id') is-invalid @enderror" required>
+                                    <option value="">Select an eligible stall</option>
                                     @foreach ($stalls as $stall)
                                         <option value="{{ $stall->id }}" @selected((string) old('stall_id', $food->stall_id) === (string) $stall->id)>
                                             {{ $stall->name }} — {{ $stall->nightMarket->name }}

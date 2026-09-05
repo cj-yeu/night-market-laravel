@@ -9,6 +9,7 @@ use App\Models\Review;
 use App\Models\Stall;
 use App\Models\User;
 use App\Models\VisitPlan;
+use App\Support\CatalogCategory;
 use App\Support\SmartPlannerTemplate;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,6 +20,14 @@ use Illuminate\Validation\ValidationException;
 class SmartVisitPlannerService
 {
     private const FALLBACK_DAYS = 14;
+
+    private function validateLocation(array $preferences): void
+    {
+        if (! empty($preferences['city']) && ! empty($preferences['night_market_id'])
+            && ! NightMarket::query()->eligibleForPlanning()->whereKey($preferences['night_market_id'])->where('city', $preferences['city'])->exists()) {
+            throw ValidationException::withMessages(['night_market_id' => 'Choose a Night Market in the selected city, or clear the city filter.']);
+        }
+    }
 
     public function __construct(
         private readonly RecommendationExplanationProvider $explanationProvider,
@@ -39,7 +48,7 @@ class SmartVisitPlannerService
                 ->get(),
             'markets' => NightMarket::query()
                 ->eligibleForPlanning()
-                ->select(['id', 'name', 'city'])
+                ->with('operatingDays')->select(['id', 'name', 'city'])
                 ->orderBy('name')
                 ->orderBy('id')
                 ->get(),
@@ -50,7 +59,7 @@ class SmartVisitPlannerService
                 ->where('category', '<>', '')
                 ->distinct()
                 ->orderBy('category')
-                ->get(),
+                ->get()->each(fn (Food $food) => $food->setAttribute('category', CatalogCategory::canonical($food->category, 'food')))->unique('category')->values(),
             'halalOptions' => [
                 'any' => 'Any classification',
                 Stall::HALAL_CERTIFIED => 'Halal-certified',
@@ -136,6 +145,7 @@ class SmartVisitPlannerService
      */
     public function recommend(array $preferences): array
     {
+        $this->validateLocation($preferences);
         $preferences = $this->normaliseTemplatePreferences($preferences);
 
         return $this->evaluateDate($preferences, Carbon::parse($preferences['visit_date']))['recommendations'];
@@ -147,6 +157,7 @@ class SmartVisitPlannerService
      */
     public function recommendDateAware(array $preferences): array
     {
+        $this->validateLocation($preferences);
         $preferences = $this->normaliseTemplatePreferences($preferences);
         $requestedDate = Carbon::parse($preferences['visit_date'])->startOfDay();
         $requestedResult = $this->evaluateDate($preferences, $requestedDate);
@@ -274,7 +285,7 @@ class SmartVisitPlannerService
     private function evaluateDate(array $preferences, Carbon $visitDate): array
     {
         $dayOfWeek = $visitDate->englishDayOfWeek;
-        $categories = array_values($preferences['categories'] ?? []);
+        $categories = array_map(fn ($category) => CatalogCategory::canonical($category, 'food'), array_values($preferences['categories'] ?? []));
         $halalPreference = $preferences['halal_preference'];
         $mustTry = (bool) $preferences['must_try'];
         $hasBudget = isset($preferences['budget_min'], $preferences['budget_max']);
@@ -344,7 +355,7 @@ class SmartVisitPlannerService
                 }
 
                 foreach ($stall->foods as $food) {
-                    if ($categories !== [] && ! in_array($food->category, $categories, true)) {
+                    if ($categories !== [] && ! in_array(CatalogCategory::canonical($food->category, 'food'), $categories, true)) {
                         continue;
                     }
 
@@ -604,7 +615,7 @@ class SmartVisitPlannerService
      */
     private function templateFoodCandidates(NightMarket $market, array $preferences, bool $ignoreMustTryPreference = false): array
     {
-        $categories = array_values($preferences['categories'] ?? []);
+        $categories = array_map(fn ($category) => CatalogCategory::canonical($category, 'food'), array_values($preferences['categories'] ?? []));
         $halalPreference = $preferences['halal_preference'];
         $mustTryOnly = ! $ignoreMustTryPreference && (bool) $preferences['must_try'];
         $budgetMinimum = isset($preferences['budget_min']) ? (float) $preferences['budget_min'] : null;
@@ -617,7 +628,7 @@ class SmartVisitPlannerService
             }
 
             foreach ($stall->foods as $food) {
-                if (($categories !== [] && ! in_array($food->category, $categories, true))
+                if (($categories !== [] && ! in_array(CatalogCategory::canonical($food->category, 'food'), $categories, true))
                     || ($mustTryOnly && ! $food->is_must_try)) {
                     continue;
                 }
@@ -642,7 +653,7 @@ class SmartVisitPlannerService
     {
         $selectedIds = collect($selected)->pluck('food.id')->map(fn ($id) => (int) $id)->all();
         $usedStallIds = collect($selected)->pluck('stall.id')->map(fn ($id) => (int) $id)->all();
-        $usedCategories = collect($selected)->pluck('food.category')->map(fn ($category) => $category ?? '')->all();
+        $usedCategories = collect($selected)->pluck('food.category')->map(fn ($category) => CatalogCategory::canonical($category, 'food') ?? '')->all();
 
         foreach ([true, false] as $requireNewStallAndCategory) {
             foreach ($foods as $food) {
@@ -651,7 +662,7 @@ class SmartVisitPlannerService
                 }
 
                 $newStall = ! in_array($food['stall']->id, $usedStallIds, true);
-                $newCategory = ! in_array($food['food']->category ?? '', $usedCategories, true);
+                $newCategory = ! in_array(CatalogCategory::canonical($food['food']->category, 'food') ?? '', $usedCategories, true);
                 if ($requireNewStallAndCategory && (! $newStall || ! $newCategory)) {
                     continue;
                 }
@@ -659,7 +670,7 @@ class SmartVisitPlannerService
                 $selected[] = $food;
                 $selectedIds[] = $food['food']->id;
                 $usedStallIds[] = $food['stall']->id;
-                $usedCategories[] = $food['food']->category ?? '';
+                $usedCategories[] = CatalogCategory::canonical($food['food']->category, 'food') ?? '';
             }
         }
 

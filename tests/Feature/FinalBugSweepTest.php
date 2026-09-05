@@ -68,16 +68,19 @@ class FinalBugSweepTest extends TestCase
         $this->actingAs($this->client())->delete(route('admin.foods.destroy', $food))->assertForbidden();
     }
 
-    public function test_stall_category_filter_collapses_variants_and_matches_the_main_category(): void
+    public function test_stall_category_filter_preserves_distinct_composites_and_matches_explicit_aliases(): void
     {
         $market = NightMarket::factory()->create();
         Stall::factory()->create(['night_market_id' => $market->id, 'name' => 'Dessert Exact', 'category' => ' Dessert ']);
         Stall::factory()->create(['night_market_id' => $market->id, 'name' => 'Ice Cream Dessert', 'category' => 'Dessert / Ice Cream']);
         Stall::factory()->create(['night_market_id' => $market->id, 'name' => 'Savory Stall', 'category' => 'Savory']);
+        Stall::factory()->create(['night_market_id' => $market->id, 'name' => 'Legacy Dessert', 'category' => 'Dessert Stall']);
 
         $this->get(route('stalls.index', ['category' => ' dessert ']))
-            ->assertOk()->assertSee('Dessert Exact')->assertSee('Ice Cream Dessert')->assertDontSee('Savory Stall')
-            ->assertSee('Dessert')->assertDontSee('Dessert / Ice Cream');
+            ->assertOk()->assertSee('Dessert Exact')->assertSee('Legacy Dessert')->assertDontSee('Ice Cream Dessert')->assertDontSee('Savory Stall')
+            ->assertSee('Dessert')->assertSee('Dessert / Ice Cream');
+        $this->get(route('stalls.index', ['category' => 'Dessert / Ice Cream']))
+            ->assertOk()->assertSee('Ice Cream Dessert')->assertDontSee('Dessert Exact')->assertDontSee('Legacy Dessert');
     }
 
     public function test_market_city_control_is_rendered_and_enforced(): void
@@ -114,8 +117,12 @@ class FinalBugSweepTest extends TestCase
     {
         $this->get(route('foods.index'))->assertOk()
             ->assertSee('name="min_price" inputmode="decimal" value=""', false)
-            ->assertSee("window.addEventListener('pageshow'", false)
-            ->assertSee("query.get(name) || ''", false);
+            ->assertSee('assets/catalog-ux.js', false);
+        $script = file_get_contents(public_path('assets/catalog-ux.js'));
+        $this->assertStringContainsString("window.addEventListener('pageshow'", $script);
+        $this->assertStringContainsString('if (event.persisted) restore()', $script);
+        $this->assertStringContainsString('field.value = value', $script);
+        $this->assertStringContainsString('resetOptions()', $script);
     }
 
     public function test_client_can_delete_only_their_own_review_and_tag_pivots_are_removed(): void

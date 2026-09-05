@@ -10,6 +10,7 @@
         </div>
     </div>
 
+    @if ($errors->any())<div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>@endif
     <div class="card market-card mb-4">
         <div class="card-body p-4">
             <form method="GET" action="{{ route('admin.reviews.index') }}">
@@ -31,19 +32,19 @@
                     </div>
                     <div class="col-12 col-md-4 col-lg-2">
                         <label for="stall_id" class="form-label">Stall</label>
-                        <select class="form-select" id="stall_id" name="stall_id">
+                        <select class="form-select" id="stall_id" name="stall_id" data-parent-select="market_id" data-searchable>
                             <option value="">All Stalls</option>
                             @foreach ($stalls as $stall)
-                                <option value="{{ $stall->id }}" @selected((int) ($filters['stall_id'] ?? 0) === $stall->id)>{{ $stall->name }}</option>
+                                <option data-parent="{{ $stall->night_market_id }}" value="{{ $stall->id }}" @selected((int) ($filters['stall_id'] ?? 0) === $stall->id)>{{ $stall->name }} — {{ $stall->nightMarket?->name }}</option>
                             @endforeach
                         </select>
                     </div>
                     <div class="col-12 col-md-4 col-lg-2">
                         <label for="food_id" class="form-label">Food</label>
-                        <select class="form-select" id="food_id" name="food_id">
+                        <select class="form-select" id="food_id" name="food_id" data-parent-select="stall_id" data-market-select="market_id" data-searchable>
                             <option value="">All Foods</option>
                             @foreach ($foods as $food)
-                                <option value="{{ $food->id }}" @selected((int) ($filters['food_id'] ?? 0) === $food->id)>{{ $food->name }}</option>
+                                <option data-parent="{{ $food->stall_id }}" data-market="{{ $food->stall?->night_market_id }}" value="{{ $food->id }}" @selected((int) ($filters['food_id'] ?? 0) === $food->id)>{{ $food->name }} — {{ $food->stall?->name }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -66,9 +67,7 @@
                     </div>
                     <div class="col-12 col-md-6 d-flex flex-wrap gap-2">
                         <button type="submit" class="btn btn-market">Apply Filters</button>
-                        @if ($hasFilters)
                             <a href="{{ route('admin.reviews.index') }}" class="btn btn-outline-secondary">Reset Filters</a>
-                        @endif
                     </div>
                 </div>
             </form>
@@ -78,7 +77,7 @@
     @if ($reviews->isEmpty())
         <div class="alert alert-info text-center py-4" role="status">
             <h2 class="h5 mb-2">No reviews found</h2>
-            <p class="mb-0">No reviews match the selected filters.</p>
+            <p>No reviews match the selected filters.</p><a class="btn btn-outline-secondary" href="{{ route('admin.reviews.index') }}">Reset Filters</a>
         </div>
     @else
         <div class="row g-4">
@@ -94,7 +93,7 @@
                                         <span class="small text-secondary">{{ $review->isFoodReview() ? 'Food · '.$review->food?->name : ($review->isMarketReview() ? 'Night Market · '.$review->nightMarket?->name : 'Legacy review') }}</span>
                                     </div>
                                 </div>
-                                <span class="badge text-bg-warning" aria-label="{{ $review->rating }} out of 5 stars">{{ $review->rating }}/5 stars</span>
+                                <span class="badge text-bg-warning review-rating" aria-label="{{ $review->rating }} out of 5 stars">{{ $review->rating }}/5 stars</span>
                             </div>
 
                             <dl class="row small mb-3">

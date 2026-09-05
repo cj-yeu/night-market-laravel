@@ -141,6 +141,7 @@ class VisitPlanService
     /** @param array{title: string, night_market_id: int, visit_date: string, notes?: string|null} $data */
     public function createForClient(User $user, array $data): VisitPlan
     {
+        $this->validateLocation($data);
         $nightMarket = $this->eligibleMarket((int) $data['night_market_id']);
         $this->validateOperatingDate($nightMarket, $data['visit_date']);
 
@@ -187,6 +188,7 @@ class VisitPlanService
                 ->where('user_id', $user->id)
                 ->lockForUpdate()
                 ->findOrFail($visitPlanId);
+            $this->validateLocation($data);
             $requestedMarketId = (int) $data['night_market_id'];
             $requestedVisitDate = Carbon::parse($data['visit_date'])->toDateString();
             $marketChanged = $visitPlan->night_market_id !== $requestedMarketId;
@@ -332,12 +334,20 @@ class VisitPlanService
     {
         return Food::query()
             ->publiclyVisible()
-            ->select(['id', 'stall_id', 'name'])
+            ->select(['id', 'stall_id', 'name', 'category', 'price_min', 'price_max', 'price_display', 'is_must_try'])
             ->whereHas('stall', fn ($query) => $query->where('night_market_id', $visitPlan->night_market_id))
             ->whereNotIn('id', $visitPlan->items->where('item_type', 'food')->pluck('food_id')->filter())
             ->with('stall:id,name')
             ->orderBy('name')
             ->get();
+    }
+
+    private function validateLocation(array $data): void
+    {
+        $errors = app(CatalogSelectionService::class)->errors($data);
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 
     private function eligibleMarket(int $nightMarketId): NightMarket

@@ -1,21 +1,20 @@
 @extends('layouts.app')
 
-@section('title', 'Must-Try Foods | '.config('app.name'))
+@section('title', 'Explore Foods | '.config('app.name'))
 
 @section('content')
     <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
         <div>
             <h1 class="h2 fw-bold text-market mb-1">Explore Foods</h1>
-            <p class="text-secondary mb-0">Discover food from active stalls, including verified catalog Must-Try selections.</p>
+            <p class="text-secondary mb-0">Discover food from active stalls, including catalog Must-Try selections.</p>
         </div>
         <div class="d-flex flex-wrap gap-2 align-self-start">
-            <a href="{{ route('foods.index', ['is_must_try' => '1', 'sort' => 'must_try_first']) }}" class="btn btn-market">Show Must-Try Foods</a>
             <a href="{{ route('stalls.index') }}" class="btn btn-outline-secondary">Explore Stalls</a>
         </div>
     </div>
 
     <div class="card market-card mb-4"><div class="card-body p-4">
-        <form method="GET" action="{{ route('foods.index') }}" class="row g-3 align-items-end">
+        <form method="GET" action="{{ route('foods.index') }}" class="row g-3 align-items-start">
             <div class="col-12 col-lg-4">
                 <label for="food-search" class="form-label">Food name or description</label>
                 <input id="food-search" name="search" type="search" maxlength="100" value="{{ $filters['search'] ?? '' }}" class="form-control @error('search') is-invalid @enderror">
@@ -31,13 +30,13 @@
             </div>
             <div class="col-12 col-md-6 col-lg-4">
                 <label for="food-stall" class="form-label">Stall</label>
-                <select id="food-stall" name="stall_id" class="form-select @error('stall_id') is-invalid @enderror">
+                <select id="food-stall" name="stall_id" data-parent-select="food-market" data-searchable class="form-select @error('stall_id') is-invalid @enderror">
                     <option value="">All public stalls</option>
-                    @foreach ($publicStalls as $stall)<option value="{{ $stall->id }}" @selected((string) ($filters['stall_id'] ?? '') === (string) $stall->id)>{{ $stall->name }} — {{ $stall->nightMarket->name }}</option>@endforeach
+                    @foreach ($publicStalls as $stall)<option data-parent="{{ $stall->night_market_id }}" value="{{ $stall->id }}" @selected((string) ($filters['stall_id'] ?? '') === (string) $stall->id)>{{ $stall->name }} — {{ $stall->nightMarket->name }}</option>@endforeach
                 </select>
                 @error('stall_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
-            <div class="col-12 col-md-6 col-lg-3">
+            <div class="col-12 col-md-6 col-lg-4">
                 <label for="food-category" class="form-label">Food category</label>
                 <select id="food-category" name="category" class="form-select @error('category') is-invalid @enderror">
                     <option value="">All categories</option>
@@ -45,7 +44,7 @@
                 </select>
                 @error('category')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
-            <div class="col-12 col-md-6 col-lg-3">
+            <div class="col-12 col-md-6 col-lg-4">
                 <label for="food-halal" class="form-label">Stall Halal classification</label>
                 <select id="food-halal" name="halal_status" class="form-select @error('halal_status') is-invalid @enderror">
                     <option value="">All classifications</option>
@@ -53,7 +52,7 @@
                 </select>
                 @error('halal_status')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
-            <div class="col-12 col-md-6 col-lg-3">
+            <div class="col-12 col-md-6 col-lg-4">
                 <label for="food-must-try" class="form-label">Must-Try status</label>
                 <select id="food-must-try" name="is_must_try" class="form-select @error('is_must_try') is-invalid @enderror">
                     <option value="">All foods</option>
@@ -62,17 +61,17 @@
                 </select>
                 @error('is_must_try')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
-            <div class="col-6 col-lg-3">
+            <div class="col-6 col-lg-4">
                 <label for="food-min-price" class="form-label">Minimum price (RM)</label>
                 <input id="food-min-price" name="min_price" inputmode="decimal" value="{{ $filters['min_price'] ?? '' }}" class="form-control @error('min_price') is-invalid @enderror">
                 @error('min_price')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
-            <div class="col-6 col-lg-3">
+            <div class="col-6 col-lg-4">
                 <label for="food-max-price" class="form-label">Maximum price (RM)</label>
                 <input id="food-max-price" name="max_price" inputmode="decimal" value="{{ $filters['max_price'] ?? '' }}" class="form-control @error('max_price') is-invalid @enderror">
                 @error('max_price')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
-            <div class="col-12 col-md-6 col-lg-3">
+            <div class="col-12 col-md-6 col-lg-4">
                 <label for="food-sort" class="form-label">Sort by</label>
                 <select id="food-sort" name="sort" class="form-select @error('sort') is-invalid @enderror">
                     <option value="name_asc" @selected(($filters['sort'] ?? 'name_asc') === 'name_asc')>Food name A–Z</option>
@@ -90,6 +89,12 @@
         </form>
     </div></div>
 
+    @if ($filters['night_market_id'] ?? null)
+        <p class="small text-secondary">Night Market: <strong>{{ $nightMarkets->firstWhere('id', (int) $filters['night_market_id'])?->name ?? 'Unavailable' }}</strong> · <a href="{{ route('foods.index', array_diff_key($filters, array_flip(['night_market_id', 'stall_id', 'page']))) }}">Clear Market and Stall</a></p>
+    @endif
+    @if ($filters['stall_id'] ?? null)
+        <p class="small text-secondary">Stall: <strong>{{ $publicStalls->firstWhere('id', (int) $filters['stall_id'])?->name ?? 'Unavailable' }}</strong> · <a href="{{ route('foods.index', array_diff_key($filters, array_flip(['stall_id', 'page']))) }}">Clear Stall</a></p>
+    @endif
     <p class="text-secondary">Showing {{ $foods->firstItem() ?? 0 }}–{{ $foods->lastItem() ?? 0 }} of {{ $foods->total() }} foods.</p>
     @if ($foods->isEmpty())
         <div class="alert alert-warning text-center py-4" role="status">
@@ -101,24 +106,6 @@
         <div class="row g-4">
             @foreach ($foods as $food)<div class="col-12 col-md-6 col-xl-4"><x-public-food-card :food="$food" :show-recommendation="true" /></div>@endforeach
         </div>
-        @if ($foods->hasPages())
-            <nav class="d-flex justify-content-between align-items-center mt-4" aria-label="Food pagination">
-                <a class="btn btn-outline-secondary {{ $foods->onFirstPage() ? 'disabled' : '' }}" href="{{ $foods->previousPageUrl() ?: '#' }}">Previous</a>
-                <span class="text-secondary">Page {{ $foods->currentPage() }} of {{ $foods->lastPage() }}</span>
-                <a class="btn btn-outline-secondary {{ $foods->hasMorePages() ? '' : 'disabled' }}" href="{{ $foods->nextPageUrl() ?: '#' }}">Next</a>
-            </nav>
-        @endif
+        <div class="mt-4"><p class="small text-secondary">Page {{ $foods->currentPage() }} of {{ $foods->lastPage() }}</p>{{ $foods->links() }}</div>
     @endif
 @endsection
-
-@push('scripts')
-<script>
-    window.addEventListener('pageshow', function () {
-        const query = new URLSearchParams(window.location.search);
-        ['min_price', 'max_price'].forEach(function (name) {
-            const input = document.querySelector('[name="' + name + '"]');
-            if (input) input.value = query.get(name) || '';
-        });
-    });
-</script>
-@endpush

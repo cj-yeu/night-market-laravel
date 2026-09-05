@@ -111,7 +111,7 @@
                         <button type="submit" class="btn btn-market">Filter</button>
                         @if (array_filter($filters))
                             <a href="{{ route('admin.social-media-records.index') }}"
-                                class="btn btn-outline-secondary">Clear</a>
+                                class="btn btn-outline-secondary">Reset Filters</a>
                         @endif
                     </div>
                 </div>
@@ -146,104 +146,42 @@
                 </div>
             </div>
         </form>
+        <p class="small text-secondary">Review pending records below. On smaller screens, scroll the table horizontally to reach all actions.</p>
         <div class="card market-card">
-            <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th scope="col"><span class="visually-hidden">Select record</span></th>
-                            <th>Night Market</th>
-                            <th>Related Food</th>
-                            <th>Platform</th>
-                            <th>Extraction</th>
-                            <th>Status</th>
-                            <th>Original Post</th>
-                            <th>Title / Excerpt</th>
-                            <th>Posted Date</th>
-                            <th>Likes</th>
-                            <th>Comments</th>
-                            <th>Shares</th>
-                            <th>Total Engagement</th>
-                            <th>Extracted Information</th>
-                            <th>Created</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
+            <div class="table-responsive" tabindex="0" role="region" aria-label="Social media records">
+                <table class="table table-hover align-middle mb-0 social-record-table">
+                    <thead><tr><th><span class="visually-hidden">Select</span></th><th>Catalog context</th><th>Publication</th><th>Post details</th><th>Status</th><th>Actions</th></tr></thead>
                     <tbody>
                         @foreach ($records as $record)
                             <tr>
                                 <td>
                                     @if ($record->status === \App\Models\SocialMediaRecord::STATUS_PENDING)
-                                        <input class="form-check-input pending-record-checkbox" type="checkbox"
-                                            form="bulk-moderation-form" name="record_ids[]" value="{{ $record->id }}"
-                                            aria-label="Select social media record {{ $record->id }}">
+                                        <input class="form-check-input pending-record-checkbox" type="checkbox" form="bulk-moderation-form" name="record_ids[]" value="{{ $record->id }}" aria-label="Select social media record {{ $record->id }}">
                                     @endif
                                 </td>
-                                <td>{{ $record->nightMarket?->name ?? 'Unavailable market' }}</td>
-                                <td>{{ $record->food?->name ?? 'None' }}</td>
-                                <td><span class="badge text-bg-warning">{{ $record->platform }}</span></td>
-                                <td>{{ ucfirst($record->extraction_status) }}</td>
+                                <td class="record-context"><strong>{{ $record->nightMarket?->name ?? 'Unavailable market' }}</strong><div class="small text-secondary">Food: {{ $record->food?->name ?? 'None' }}</div></td>
+                                <td><span class="badge text-bg-warning">{{ $record->platform }}</span><div class="small mt-2">{{ ucfirst($record->extraction_status) }}</div><time class="small text-nowrap">{{ $record->posted_date->format('d M Y') }}</time></td>
                                 <td>
-                                    <span class="badge {{ $record->status === \App\Models\SocialMediaRecord::STATUS_APPROVED ? 'text-bg-success' : ($record->status === \App\Models\SocialMediaRecord::STATUS_REJECTED ? 'text-bg-danger' : 'text-bg-secondary') }}">
-                                        {{ ucfirst($record->status) }}
-                                    </span>
-                                    @if ($record->status === \App\Models\SocialMediaRecord::STATUS_REJECTED)
-                                        <div class="small text-secondary mt-1">
-                                            <strong>Reason:</strong> {{ $record->rejection_reason ?? 'Not recorded' }}
-                                            @if ($record->rejectedBy || $record->rejected_at)
-                                                <br>By {{ $record->rejectedBy?->name ?? 'Former administrator' }}
-                                                @if ($record->rejected_at)
-                                                    on {{ $record->rejected_at->format('d M Y H:i') }}
-                                                @endif
-                                            @endif
-                                        </div>
-                                    @endif
+                                    @if ($record->safe_source_url)<a href="{{ $record->safe_source_url }}" target="_blank" rel="noopener noreferrer">Open post <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>@else<span class="text-secondary">URL unavailable</span>@endif
+                                    <details><summary>Content and engagement</summary>
+                                        @if ($record->extracted_title)<strong class="d-block">{{ $record->extracted_title }}</strong>@endif
+                                        <p class="small">{{ \Illuminate\Support\Str::limit($record->content_summary, 220) }}</p>
+                                        <dl class="small"><dt>Total Engagement</dt><dd>{{ number_format($record->engagement_count) }}</dd><dt>Likes / Comments / Shares</dt><dd>{{ number_format($record->likes) }} / {{ number_format($record->comments) }} / {{ number_format($record->shares) }}</dd><dt>Created</dt><dd>{{ $record->created_at->format('d M Y') }}</dd></dl>
+                                        @foreach ($record->extracted_hashtags ?? [] as $hashtag)<span class="badge text-bg-light border">{{ $hashtag }}</span>@endforeach
+                                        <div class="small">Markets: {{ implode(', ', $record->extracted_market_mentions ?? []) ?: 'None' }}</div>
+                                        <div class="small">Foods: {{ implode(', ', $record->extracted_food_mentions ?? []) ?: 'None' }}</div>
+                                        <div class="small">Locations: {{ implode(', ', $record->extracted_location_mentions ?? []) ?: 'None' }}</div>
+                                    </details>
                                 </td>
                                 <td>
-                                    @if ($record->safe_source_url)
-                                        <a href="{{ $record->safe_source_url }}" target="_blank" rel="noopener noreferrer">
-                                            Open post
-                                        </a>
-                                    @else
-                                        <span class="text-secondary">URL unavailable</span>
+                                    <span class="badge {{ $record->status === 'approved' ? 'text-bg-success' : ($record->status === 'rejected' ? 'text-bg-danger' : 'text-bg-secondary') }}">{{ ucfirst($record->status) }}</span>
+                                    @if ($record->status === 'rejected')
+                                        <p class="small mt-2 mb-0"><strong>Reason:</strong> {{ $record->rejection_reason ?? 'Not recorded' }}<br>By {{ $record->rejectedBy?->name ?? 'Former administrator' }} @if ($record->rejected_at) on {{ $record->rejected_at->format('d M Y H:i') }} @endif</p>
                                     @endif
+                                    @if ($record->status !== 'pending')<p class="small text-secondary mt-2">Editing returns this record to Pending for review.</p>@endif
                                 </td>
-                                <td style="min-width: 16rem;">
-                                    @if ($record->extracted_title)<strong class="d-block">{{ $record->extracted_title }}</strong>@endif
-                                    {{ \Illuminate\Support\Str::limit($record->content_summary, 220) }}
-                                </td>
-                                <td>{{ $record->posted_date->format('d M Y') }}</td>
-                                <td>{{ number_format($record->likes) }}</td>
-                                <td>{{ number_format($record->comments) }}</td>
-                                <td>{{ number_format($record->shares) }}</td>
-                                <td>{{ number_format($record->engagement_count) }}</td>
-                                <td style="min-width: 15rem;">
-                                    @if (empty($record->extracted_hashtags)
-                                        && empty($record->extracted_market_mentions)
-                                        && empty($record->extracted_food_mentions)
-                                        && empty($record->extracted_location_mentions))
-                                        <span class="text-secondary">No extracted matches</span>
-                                    @else
-                                        @foreach ($record->extracted_hashtags ?? [] as $hashtag)
-                                            <span class="badge text-bg-light border mb-1">{{ $hashtag }}</span>
-                                        @endforeach
-                                        <div class="small mt-1">
-                                            <strong>Markets:</strong>
-                                            {{ implode(', ', $record->extracted_market_mentions ?? []) ?: 'None' }}
-                                        </div>
-                                        <div class="small">
-                                            <strong>Locations:</strong>
-                                            {{ implode(', ', $record->extracted_location_mentions ?? []) ?: 'None' }}
-                                        </div>
-                                        <div class="small">
-                                            <strong>Foods:</strong>
-                                            {{ implode(', ', $record->extracted_food_mentions ?? []) ?: 'None' }}
-                                        </div>
-                                    @endif
-                                </td>
-                                <td>{{ $record->created_at->format('d M Y') }}</td>
-                                <td>
-                                    <div class="d-flex gap-2">
+                                <td class="record-actions">
+                                    <div class="d-flex flex-wrap gap-2">
                                         <a href="{{ route('admin.social-media-records.edit', $record) }}"
                                             class="btn btn-sm btn-outline-secondary">Edit</a>
                                         <form method="POST"
@@ -253,7 +191,7 @@
                                             @method('DELETE')
                                             <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
                                         </form>
-                                        @if ($record->status !== \App\Models\SocialMediaRecord::STATUS_APPROVED)
+                                        @if ($record->status === \App\Models\SocialMediaRecord::STATUS_PENDING)
                                             <form method="POST"
                                                 action="{{ route('admin.social-media-records.moderate', $record) }}"
                                                 onsubmit="return confirm('Approve this social media record for Client viewing?');">
@@ -263,7 +201,7 @@
                                                 <button type="submit" class="btn btn-sm btn-success">Approve</button>
                                             </form>
                                         @endif
-                                        @if ($record->status !== \App\Models\SocialMediaRecord::STATUS_REJECTED)
+                                        @if ($record->status === \App\Models\SocialMediaRecord::STATUS_PENDING)
                                             <details>
                                                 <summary class="btn btn-sm btn-outline-danger">Reject</summary>
                                                 <form method="POST" class="mt-2" action="{{ route('admin.social-media-records.moderate', $record) }}"
@@ -287,16 +225,9 @@
                 </table>
             </div>
         </div>
+        <div class="mt-4">{{ $records->links() }}</div>
 
-        @if ($records->hasPages())
-            <nav class="d-flex justify-content-between align-items-center mt-4" aria-label="Social media records pagination">
-                <a class="btn btn-outline-secondary {{ $records->onFirstPage() ? 'disabled' : '' }}"
-                    href="{{ $records->previousPageUrl() ?: '#' }}">Previous</a>
-                <span class="text-secondary">Page {{ $records->currentPage() }} of {{ $records->lastPage() }}</span>
-                <a class="btn btn-outline-secondary {{ $records->hasMorePages() ? '' : 'disabled' }}"
-                    href="{{ $records->nextPageUrl() ?: '#' }}">Next</a>
-            </nav>
-        @endif
+
     @endif
 @endsection
 

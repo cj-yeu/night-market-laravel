@@ -7,16 +7,18 @@
     <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
         <div>
             <h1 class="h2 fw-bold text-market mb-1">Smart Visit Planner</h1>
-            <p class="text-secondary mb-0">Transparent recommendations using current public catalog data and deterministic rules.</p>
+            <p class="text-secondary mb-0">Choose your preferences, compare suggested stops, then save an editable visit plan.</p>
         </div>
         <a href="{{ route('client.visit-plans.index') }}" class="btn btn-outline-secondary align-self-start">Back to My Visit Plans</a>
     </div>
 
+    @if ($errors->any())<div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>@endif
     <section class="mb-4" aria-labelledby="planner-templates-heading">
         <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
             <div>
                 <h2 id="planner-templates-heading" class="h4 fw-bold text-market mb-1">Recommended Plan Templates</h2>
-                <p class="text-secondary mb-0">Each template uses the same deterministic public-catalog recommendations. You can adjust the available preferences before generating a plan.</p>
+                <p class="text-secondary mb-0">Start with a template or choose your own preferences below.</p>
+                <p class="small text-secondary mb-0">Suggestions use catalog information and fixed rules. No external AI or live data is used.</p>
             </div>
             @if ($activeTemplate)
                 <a href="{{ route('client.visit-plans.smart-planner.index') }}" class="btn btn-sm btn-outline-secondary align-self-start">Clear Template</a>
@@ -44,9 +46,9 @@
     </section>
 
     <section class="card market-card mb-4" aria-labelledby="planner-preferences-heading">
-        <div class="card-body p-4 p-lg-5">
+        <div class="card-body p-4">
             <h2 id="planner-preferences-heading" class="h4 fw-bold text-market">Planning Preferences</h2>
-            <p class="text-secondary">Only public active Selangor catalog records are considered. No external AI or live data is used.</p>
+            <p class="text-secondary">Choose when and where to visit, then narrow your food preferences if needed.</p>
 
             @if ($markets->isEmpty())
                 <div class="alert alert-info mb-0">No markets currently have enough schedule, stall, and food data for planning.</div>
@@ -57,14 +59,14 @@
                 <div class="row g-3">
                     <div class="col-12 col-md-6 col-lg-4">
                         <label for="visit_date" class="form-label">Visit Date</label>
-                        <input type="date" id="visit_date" name="visit_date"
+                        <input type="date" id="visit_date" name="visit_date" data-schedule-date
                             value="{{ old('visit_date', $preferences['visit_date'] ?? '') }}"
                             min="{{ now()->toDateString() }}"
                             class="form-control @error('visit_date') is-invalid @enderror" required>
                         @error('visit_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
                     <div class="col-12 col-md-6 col-lg-4">
-                        <label for="city" class="form-label">City/District <span class="text-secondary">(optional)</span></label>
+                        <label for="city" class="form-label">City <span class="text-secondary">(optional)</span></label>
                         <select id="city" name="city" class="form-select @error('city') is-invalid @enderror">
                             <option value="">Any public Selangor city</option>
                             @foreach ($cities as $city)
@@ -75,10 +77,10 @@
                     </div>
                     <div class="col-12 col-lg-4">
                         <label for="night_market_id" class="form-label">Target Night Market <span class="text-secondary">(optional)</span></label>
-                        <select id="night_market_id" name="night_market_id" class="form-select @error('night_market_id') is-invalid @enderror">
+                        <select id="night_market_id" name="night_market_id" data-parent-select="city" data-searchable data-schedule-select data-fallback="true" class="form-select @error('night_market_id') is-invalid @enderror">
                             <option value="">Any operating public Market</option>
                             @foreach ($markets as $market)
-                                <option value="{{ $market->id }}" @selected((string) old('night_market_id', $preferences['night_market_id'] ?? '') === (string) $market->id)>
+                                <option data-parent="{{ $market->city }}" data-days="{{ $market->operatingDays->pluck('day_of_week')->implode('|') }}" data-schedule="{{ $market->operatingDays->map(fn ($day) => $day->day_of_week.' '.($day->opening_time?->format('g:i A') ?? 'Time not available').'–'.($day->closing_time?->format('g:i A') ?? 'Time not available'))->implode('; ') }}" value="{{ $market->id }}" @selected((string) old('night_market_id', $preferences['night_market_id'] ?? '') === (string) $market->id)>
                                     {{ $market->name }} — {{ $market->city }}
                                 </option>
                             @endforeach
@@ -86,6 +88,8 @@
                         @error('night_market_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
+                    <div class="col-12"><p data-schedule-hint class="small text-secondary mb-0" role="status"></p></div>
+                    <div class="col-12"><h3 class="h5 mt-3 mb-0">Food preferences</h3></div>
                     @if ($activeTemplate === 'budget')
                         <input type="hidden" name="budget_min" value="0">
                         <div class="col-12 col-lg-3">
@@ -137,7 +141,7 @@
 
                     <fieldset class="col-12">
                         <legend class="form-label">Preferred Food Categories <span class="text-secondary">(optional)</span></legend>
-                        <div class="d-flex flex-wrap gap-3">
+                        <div class="d-flex flex-wrap gap-2 planner-options">
                             @foreach ($categories as $category)
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="categories[]"
@@ -170,12 +174,16 @@
                         <label for="preference_notes" class="form-label">Planning Notes <span class="text-secondary">(optional)</span></label>
                         <textarea id="preference_notes" name="preference_notes" rows="3" maxlength="1000"
                             class="form-control @error('preference_notes') is-invalid @enderror"
-                            placeholder="For your reference; notes do not create unsupported travel or live-data assumptions.">{{ old('preference_notes', $preferences['preference_notes'] ?? '') }}</textarea>
+                            placeholder="Anything you would like to remember for this visit.">{{ old('preference_notes', $preferences['preference_notes'] ?? '') }}</textarea>
                         @error('preference_notes')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-market mt-4">Generate Recommendations</button>
+                <div class="planner-summary mt-4">
+                    <h3 class="h5">Your visit</h3><p data-planner-summary class="mb-2"></p>
+                    <p class="small text-secondary">Prices and regular schedules may change.</p>
+                    <button type="submit" class="btn btn-market">Generate Recommendations</button>
+                </div>
             </form>
             @endif
         </div>
@@ -268,7 +276,7 @@
                                     @foreach ($recommendation['market']->operatingDays as $operatingDay)
                                         <span class="d-block">
                                             {{ $operatingDay->day_of_week }}:
-                                            {{ $operatingDay->opening_time->format('g:i A') }}–{{ $operatingDay->closing_time->format('g:i A') }}
+                                            {{ $operatingDay->opening_time?->format('g:i A') ?? 'Time not available' }}–{{ $operatingDay->closing_time?->format('g:i A') ?? 'Time not available' }}
                                         </span>
                                     @endforeach
                                 </div>
@@ -300,7 +308,7 @@
                                             <div class="border rounded-3 h-100 overflow-hidden bg-white">
                                                 <x-food-image :food="$foodRecommendation['food']" />
                                                 <div class="p-3">
-                                                    <div class="d-flex justify-content-between gap-2">
+                                                    <div class="d-flex justify-content-between align-items-start gap-2">
                                                         <strong>{{ $foodRecommendation['food']->name }}</strong>
                                                         @if ($foodRecommendation['food']->is_must_try)
                                                             <span class="badge text-bg-warning">Must-Try</span>
@@ -308,7 +316,7 @@
                                                     </div>
                                                     <span class="small text-secondary d-block">{{ $foodRecommendation['stall']->name }}</span>
                                                     @if ($foodRecommendation['food']->category)
-                                                        <span class="small text-market d-block">{{ $foodRecommendation['food']->category }}</span>
+                                                        <span class="small text-market d-block">{{ \App\Support\CatalogCategory::canonical($foodRecommendation['food']->category, 'food') }}</span>
                                                     @endif
                                                     <span class="fw-semibold d-block my-2">{{ $foodRecommendation['price_label'] }}</span>
                                                     <p class="small mb-0">{{ $foodRecommendation['explanation'] }}</p>
@@ -318,7 +326,7 @@
                                     @endforeach
                                 </div>
 
-                                <form method="POST" action="{{ route('client.visit-plans.smart-planner.store') }}" class="mt-4">
+                                <form method="POST" action="{{ route('client.visit-plans.smart-planner.store') }}" class="planner-summary mt-4">
                                     @csrf
                                     <input type="hidden" name="title" value="Smart visit to {{ $recommendation['market']->name }}">
                                     <input type="hidden" name="requested_date" value="{{ $plannerResult['requested_date'] }}">
@@ -343,7 +351,9 @@
                                     @foreach ($recommendation['foods'] as $foodRecommendation)
                                         <input type="hidden" name="food_ids[]" value="{{ $foodRecommendation['food']->id }}">
                                     @endforeach
+                                    <p class="mb-2"><strong>{{ count($recommendation['foods']) }} Food stops</strong> · {{ $recommendation['market']->name }}</p>
                                     @if ($plannerResult['uses_fallback'])
+                                        <p class="small">Requested: {{ $plannerResult['requested_date_label'] }}<br>Alternative: {{ $plannerResult['recommendation_date_label'] }}</p>
                                         <div class="form-check mb-3">
                                             <input class="form-check-input" type="checkbox" name="confirmed_fallback_date" value="1"
                                                 id="confirmed-fallback-date-{{ $recommendation['market']->id }}" required>
@@ -352,7 +362,7 @@
                                             </label>
                                         </div>
                                     @endif
-                                    <p class="small text-secondary">Confirmed plan date: {{ $plannerResult['recommendation_date_label'] }}</p>
+                                    <p class="small text-secondary">{{ $plannerResult['uses_fallback'] ? 'Plan date if confirmed:' : 'Plan date:' }} {{ $plannerResult['recommendation_date_label'] }}</p>
                                     <button type="submit" class="btn btn-market">
                                         {{ $plannerResult['uses_fallback'] ? 'Use Recommended Date and Create Plan' : 'Create Plan from This Recommendation' }}
                                     </button>
