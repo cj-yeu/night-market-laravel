@@ -7,6 +7,7 @@ use App\Models\NightMarket;
 use App\Models\Stall;
 use App\Models\User;
 use App\Support\CatalogCategory;
+use App\Support\PlannerFoodInterests;
 use App\Support\SmartPlannerTemplate;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Query\Builder;
@@ -25,6 +26,9 @@ class SmartPlannerRecommendationRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'recommendation_mode' => ['nullable', Rule::in(['ai', 'basic'])],
+            'interests' => ['nullable', 'array', 'max:7'],
+            'interests.*' => ['required', 'string', 'distinct', Rule::in(array_keys(PlannerFoodInterests::GROUPS))],
             'template' => ['nullable', 'string', Rule::in(SmartPlannerTemplate::KEYS)],
             'visit_date' => ['required', 'date', 'after_or_equal:today'],
             'city' => [
@@ -42,7 +46,7 @@ class SmartPlannerRecommendationRequest extends FormRequest
             ],
             'budget_min' => ['nullable', 'required_with:budget_max', 'numeric', 'min:0', 'max:10000', 'lte:budget_max'],
             'budget_max' => ['nullable', 'required_with:budget_min', 'numeric', 'min:0', 'max:10000', 'gte:budget_min'],
-            'categories' => ['nullable', 'array', 'max:10'],
+            'categories' => ['nullable', 'array', 'max:100'],
             'categories.*' => [
                 'required',
                 'string',
@@ -108,7 +112,7 @@ class SmartPlannerRecommendationRequest extends FormRequest
             'halal_preference' => $this->input('halal_preference', 'any'),
             'must_try' => $this->has('must_try') ? $this->input('must_try') : false,
             'max_markets' => $this->input('max_markets', 1),
-            'budget_min' => $isBudgetTemplate && ! filled($budgetMinimum) ? 0 : $budgetMinimum,
+            'budget_min' => ($isBudgetTemplate || filled($budgetMaximum)) && ! filled($budgetMinimum) ? 0 : $budgetMinimum,
             'budget_max' => $isBudgetTemplate && ! filled($budgetMaximum) ? 30 : $budgetMaximum,
             'preference_notes' => is_string($notes) ? (trim($notes) !== '' ? trim($notes) : null) : $notes,
         ]);

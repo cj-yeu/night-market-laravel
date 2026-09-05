@@ -2,6 +2,12 @@
 
 return [
 
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+        // Opt in explicitly. Without this, the planner remains fully deterministic.
+        'planner_enabled' => env('OPENAI_PLANNER_ENABLED', false),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services
