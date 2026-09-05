@@ -1,197 +1,31 @@
 @extends('layouts.app')
 
 @section('title', 'Smart Visit Planner | '.config('app.name'))
+@push('styles')
+    <link rel="stylesheet" href="{{ asset('assets/smart-planner.css') }}">
+@endpush
+@push('scripts')
+    <script src="{{ asset('assets/smart-planner.js') }}" defer></script>
+@endpush
 
 @section('content')
     @php($activeTemplate = $preferences['template'] ?? null)
-    <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
+    <div class="night-out-header mb-4">
         <div>
-            <h1 class="h2 fw-bold text-market mb-1">Smart Visit Planner</h1>
-            <p class="text-secondary mb-0">Choose your preferences, compare suggested stops, then save an editable visit plan.</p>
+            <p class="text-market small fw-bold mb-2">SMART VISIT PLANNER</p>
+            <h1>Your next night out, planned.</h1>
+            <p class="text-secondary fs-5">Discover a night market plan that fits your taste and budget.</p>
         </div>
-        <a href="{{ route('client.visit-plans.index') }}" class="btn btn-outline-secondary align-self-start">Back to My Visit Plans</a>
+        <a href="{{ route('client.visit-plans.index') }}" class="btn btn-outline-secondary">Back to My Visit Plans</a>
     </div>
-
     @if ($errors->any())<div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>@endif
-    <section class="mb-4" aria-labelledby="planner-templates-heading">
-        <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
-            <div>
-                <h2 id="planner-templates-heading" class="h4 fw-bold text-market mb-1">Recommended Plan Templates</h2>
-                <p class="text-secondary mb-0">Start with a template or choose your own preferences below.</p>
-                <p class="small text-secondary mb-0">Suggestions use catalog information and fixed rules. No external AI or live data is used.</p>
-            </div>
-            @if ($activeTemplate)
-                <a href="{{ route('client.visit-plans.smart-planner.index') }}" class="btn btn-sm btn-outline-secondary align-self-start">Clear Template</a>
-            @endif
-        </div>
-        <div class="row g-3">
-            @foreach ($templates as $key => $template)
-                <div class="col-12 col-md-6 col-xl-3">
-                    <article class="card h-100 market-card {{ $activeTemplate === $key ? 'border border-2 border-warning' : '' }}">
-                        <div class="card-body p-4 d-flex flex-column">
-                            <div class="d-flex justify-content-between gap-2 mb-2">
-                                <h3 class="h5 fw-bold mb-0">{{ $template['name'] }}</h3>
-                                @if ($activeTemplate === $key)<span class="badge text-bg-warning">Active</span>@endif
-                            </div>
-                            <p class="small text-secondary">{{ $template['description'] }}</p>
-                            <p class="small mb-4"><strong>Limit:</strong> {{ $template['limit'] }}</p>
-                            <a href="{{ route('client.visit-plans.smart-planner.index', ['template' => $key]) }}" class="btn {{ $activeTemplate === $key ? 'btn-outline-secondary' : 'btn-market' }} mt-auto">
-                                {{ $activeTemplate === $key ? 'Template Active' : 'Use Template' }}
-                            </a>
-                        </div>
-                    </article>
-                </div>
-            @endforeach
-        </div>
-    </section>
-
-    <section class="card market-card mb-4" aria-labelledby="planner-preferences-heading">
-        <div class="card-body p-4">
-            <h2 id="planner-preferences-heading" class="h4 fw-bold text-market">Planning Preferences</h2>
-            <p class="text-secondary">Choose when and where to visit, then narrow your food preferences if needed.</p>
-
-            @if ($markets->isEmpty())
-                <div class="alert alert-info mb-0">No markets currently have enough schedule, stall, and food data for planning.</div>
-            @else
-            <form method="POST" action="{{ route('client.visit-plans.smart-planner.recommend') }}" novalidate>
-                @csrf
-                @if ($activeTemplate)<input type="hidden" name="template" value="{{ $activeTemplate }}">@endif
-                <div class="row g-3">
-                    <div class="col-12 col-md-6 col-lg-4">
-                        <label for="visit_date" class="form-label">Visit Date</label>
-                        <input type="date" id="visit_date" name="visit_date" data-schedule-date
-                            value="{{ old('visit_date', $preferences['visit_date'] ?? '') }}"
-                            min="{{ now()->toDateString() }}"
-                            class="form-control @error('visit_date') is-invalid @enderror" required>
-                        @error('visit_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                    </div>
-                    <div class="col-12 col-md-6 col-lg-4">
-                        <label for="city" class="form-label">City <span class="text-secondary">(optional)</span></label>
-                        <select id="city" name="city" class="form-select @error('city') is-invalid @enderror">
-                            <option value="">Any public Selangor city</option>
-                            @foreach ($cities as $city)
-                                <option value="{{ $city->city }}" @selected(old('city', $preferences['city'] ?? '') === $city->city)>{{ $city->city }}</option>
-                            @endforeach
-                        </select>
-                        @error('city')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                    </div>
-                    <div class="col-12 col-lg-4">
-                        <label for="night_market_id" class="form-label">Target Night Market <span class="text-secondary">(optional)</span></label>
-                        <select id="night_market_id" name="night_market_id" data-parent-select="city" data-searchable data-schedule-select data-fallback="true" class="form-select @error('night_market_id') is-invalid @enderror">
-                            <option value="">Any operating public Market</option>
-                            @foreach ($markets as $market)
-                                <option data-parent="{{ $market->city }}" data-days="{{ $market->operatingDays->pluck('day_of_week')->implode('|') }}" data-schedule="{{ $market->operatingDays->map(fn ($day) => $day->day_of_week.' '.($day->opening_time?->format('g:i A') ?? 'Time not available').'–'.($day->closing_time?->format('g:i A') ?? 'Time not available'))->implode('; ') }}" value="{{ $market->id }}" @selected((string) old('night_market_id', $preferences['night_market_id'] ?? '') === (string) $market->id)>
-                                    {{ $market->name }} — {{ $market->city }}
-                                </option>
-                            @endforeach
-                        </select>
-                        @error('night_market_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                    </div>
-
-                    <div class="col-12"><p data-schedule-hint class="small text-secondary mb-0" role="status"></p></div>
-                    <div class="col-12"><h3 class="h5 mt-3 mb-0">Food preferences</h3></div>
-                    @if ($activeTemplate === 'budget')
-                        <input type="hidden" name="budget_min" value="0">
-                        <div class="col-12 col-lg-3">
-                            <label for="budget_max" class="form-label">Budget Limit (RM)</label>
-                            <input id="budget_max" name="budget_max" inputmode="decimal"
-                                value="{{ old('budget_max', $preferences['budget_max'] ?? 30) }}"
-                                class="form-control @error('budget_max') is-invalid @enderror" placeholder="30">
-                            <div class="form-text">The template uses numeric price maximums only and defaults to RM30.</div>
-                            @error('budget_max')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                    @else
-                        <div class="col-6 col-lg-3">
-                            <label for="budget_min" class="form-label">Minimum Budget (RM)</label>
-                            <input id="budget_min" name="budget_min" inputmode="decimal"
-                                value="{{ old('budget_min', $preferences['budget_min'] ?? '') }}"
-                                class="form-control @error('budget_min') is-invalid @enderror" placeholder="e.g. 10">
-                            @error('budget_min')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                        <div class="col-6 col-lg-3">
-                            <label for="budget_max" class="form-label">Maximum Budget (RM)</label>
-                            <input id="budget_max" name="budget_max" inputmode="decimal"
-                                value="{{ old('budget_max', $preferences['budget_max'] ?? '') }}"
-                                class="form-control @error('budget_max') is-invalid @enderror" placeholder="e.g. 50">
-                            @error('budget_max')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                    @endif
-                    <div class="col-12 col-md-6 col-lg-3">
-                        <label for="halal_preference" class="form-label">Stall Halal Preference</label>
-                        <select id="halal_preference" name="halal_preference" class="form-select @error('halal_preference') is-invalid @enderror">
-                            @foreach ($halalOptions as $value => $label)
-                                <option value="{{ $value }}" @selected(old('halal_preference', $preferences['halal_preference'] ?? 'any') === $value)>{{ $label }}</option>
-                            @endforeach
-                        </select>
-                        @error('halal_preference')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                    </div>
-                    @if ($activeTemplate)
-                        <input type="hidden" name="max_markets" value="1">
-                    @else
-                        <div class="col-12 col-md-6 col-lg-3">
-                            <label for="max_markets" class="form-label">Maximum Markets</label>
-                            <select id="max_markets" name="max_markets" class="form-select @error('max_markets') is-invalid @enderror">
-                                @for ($limit = 1; $limit <= 3; $limit++)
-                                    <option value="{{ $limit }}" @selected((int) old('max_markets', $preferences['max_markets'] ?? 1) === $limit)>{{ $limit }}</option>
-                                @endfor
-                            </select>
-                            @error('max_markets')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                    @endif
-
-                    <fieldset class="col-12">
-                        <legend class="form-label">Preferred Food Categories <span class="text-secondary">(optional)</span></legend>
-                        <div class="d-flex flex-wrap gap-2 planner-options">
-                            @foreach ($categories as $category)
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="categories[]"
-                                        id="category-{{ $loop->index }}" value="{{ $category->category }}"
-                                        @checked(in_array($category->category, old('categories', $preferences['categories'] ?? []), true))>
-                                    <label class="form-check-label" for="category-{{ $loop->index }}">{{ $category->category }}</label>
-                                </div>
-                            @endforeach
-                        </div>
-                        @error('categories')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
-                        @error('categories.*')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
-                    </fieldset>
-
-                    <div class="col-12">
-                        @if ($activeTemplate === 'food_hunting')
-                            <input type="hidden" name="must_try" value="0">
-                            <p class="small text-secondary mb-0">Must-Try Foods are prioritised. Other active Foods can fill the plan when Must-Try options are limited.</p>
-                        @else
-                            <div class="form-check">
-                                <input type="hidden" name="must_try" value="0">
-                                <input class="form-check-input" type="checkbox" id="must_try" name="must_try" value="1"
-                                    @checked((bool) old('must_try', $preferences['must_try'] ?? false))>
-                                <label class="form-check-label" for="must_try">Recommend Must-Try Foods only</label>
-                            </div>
-                            @error('must_try')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
-                        @endif
-                    </div>
-
-                    <div class="col-12">
-                        <label for="preference_notes" class="form-label">Planning Notes <span class="text-secondary">(optional)</span></label>
-                        <textarea id="preference_notes" name="preference_notes" rows="3" maxlength="1000"
-                            class="form-control @error('preference_notes') is-invalid @enderror"
-                            placeholder="Anything you would like to remember for this visit.">{{ old('preference_notes', $preferences['preference_notes'] ?? '') }}</textarea>
-                        @error('preference_notes')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                    </div>
-                </div>
-
-                <div class="planner-summary mt-4">
-                    <h3 class="h5">Your visit</h3><p data-planner-summary class="mb-2"></p>
-                    <p class="small text-secondary">Prices and regular schedules may change.</p>
-                    <button type="submit" class="btn btn-market">Generate Recommendations</button>
-                </div>
-            </form>
-            @endif
-        </div>
-    </section>
+    @include('client.visit-plans.partials.smart-preferences')
 
     @if ($plannerResult !== null)
-        <section aria-labelledby="planner-results-heading" class="vstack gap-4">
+        <section aria-labelledby="planner-results-heading" class="vstack gap-4" id="planner-results" data-invalidate-url="{{ route('client.visit-plans.smart-planner.invalidate') }}">
             <h2 id="planner-results-heading" class="visually-hidden">Smart Planner Results</h2>
+            @if (isset($plannerResult['source_notice']))<p class="alert alert-info" role="status">{{ $plannerResult['source_notice'] }}</p>@endif
+            <p id="planner-stale" class="alert alert-warning" role="status" hidden>Your preferences changed. Generate again before saving.</p>
 
             @if ($plannerResult['template'] ?? null)
                 <div class="alert alert-info mb-0" role="status">
@@ -257,11 +91,14 @@
                     </p>
                     <div class="vstack gap-4">
                     @foreach ($recommendations as $recommendation)
+                        @if (isset($recommendation['snapshot_id']))
+                            @include('client.visit-plans.partials.smart-result')
+                        @else
                         <article class="card market-card">
                             <div class="card-body p-4 p-lg-5">
                                 <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
                                     <div>
-                                        <span class="badge text-bg-warning mb-2">Score {{ $recommendation['score'] }}</span>
+                                        <span class="badge text-bg-light mb-2">Basic recommendation</span>
                                         <h3 class="h3 fw-bold text-market mb-1">{{ $recommendation['market']->name }}</h3>
                                         <p class="text-secondary mb-0">{{ $recommendation['market']->city }}, {{ $recommendation['market']->state }}</p>
                                     </div>
@@ -369,6 +206,7 @@
                                 </form>
                             </div>
                         </article>
+                        @endif
                     @endforeach
                     </div>
                 </section>

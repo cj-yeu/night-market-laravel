@@ -132,6 +132,12 @@ Route::middleware('auth')->group(function () {
             ->name('visit-plans.smart-planner.recommend');
         Route::post('/visit-plans/smart-planner/create-plan', [SmartVisitPlannerController::class, 'store'])
             ->name('visit-plans.smart-planner.store');
+        Route::post('/visit-plans/smart-planner/parse', [SmartVisitPlannerController::class, 'parse'])
+            ->middleware('throttle:8,1')->name('visit-plans.smart-planner.parse');
+        Route::post('/visit-plans/smart-planner/save', [SmartVisitPlannerController::class, 'saveSnapshot'])
+            ->name('visit-plans.smart-planner.save');
+        Route::post('/visit-plans/smart-planner/invalidate', [SmartVisitPlannerController::class, 'invalidate'])
+            ->name('visit-plans.smart-planner.invalidate');
         Route::get('/visit-plans/create', [VisitPlanController::class, 'create'])->name('visit-plans.create');
         Route::post('/visit-plans', [VisitPlanController::class, 'store'])->name('visit-plans.store');
         Route::get('/visit-plans/{visitPlan}', [VisitPlanController::class, 'show'])
