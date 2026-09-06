@@ -28,6 +28,12 @@ class CatalogImportProposalService
     {
         $canonicalSource = $this->canonicalizer->canonicalize($data['youtube_url']);
 
+        return $this->createSourceDraft($user, $data, $canonicalSource);
+    }
+
+    public function createSourceDraft(User $user, array $data, array $canonicalSource): CatalogImportProposal
+    {
+
         return DB::transaction(function () use ($user, $data, $canonicalSource): CatalogImportProposal {
             $source = $this->findOrCreateSource($canonicalSource);
             $target = $this->resolveTarget($data);
@@ -181,7 +187,7 @@ class CatalogImportProposalService
     /**
      * @param  array{platform: string, canonical_url: string, external_content_id: string, url_fingerprint: string}  $sourceData
      */
-    private function findOrCreateSource(array $sourceData): SocialMediaSource
+    public function findOrCreateSource(array $sourceData): SocialMediaSource
     {
         $source = SocialMediaSource::query()
             ->where('url_fingerprint', $sourceData['url_fingerprint'])
@@ -201,7 +207,7 @@ class CatalogImportProposalService
             $source = SocialMediaSource::query()
                 ->where('url_fingerprint', $sourceData['url_fingerprint'])
                 ->orWhere(function (Builder $query) use ($sourceData) {
-                    $query->where('platform', $sourceData['platform'])
+                    $query->whereNotNull('external_content_id')->where('platform', $sourceData['platform'])
                         ->where('external_content_id', $sourceData['external_content_id']);
                 })
                 ->first();

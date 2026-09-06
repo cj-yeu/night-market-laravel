@@ -3,6 +3,8 @@
 @section('title', $stall->name.' | Admin')
 
 @section('content')
+    @if(session('ai_import_history'))<p><a class="btn btn-outline-market" href="{{ session('ai_import_history') }}">View Imported Records</a></p>@endif
+    <p><a class="btn btn-outline-market" href="{{ route('admin.ai-import.index',['module'=>'foods','market_id'=>$stall->night_market_id,'stall_id'=>$stall->id]) }}">Find Foods with AI</a></p>
     <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
         <div><h1 class="h2 fw-bold mb-1">{{ $stall->name }}</h1><p class="text-secondary mb-0">Stall details</p></div>
         <div class="d-flex gap-2 align-self-start">

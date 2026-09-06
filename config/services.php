@@ -59,6 +59,18 @@ return [
         'base_url' => 'https://generativelanguage.googleapis.com',
     ],
 
+    'catalog_ai' => [
+        // Separate from the shared Gemini model and OpenAI Smart Planner.
+        'model' => env('CATALOG_AI_MODEL', 'gemini-3.5-flash-lite'),
+        // The key inherits its project's billing tier; a model name cannot prove it.
+        'free_tier_confirmed' => env('CATALOG_AI_FREE_TIER_CONFIRMED', false),
+    ],
+
+    'catalog_search' => [
+        'tavily_key' => env('TAVILY_API_KEY'),
+        'tavily_free_confirmed' => env('CATALOG_SEARCH_TAVILY_FREE_CONFIRMED', false),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

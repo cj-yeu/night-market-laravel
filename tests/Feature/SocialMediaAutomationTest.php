@@ -38,9 +38,9 @@ class SocialMediaAutomationTest extends TestCase
         $this->get(route('admin.social-media.automation.index'))->assertRedirect(route('login'));
         $this->actingAs($client)->get(route('admin.social-media.automation.index'))->assertForbidden();
         $this->actingAs($this->admin)->get(route('admin.social-media.automation.index'))
-            ->assertOk()
-            ->assertSee('Automation Imports');
-        $this->actingAs($superAdmin)->get(route('admin.social-media.automation.create'))->assertOk();
+            ->assertRedirect(route('admin.ai-import.history'));
+        $this->actingAs($superAdmin)->get(route('admin.social-media.automation.create'))->assertRedirect(route('admin.ai-import.index'));
+        $this->get(route('admin.ai-import.index'))->assertOk()->assertSee('Search Sources');
     }
 
     public function test_gap_detection_only_returns_eligible_records_without_active_children(): void
@@ -187,7 +187,7 @@ class SocialMediaAutomationTest extends TestCase
             ]);
 
         $proposal = CatalogImportProposal::latest('id')->firstOrFail();
-        $response->assertRedirect(route('admin.social-media.automation.show', $proposal));
+        $response->assertRedirect(route('admin.ai-import.show', $proposal));
         $this->assertSame($market->id, $proposal->matched_night_market_id);
         $this->assertSame($stall->id, $proposal->matched_stall_id);
 
@@ -231,7 +231,7 @@ class SocialMediaAutomationTest extends TestCase
 
         $proposal = CatalogImportProposal::latest('id')->firstOrFail();
         $this->actingAs($this->admin)
-            ->get(route('admin.social-media.automation.show', $proposal))
+            ->get(route('admin.ai-import.show', $proposal))
             ->assertOk()
             ->assertSee('Metadata retrieval needs attention.')
             ->assertSee('No Night Market, Stall, or Food record has been created.');

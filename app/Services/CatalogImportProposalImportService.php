@@ -15,8 +15,11 @@ use App\Models\Stall;
 use App\Models\User;
 use App\Support\CatalogImportProposalImportResult;
 use App\Support\CatalogMarketIdentity;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -55,6 +58,9 @@ class CatalogImportProposalImportService
     {
         return DB::transaction(function () use ($proposal): CatalogImportProposal {
             $proposal = $this->lockedDetail($proposal->id);
+            if (isset($proposal->review_metadata_snapshot['ai_import'])) {
+                $this->fail(self::FAILURE_PROPOSAL_INVALID, 'Use the module Review Import page for this draft.');
+            }
             $this->assertStatus($proposal, CatalogImportProposal::STATUS_DRAFT);
             $source = $this->lockedSource($proposal);
             $this->lockedTargets($proposal);
@@ -159,6 +165,136 @@ class CatalogImportProposalImportService
             self::FAILURE_IMPORT_FAILED => 'The catalog import could not be completed safely. No partial catalog records were saved.',
             default => 'The proposal is incomplete or is no longer valid for import.',
         };
+    }
+
+    /** Called from the locked, validated module review workflow; never from request payloads. */
+    public function importReviewedSelection(User $reviewer, CatalogImportProposal $proposal, array $graph): array
+    {
+        $createdImages = [];
+        try {
+            return DB::transaction(function () use ($reviewer, $proposal, $graph, &$createdImages) {
+                $proposal = $this->lockedDetail($proposal->id);
+                $data = $proposal->review_metadata_snapshot['ai_import'] ?? null;
+                if ($proposal->status === CatalogImportProposal::STATUS_IMPORTED && isset($data['import_result'])) {
+                    return $data['import_result'];
+                }
+                if (! $reviewer->hasAdminAccess() || ! $data || $proposal->status !== CatalogImportProposal::STATUS_DRAFT) {
+                    $this->fail(self::FAILURE_PROPOSAL_INVALID);
+                }
+                $marketId = $data['context']['market_id'] ?? $graph['market']['matched_night_market_id'] ?? null;
+                $market = $marketId ? $this->eligibleMarket($marketId) : null;
+                $counts = ['markets' => 0, 'stalls' => 0, 'foods' => 0, 'linked' => 0];
+                if (! $market) {
+                    $suggestion = new CatalogImportProposalMarket($graph['market']);
+                    $suggestion->setRelation('operatingDays', new Collection(collect($graph['operating_days'])->map(fn ($d) => new CatalogImportProposalOperatingDay($d))->all()));
+                    $this->assertOperatingDays($suggestion->operatingDays);
+                    $this->assertNewMarketDraft($proposal, $suggestion);
+                    $proposal->setRelation('proposalMarket', $suggestion);
+                    $this->preflightConflicts($proposal, ['market' => null, 'stall' => null]);
+                    $market = NightMarket::create(['name' => $suggestion->name, 'address' => $suggestion->address,
+                        'city' => $suggestion->city, 'state' => 'Selangor', 'description' => $suggestion->description,
+                        'source_url' => $proposal->socialMediaSource->canonical_url, 'status' => NightMarket::STATUS_INACTIVE]);
+                    foreach ($suggestion->operatingDays as $day) {
+                        $market->operatingDays()->create(['day_of_week' => $day->day_of_week, 'opening_time' => $this->timeValue($day->opening_time), 'closing_time' => $this->timeValue($day->closing_time)]);
+                    }
+                    $counts['markets']++;
+                }
+                $linked = function ($record, string $type, string $column, ?string $url = null) use ($proposal, $data) {
+                    $sourceId = $proposal->social_media_source_id;
+                    if ($url && collect($data['sources'])->contains('url', $url)) {
+                        $canonical = in_array(parse_url($url, PHP_URL_HOST), ['youtube.com', 'www.youtube.com', 'youtu.be'], true)
+                            ? app(YouTubeVideoUrlCanonicalizer::class)->canonicalize($url)
+                            : ['platform' => 'web', 'canonical_url' => $url, 'url_fingerprint' => hash('sha256', $url), 'external_content_id' => null];
+                        $sourceId = app(CatalogImportProposalService::class)->findOrCreateSource($canonical)->id;
+                    }
+                    CatalogSocialMediaSourceLink::firstOrCreate(['social_media_source_id' => $sourceId, $column => $record->id],
+                        ['catalog_import_proposal_id' => $proposal->id, 'catalog_type' => $type]);
+                };
+                $linked($market, CatalogSocialMediaSourceLink::TYPE_NIGHT_MARKET, 'night_market_id');
+                $records = $counts['markets'] ? [['type' => 'market', 'id' => $market->id, 'name' => $market->name]] : [];
+                $seenStalls = [];
+                $seenFoods = [];
+                foreach ($graph['stalls'] as $row) {
+                    $name = $this->normalizedRequired($row['name'], 255);
+                    if (empty($row['parent_confirmed'])) {
+                        $this->fail(self::FAILURE_PROPOSAL_INVALID, 'Confirm each selected Stall belongs to this Market.');
+                    }
+                    $stall = empty($row['matched_stall_id']) ? null : Stall::query()->lockForUpdate()->find($row['matched_stall_id']);
+                    if (! empty($row['matched_stall_id']) && (! $stall || $stall->night_market_id !== $market->id || $stall->status !== 'active')) {
+                        $this->fail(self::FAILURE_TARGET_INELIGIBLE);
+                    }
+                    if (! empty($data['context']['stall_id']) && $stall?->id !== $data['context']['stall_id']) {
+                        $this->fail(self::FAILURE_TARGET_INELIGIBLE);
+                    }
+                    if (! $stall) {
+                        $key = Str::lower(Str::squish($name));
+                        if (isset($seenStalls[$key]) || Stall::where('night_market_id', $market->id)->whereRaw('LOWER(TRIM(name)) = ?', [$key])->exists()) {
+                            $this->fail(self::FAILURE_CONFLICT_STALL, 'A Stall with this name already exists. Explicitly link it or deselect this duplicate.');
+                        }
+                        $seenStalls[$key] = true;
+                        $stall = Stall::create(['night_market_id' => $market->id, 'name' => $name, 'description' => $row['description'] ?? null,
+                            'halal_status' => Stall::HALAL_UNKNOWN, 'status' => Stall::STATUS_INACTIVE]);
+                        $counts['stalls']++;
+                    } else {
+                        $counts['linked']++;
+                    }
+                    $linked($stall, CatalogSocialMediaSourceLink::TYPE_STALL, 'stall_id', $row['source_url'] ?? null);
+                    $records[] = ['type' => 'stall', 'id' => $stall->id, 'name' => $stall->name];
+                    foreach ($row['foods'] as $item) {
+                        $name = $this->normalizedRequired($item['name'], 255);
+                        $food = empty($item['matched_food_id']) ? null : Food::query()->lockForUpdate()->find($item['matched_food_id']);
+                        if (! empty($item['matched_food_id'])) {
+                            if (! $food || $food->stall_id !== $stall->id) {
+                                $this->fail(self::FAILURE_TARGET_INELIGIBLE);
+                            }
+                            $counts['linked']++;
+                            $linked($food, CatalogSocialMediaSourceLink::TYPE_FOOD, 'food_id', $item['source_url'] ?? null);
+                        } else {
+                            $key = $stall->id.':'.Str::lower(Str::squish($name));
+                            if (isset($seenFoods[$key]) || Food::where('stall_id', $stall->id)->where('name', $name)->exists()) {
+                                $this->fail(self::FAILURE_CONFLICT_FOOD, 'A Food with this name already exists. Explicitly link it or deselect it.');
+                            }
+                            $seenFoods[$key] = true;
+                            $suggestion = new CatalogImportProposalFood($item);
+                            $this->assertFoodDraft($suggestion);
+                            if (empty($item['photo_confirmed']) || empty($item['image_path']) || ! str_starts_with($item['image_path'], 'ai-import/'.$proposal->id.'/')
+                                || ! app(CatalogDraftImageStorage::class)->disk()->exists($item['image_path'])
+                                || ! $suggestion->category || ! app(CatalogCategoryService::class)->isPermittedSelection('food', $suggestion->category)
+                                || $suggestion->price_min === null || $suggestion->price_max === null || $suggestion->price_min <= 0) {
+                                $this->fail(self::FAILURE_PROPOSAL_INVALID, 'Selected Food requires a category, valid numeric price and confirmed photo.');
+                            }
+                            $food = $this->createFoodAndLink($proposal, $suggestion, $stall, false);
+                            $upload = new UploadedFile(app(CatalogDraftImageStorage::class)->disk()->path($item['image_path']), basename($item['image_path']), null, null, true);
+                            app(StallFoodImageService::class)->updateFoodImage($food, $upload);
+                            $createdImages[] = $food->image_path;
+                            $food->forceFill(['source_url' => $item['source_url'] ?? $proposal->socialMediaSource->canonical_url,
+                                'price_checked_at' => $item['price_checked_at'] ?? null,
+                                'price_display' => 'RM'.number_format((float) $food->price_min, 2).($food->price_max != $food->price_min ? '–RM'.number_format((float) $food->price_max, 2) : '').(! empty($item['unit']) ? ' / '.$item['unit'] : '')])->save();
+                            $counts['foods']++;
+                            $linked($food, CatalogSocialMediaSourceLink::TYPE_FOOD, 'food_id', $item['source_url'] ?? null);
+                        }
+                        $records[] = ['type' => 'food', 'id' => $food->id, 'name' => $food->name];
+                    }
+                }
+                $result = ['market_id' => $market->id, 'stall_id' => $data['context']['stall_id'], 'counts' => $counts, 'records' => $records];
+                $data['import_result'] = $result;
+                $proposal->forceFill(['status' => 'imported', 'reviewed_by' => $reviewer->id, 'reviewed_at' => now(), 'imported_at' => now(),
+                    'review_metadata_snapshot' => ['ai_import' => $data]])->save();
+
+                return $result;
+            });
+        } catch (Throwable $e) {
+            foreach ($createdImages as $path) {
+                if (Food::isOwnedImagePath($path)) {
+                    Storage::disk('public')->delete($path);
+                }
+            }
+            if ($e instanceof ValidationException) {
+                throw $e;
+            }
+            $this->fail($this->isMarketIdentityUniqueViolation($e) ? self::FAILURE_CONFLICT_MARKET : self::FAILURE_IMPORT_FAILED,
+                $this->failureMessage($this->isMarketIdentityUniqueViolation($e) ? self::FAILURE_CONFLICT_MARKET : self::FAILURE_IMPORT_FAILED));
+        }
     }
 
     private function lockedDetail(int $proposalId): CatalogImportProposal
@@ -621,7 +757,7 @@ class CatalogImportProposalImportService
         }
     }
 
-    private function createFoodAndLink(CatalogImportProposal $proposal, CatalogImportProposalFood $suggestion, Stall $stall): void
+    private function createFoodAndLink(CatalogImportProposal $proposal, CatalogImportProposalFood $suggestion, Stall $stall, bool $linkSource = true): Food
     {
         $food = Food::create([
             'stall_id' => $stall->id,
@@ -634,7 +770,11 @@ class CatalogImportProposalImportService
             'is_must_try' => (bool) $suggestion->is_must_try,
             'status' => Food::STATUS_INACTIVE,
         ]);
-        $this->createLink($proposal, CatalogSocialMediaSourceLink::TYPE_FOOD, $food);
+        if ($linkSource) {
+            $this->createLink($proposal, CatalogSocialMediaSourceLink::TYPE_FOOD, $food);
+        }
+
+        return $food;
     }
 
     private function createLink(CatalogImportProposal $proposal, string $type, NightMarket|Stall|Food $catalog): void

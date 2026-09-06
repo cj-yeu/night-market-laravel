@@ -115,7 +115,7 @@ class SocialMediaCatalogImportTest extends TestCase
         ]);
 
         $this->actingAs($this->admin)
-            ->get(route('admin.social-media.automation.show', $proposal))
+            ->get(route('admin.ai-import.show', $proposal))
             ->assertOk()
             ->assertSee('Review metadata is frozen.')
             ->assertSee($snapshot['title'])
@@ -471,7 +471,7 @@ class SocialMediaCatalogImportTest extends TestCase
         $proposal->refresh();
         $this->assertSame(CatalogImportProposal::STATUS_FAILED, $proposal->status);
         $this->assertSame('catalog_import_failed', $proposal->failure_code);
-        $this->get(route('admin.social-media.automation.show', $proposal))
+        $this->get(route('admin.ai-import.show', $proposal))
             ->assertOk()
             ->assertSee('No partial catalog records were saved.')
             ->assertDontSee('forced internal database failure')

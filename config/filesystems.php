@@ -40,11 +40,22 @@ return [
 
         'public' => [
             'driver' => 'local',
-            'root' => storage_path('app/public'),
+            'root' => env('PUBLIC_STORAGE_ROOT', storage_path('app/public')),
             'url' => env('APP_URL').'/storage',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
+        ],
+
+        'catalog_drafts' => [
+            'driver' => 'local',
+            // Same default location as existing private drafts; no data move implied.
+            'root' => env('CATALOG_IMPORT_PRIVATE_ROOT', storage_path('app/private')),
+            'visibility' => 'private',
+            'serve' => false,
+            'throw' => true,
+            'report' => false,
+            'permissions' => ['file' => ['public' => 0600, 'private' => 0600], 'dir' => ['public' => 0700, 'private' => 0700]],
         ],
 
         's3' => [
@@ -74,7 +85,7 @@ return [
     */
 
     'links' => [
-        public_path('storage') => storage_path('app/public'),
+        public_path('storage') => env('PUBLIC_STORAGE_ROOT', storage_path('app/public')),
     ],
 
 ];

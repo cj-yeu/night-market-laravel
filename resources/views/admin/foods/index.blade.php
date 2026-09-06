@@ -3,7 +3,7 @@
 @section('title', 'Manage Foods | '.config('app.name'))
 
 @section('content')
-    <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4"><div><h1 class="h2 fw-bold mb-1">Foods</h1><p class="text-secondary mb-0">Manage food assignments, categories, and public availability.</p></div><a href="{{ route('admin.foods.create') }}" class="btn btn-market align-self-start">Create Food</a></div>
+    <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4"><div><h1 class="h2 fw-bold mb-1">Foods</h1><p class="text-secondary mb-0">Manage food assignments, categories, and public availability.</p></div><div class="d-flex flex-wrap gap-2 align-self-start"><a href="{{ route('admin.ai-import.index',['module'=>'foods']) }}" class="btn btn-outline-market">AI Import</a><a href="{{ route('admin.foods.create') }}" class="btn btn-market">Create Food</a></div></div>
     @error('status')<div class="alert alert-danger" role="alert">{{ $message }}</div>@enderror
     <div class="card market-card mb-4"><div class="card-body p-4"><form method="GET" action="{{ route('admin.foods.index') }}" class="row g-3 align-items-end">
         <div class="col-12 col-lg-4"><label for="search" class="form-label">Food name or description</label><input id="search" name="search" type="search" value="{{ $filters['search'] ?? '' }}" class="form-control @error('search') is-invalid @enderror">@error('search')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>

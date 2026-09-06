@@ -12,5 +12,6 @@ final readonly class CatalogSuggestionInput
         public string $targetType,
         public array $authoritativeTarget,
         public string $model,
+        public bool $moduleImport = false,
     ) {}
 }
