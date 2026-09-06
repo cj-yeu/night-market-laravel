@@ -1,14 +1,14 @@
 @extends('layouts.app')
 
-@section('title', 'Automation Import Proposal | '.config('app.name'))
+@section('title', 'Catalog Import Draft | '.config('app.name'))
 
 @section('content')
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
         <div>
-            <h1 class="display-6 fw-bold text-market mb-1">Automation Import Proposal</h1>
+            <h1 class="display-6 fw-bold text-market mb-1">Catalog Import Draft</h1>
             <p class="text-secondary mb-0">Draft #{{ $proposal->id }} · Revision {{ $proposal->revision }}</p>
         </div>
-        <a href="{{ route('admin.social-media.automation.index') }}" class="btn btn-outline-secondary">Back to Imports</a>
+        <a href="{{ route('admin.ai-import.history') }}" class="btn btn-outline-secondary">Drafts / Import History</a>
     </div>
 
     @if (session('status'))

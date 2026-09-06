@@ -1,0 +1,5 @@
+@extends('layouts.app')
+@section('title', 'Catalog drafts and import history | NightBite')
+@section('content')<div class="ai-import">
+@include('admin.ai-import._header', ['heading' => 'Drafts & Import History', 'stage' => 0])
+<div class="ai-source-grid">@forelse($proposals as $proposal)<article class="card market-card"><div class="card-body"><span class="badge text-bg-secondary">{{ ucfirst($proposal->status) }}</span><h2 class="h5 mt-2">{{ $proposal->matchedNightMarket?->name ?? $proposal->matchedStall?->name ?? $proposal->socialMediaSource?->title ?? 'New Market draft' }}</h2><p>{{ $proposal->created_at->format('d M Y') }} · Revision {{ $proposal->revision }}</p><a class="btn btn-outline-market" href="{{ route('admin.ai-import.show',$proposal) }}">{{ $proposal->status === 'imported' ? 'View Imported Records' : 'Open Draft' }}</a></div></article>@empty<p>No drafts yet. Choose a Night Market and search for sources to get started.</p>@endforelse</div><div class="mt-4">{{ $proposals->links() }}</div></div>@endsection

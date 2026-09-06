@@ -58,6 +58,19 @@ class CatalogSuggestionExtractionService
 
     public function __construct(private readonly CatalogSuggestionProvider $provider) {}
 
+    /** Analyse already-read content; never treat search snippets or metadata as body text. */
+    public function extractReadContent(CatalogImportProposal $proposal, string $text): array
+    {
+        $proposal->loadMissing('matchedNightMarket', 'matchedStall.nightMarket');
+        $market = $proposal->matchedNightMarket ?? $proposal->matchedStall?->nightMarket;
+        $context = $proposal->review_metadata_snapshot['ai_import']['context'] ?? [];
+        $input = new CatalogSuggestionInput($market?->name ?? 'Unconfirmed Selangor market', $text, null,
+            $proposal->target_type, ['market_name' => $market?->name ?? $context['name'] ?? null, 'city' => $market?->city ?? $context['city'] ?? null,
+                'state' => 'Selangor', 'stall_name' => $proposal->matchedStall?->name], app(CatalogGeminiConfiguration::class)->model(), true);
+
+        return $this->validatedGraph($proposal, $input, $this->provider->extract($input));
+    }
+
     public function generate(CatalogImportProposal $proposal): CatalogSuggestionGenerationResult
     {
         try {
@@ -288,6 +301,7 @@ class CatalogSuggestionExtractionService
 
     private function assertReadyForExtraction(CatalogImportProposal $proposal): void
     {
+        $this->assertDraft($proposal);
         if ($proposal->status !== CatalogImportProposal::STATUS_DRAFT) {
             throw ValidationException::withMessages(['proposal' => 'Only draft proposals can generate suggestions.']);
         }
@@ -303,6 +317,9 @@ class CatalogSuggestionExtractionService
 
     private function assertDraft(CatalogImportProposal $proposal): void
     {
+        if (isset($proposal->review_metadata_snapshot['ai_import'])) {
+            throw ValidationException::withMessages(['proposal' => 'Use Analyse Selected in the module draft for this source.']);
+        }
         if ($proposal->status !== CatalogImportProposal::STATUS_DRAFT) {
             throw ValidationException::withMessages([
                 'proposal' => 'Only draft proposals can be edited.',
@@ -594,7 +611,7 @@ class CatalogSuggestionExtractionService
         $sourceText = $this->normalizeWhitespace($input->sourceTitle."\n".$input->sourceDescription);
         $market = $this->marketSuggestion($proposal, $payload['market'], $sourceText);
         $operatingDays = $this->operatingDays($payload['market'], $sourceText, (string) $market['name']);
-        $stalls = $this->stalls($proposal, $payload['stalls'], $sourceText);
+        $stalls = $this->stalls($proposal, $payload['stalls'], $sourceText, $input->moduleImport);
 
         return [
             'market' => $market,
@@ -708,7 +725,7 @@ class CatalogSuggestionExtractionService
     }
 
     /** @return list<array<string, mixed>> */
-    private function stalls(CatalogImportProposal $proposal, array $candidates, string $sourceText): array
+    private function stalls(CatalogImportProposal $proposal, array $candidates, string $sourceText, bool $allowIncompleteDraft = false): array
     {
         if ($proposal->target_type === CatalogImportProposal::TARGET_EXISTING_STALL) {
             $stall = $proposal->matchedStall;
@@ -759,18 +776,23 @@ class CatalogSuggestionExtractionService
 
             $evidence = $this->evidence($candidate['evidence_text'] ?? null, $sourceText);
             $name = $evidence === null ? null : $this->supportedText($candidate['name'] ?? null, $evidence, 255);
-            if ($name === null || $evidence === null) {
+            if ($allowIncompleteDraft && is_string($name) && preg_match('/\A(?:unnamed|unknown|unidentified)\b/i', $name)) {
+                $name = null;
+            }
+            if ($evidence === null || ($name === null && ! $allowIncompleteDraft)) {
                 continue;
             }
 
-            $key = mb_strtolower($name);
+            // Module drafts may retain supported foods under an unnamed, unconfirmed parent.
+            // Never replace a missing brand with a model-invented stall identity.
+            $key = $name === null ? 'unnamed:'.count($stalls) : mb_strtolower($name);
             if (isset($stalls[$key])) {
                 continue;
             }
 
             $stalls[$key] = [
                 'matched_stall_id' => null,
-                'name' => $name,
+                'name' => $name ?? '',
                 'description' => $this->supportedText($candidate['description'] ?? null, $evidence, 5000),
                 'halal_status' => Stall::HALAL_UNKNOWN,
                 'evidence_text' => $evidence,

@@ -37,18 +37,16 @@ class SocialMediaAutomationController extends Controller
         private readonly CatalogSuggestionExtractionService $catalogSuggestionExtractionService,
     ) {}
 
-    public function index(): View
+    public function index(): RedirectResponse
     {
-        return view('admin.social-media-automation.index', [
-            'marketGaps' => $this->socialMediaDiscoveryService->activeMarketsWithoutActiveStalls(),
-            'stallGaps' => $this->socialMediaDiscoveryService->activeStallsWithoutActiveFoods(),
-            'proposals' => $this->catalogImportProposalService->proposals(),
-        ]);
+        return redirect()->route('admin.ai-import.history');
     }
 
-    public function create(): View
+    public function create(): RedirectResponse
     {
-        return view('admin.social-media-automation.create', $this->catalogImportProposalService->formOptions());
+        session()->keep(['errors', '_old_input', 'status']);
+
+        return redirect()->route('admin.ai-import.index');
     }
 
     public function store(StoreCatalogImportProposalRequest $request): RedirectResponse
@@ -60,7 +58,7 @@ class SocialMediaAutomationController extends Controller
         $source = $this->socialMediaMetadataService->fetch($proposal);
 
         return redirect()
-            ->route('admin.social-media.automation.show', $proposal)
+            ->route('admin.ai-import.show', $proposal)
             ->with('status', $this->socialMediaMetadataService->statusMessage($source));
     }
 
@@ -76,6 +74,13 @@ class SocialMediaAutomationController extends Controller
             'extractionFailureMessage' => $this->catalogSuggestionExtractionService->failureMessage($proposal->extraction_failure_code),
             'importFailureMessage' => $this->catalogImportProposalImportService->failureMessage($proposal->failure_code),
         ]);
+    }
+
+    public function redirectToDraft(CatalogImportProposal $catalogImportProposal): RedirectResponse
+    {
+        session()->keep(['errors', '_old_input', 'status']);
+
+        return redirect()->route('admin.ai-import.show', $catalogImportProposal);
     }
 
     public function fetchMetadata(

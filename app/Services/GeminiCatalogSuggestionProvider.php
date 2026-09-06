@@ -24,7 +24,7 @@ class GeminiCatalogSuggestionProvider implements CatalogSuggestionProvider
         }
 
         $baseUrl = config('services.gemini.base_url');
-        $model = config('services.gemini.model');
+        $model = $input->moduleImport ? app(CatalogGeminiConfiguration::class)->model() : config('services.gemini.model');
         if ($baseUrl !== self::BASE_URL || ! is_string($model) || $model !== $input->model || trim($model) === '') {
             throw new CatalogSuggestionException(CatalogSuggestionExtractionService::FAILURE_CONFIG_MISSING);
         }
@@ -86,11 +86,12 @@ class GeminiCatalogSuggestionProvider implements CatalogSuggestionProvider
                 ]],
             ]],
             'generationConfig' => [
+                ...($input->moduleImport ? app(CatalogGeminiConfiguration::class)->generationConfig() : []),
                 'temperature' => 0,
                 'candidateCount' => 1,
                 'maxOutputTokens' => 4096,
                 'responseMimeType' => 'application/json',
-                'responseJsonSchema' => $this->responseSchema(),
+                'responseJsonSchema' => $this->responseSchema($input->moduleImport),
             ],
         ];
     }
@@ -107,14 +108,15 @@ class GeminiCatalogSuggestionProvider implements CatalogSuggestionProvider
             ."<untrusted_source_title>\n{$input->sourceTitle}\n</untrusted_source_title>\n"
             ."<untrusted_source_description>\n{$input->sourceDescription}\n</untrusted_source_description>\n"
             ."<untrusted_source_creator>\n".($input->sourceCreator ?? '')."\n</untrusted_source_creator>\n"
-            .'Extract only source-supported suggestions. For an existing market, retain the authoritative market. For an existing stall, retain the authoritative market and stall, and only suggest foods.';
+            .'Extract only source-supported suggestions. For an existing market, retain the authoritative market. For an existing stall, retain the authoritative market and stall, and only suggest foods.'
+            .($input->moduleImport ? ' Include at most 10 stalls and 10 foods per stall. Only include information belonging to the selected market, not other locations in a multi-market article. For unnamed or unidentified stalls return a null name, retain literal evidence and supported foods for Admin review. Preserve serving/pack quantities in price_display; do not turn a bundle price into a single-item price.' : '');
     }
 
     /** @return array<string, mixed> */
-    private function responseSchema(): array
+    private function responseSchema(bool $moduleImport = false): array
     {
-        $nullableString = ['type' => 'string', 'nullable' => true];
-        $nullableNumber = ['type' => 'number', 'nullable' => true];
+        $nullableString = $moduleImport ? ['type' => ['string', 'null']] : ['type' => 'string', 'nullable' => true];
+        $nullableNumber = $moduleImport ? ['type' => ['number', 'null']] : ['type' => 'number', 'nullable' => true];
         $food = [
             'type' => 'object',
             'additionalProperties' => false,
@@ -138,8 +140,7 @@ class GeminiCatalogSuggestionProvider implements CatalogSuggestionProvider
             'required' => ['market', 'stalls', 'warnings', 'insufficient_data'],
             'properties' => [
                 'market' => [
-                    'type' => 'object',
-                    'nullable' => true,
+                    ...($moduleImport ? ['type' => ['object', 'null']] : ['type' => 'object', 'nullable' => true]),
                     'additionalProperties' => false,
                     'required' => ['name', 'address', 'city', 'state', 'description', 'evidence_text', 'confidence', 'operating_days'],
                     'properties' => [

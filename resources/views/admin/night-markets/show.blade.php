@@ -3,6 +3,8 @@
 @section('title', $nightMarket->name.' | Admin')
 
 @section('content')
+    @if(session('ai_import_history'))<p><a class="btn btn-outline-market" href="{{ session('ai_import_history') }}">View Imported Records</a></p>@endif
+    <p><a class="btn btn-outline-market" href="{{ route('admin.ai-import.index',['market_id'=>$nightMarket->id]) }}">Find Stalls & Foods with AI</a></p>
     <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
         <div>
             <h1 class="h2 fw-bold mb-1">{{ $nightMarket->name }}</h1>

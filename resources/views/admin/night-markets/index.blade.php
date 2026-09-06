@@ -8,7 +8,7 @@
             <h1 class="h2 fw-bold mb-1">Night Markets</h1>
             <p class="text-secondary mb-0">Manage catalog details, operating schedules, and public availability.</p>
         </div>
-        <a href="{{ route('admin.night-markets.create') }}" class="btn btn-market align-self-start">Create Night Market</a>
+        <div class="d-flex flex-wrap gap-2 align-self-start"><a href="{{ route('admin.ai-import.index') }}" class="btn btn-outline-market">Find with AI</a><a href="{{ route('admin.night-markets.create') }}" class="btn btn-market">Create Night Market</a></div>
     </div>
 
     <div class="card market-card mb-4">

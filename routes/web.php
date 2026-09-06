@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\CatalogActivityController;
+use App\Http\Controllers\Admin\CatalogAiImportController;
 use App\Http\Controllers\Admin\CatalogDataQualityController;
 use App\Http\Controllers\Admin\FoodController;
 use App\Http\Controllers\Admin\NightMarketController;
@@ -242,6 +243,19 @@ Route::middleware('auth')->group(function () {
         Route::delete('/foods/{food}', [FoodController::class, 'destroy'])
             ->whereNumber('food')->name('foods.destroy');
 
+        Route::prefix('night-markets/ai-import')->name('ai-import.')->controller(CatalogAiImportController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/search', 'search')->middleware('throttle:6,1')->name('search');
+            Route::post('/drafts', 'start')->name('start');
+            Route::get('/history', 'history')->name('history');
+            Route::get('/drafts/{proposal}', 'show')->whereNumber('proposal')->name('show');
+            Route::post('/drafts/{proposal}/analyse', 'analyse')->whereNumber('proposal')->middleware('throttle:3,1')->name('analyse');
+            Route::patch('/drafts/{proposal}', 'update')->whereNumber('proposal')->name('update');
+            Route::get('/drafts/{proposal}/review', 'review')->whereNumber('proposal')->name('review');
+            Route::post('/drafts/{proposal}/import', 'import')->whereNumber('proposal')->name('import');
+            Route::get('/drafts/{proposal}/images/{stall}/{food}', 'image')->whereNumber(['proposal', 'stall', 'food'])->name('image');
+            Route::get('/drafts/{proposal}/source-images/{source}/{image}', 'candidateImage')->whereNumber(['proposal', 'source', 'image'])->middleware('throttle:30,1')->name('candidate-image');
+        });
         Route::get('/reviews', [AdminReviewController::class, 'index'])->name('reviews.index');
         Route::delete('/reviews/{review}', [AdminReviewController::class, 'destroy'])
             ->whereNumber('review')->name('reviews.destroy');
@@ -290,7 +304,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/social-media/automation/proposals/{catalogImportProposal}/foods/{proposalFood}', [SocialMediaAutomationController::class, 'destroySuggestionFood'])
             ->whereNumber('catalogImportProposal')->whereNumber('proposalFood')
             ->name('social-media.automation.proposals.foods.destroy');
-        Route::get('/social-media/automation/{catalogImportProposal}', [SocialMediaAutomationController::class, 'show'])
+        Route::get('/social-media/automation/{catalogImportProposal}', [SocialMediaAutomationController::class, 'redirectToDraft'])
             ->whereNumber('catalogImportProposal')
             ->name('social-media.automation.show');
         Route::get('/social-media/extract', [SocialMediaExtractionController::class, 'create'])

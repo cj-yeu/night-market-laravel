@@ -5,7 +5,7 @@
 @section('content')
     <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
         <div><h1 class="h2 fw-bold mb-1">Stalls</h1><p class="text-secondary mb-0">Manage stall assignments, metadata, and operational availability.</p></div>
-        <a href="{{ route('admin.stalls.create') }}" class="btn btn-market align-self-start">Create Stall</a>
+        <div class="d-flex flex-wrap gap-2 align-self-start"><a href="{{ route('admin.ai-import.index',['module'=>'stalls']) }}" class="btn btn-outline-market">AI Import</a><a href="{{ route('admin.stalls.create') }}" class="btn btn-market">Create Stall</a></div>
     </div>
 
     @error('status')
