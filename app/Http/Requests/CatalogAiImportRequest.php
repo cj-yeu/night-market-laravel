@@ -16,6 +16,9 @@ class CatalogAiImportRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'import_mode' => [Rule::requiredIf($this->routeIs('admin.ai-import.search') || ($this->routeIs('admin.ai-import.prepare') && ! $this->filled('search_id'))), 'nullable', Rule::in(['new_market', 'existing_market'])],
+            'action' => ['nullable', Rule::in(['save', 'import'])],
+            'status' => ['nullable', Rule::in(['draft', 'imported'])],
             'module' => ['nullable', Rule::in(['night-markets', 'stalls', 'foods'])],
             'name' => ['nullable', 'string', 'max:255'], 'city' => ['nullable', 'string', 'max:100'],
             'market_id' => ['nullable', 'integer'], 'stall_id' => ['nullable', 'integer'],

@@ -244,6 +244,10 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('food')->name('foods.destroy');
 
         Route::prefix('night-markets/ai-import')->name('ai-import.')->controller(CatalogAiImportController::class)->group(function () {
+            Route::post('/prepare', 'prepare')->middleware('throttle:3,1')->name('prepare');
+            Route::post('/drafts/{proposal}/complete', 'complete')->whereNumber('proposal')->name('complete');
+            Route::get('/drafts/{proposal}/success', 'success')->whereNumber('proposal')->name('success');
+            Route::delete('/drafts/{proposal}/empty', 'destroyEmpty')->whereNumber('proposal')->name('destroy-empty');
             Route::get('/', 'index')->name('index');
             Route::post('/search', 'search')->middleware('throttle:6,1')->name('search');
             Route::post('/drafts', 'start')->name('start');

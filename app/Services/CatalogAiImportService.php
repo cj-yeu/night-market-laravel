@@ -28,13 +28,20 @@ class CatalogAiImportService
 
     public function context(array $input): array
     {
+        $mode = $input['import_mode'] ?? null;
+        if ($mode === 'new_market' && (! empty($input['market_id']) || ! empty($input['stall_id']))) {
+            throw ValidationException::withMessages(['market_id' => 'New Market mode cannot target an existing Market or Stall. Choose the intended mode.']);
+        }
+        if ($mode === 'existing_market' && empty($input['market_id'])) {
+            throw ValidationException::withMessages(['market_id' => 'Select the exact existing Night Market.']);
+        }
         $market = empty($input['market_id']) ? null : NightMarket::query()->publiclyVisible()->find($input['market_id']);
         $stall = empty($input['stall_id']) ? null : Stall::query()->where('status', 'active')->find($input['stall_id']);
         if ((! empty($input['market_id']) && ! $market) || (! empty($input['stall_id']) && (! $stall || $stall->night_market_id !== $market?->id))) {
             throw ValidationException::withMessages(['market_id' => 'Choose an active Selangor Market and a Stall belonging to it.']);
         }
 
-        return ['module' => $input['module'] ?? 'night-markets', 'market_id' => $market?->id, 'stall_id' => $stall?->id,
+        return ['import_mode' => $mode, 'module' => $input['module'] ?? 'night-markets', 'market_id' => $market?->id, 'stall_id' => $stall?->id,
             'name' => $market?->name ?? trim($input['name'] ?? ''), 'city' => $market?->city ?? trim($input['city'] ?? ''), 'state' => 'Selangor'];
     }
 
@@ -74,7 +81,7 @@ class CatalogAiImportService
             throw ValidationException::withMessages(['source' => 'Search results expired or are unavailable in this account. Search again.']);
         }
         $context = $result['context'] ?? $this->context($input);
-        if ($context['module'] !== 'night-markets' && ! $context['market_id']) {
+        if ($context['module'] !== 'night-markets' && ! $context['market_id'] && ($context['import_mode'] ?? null) !== 'new_market') {
             throw ValidationException::withMessages(['market_id' => 'Choose the target Night Market before importing Stalls or Foods.']);
         }
         if (! $context['name'] || ! $context['city']) {
@@ -106,6 +113,12 @@ class CatalogAiImportService
         if ($proposal->matched_night_market_id !== $context['market_id'] || $proposal->matched_stall_id !== $context['stall_id']) {
             throw ValidationException::withMessages(['source' => 'This source already has a draft for another target. Open Drafts to review it.']);
         }
+        $previous = $this->data($proposal);
+        if ($previous && ! $context['market_id'] &&
+            (CatalogCategory::key($previous['context']['name']) !== CatalogCategory::key($context['name'])
+                || CatalogCategory::key($previous['context']['city']) !== CatalogCategory::key($context['city']))) {
+            throw ValidationException::withMessages(['source' => 'This source already has saved work for a different Market identity. Review it in Import History & Saved Work; it has not been overwritten.']);
+        }
         if (! $this->data($proposal)) {
             if (! $proposal->wasRecentlyCreated) {
                 // Reopen legacy drafts intact; never replace their existing review snapshot.
@@ -115,6 +128,69 @@ class CatalogAiImportService
         }
 
         return $proposal;
+    }
+
+    public function prepare(User $user, array $input, ?UploadedFile $screenshot = null): array
+    {
+        $result = $this->results($user, $input['search_id'] ?? null);
+        if (! empty($input['search_id']) && ! $result) {
+            throw ValidationException::withMessages(['source' => 'Search results expired. Search again before analysing.']);
+        }
+        $context = $result['context'] ?? $this->context($input);
+        if (! in_array($context['import_mode'] ?? null, ['new_market', 'existing_market'], true)) {
+            throw ValidationException::withMessages(['import_mode' => 'Choose whether to create a new Market or add to an existing Market.']);
+        }
+        $cards = [];
+        foreach (array_unique($input['source_ids'] ?? []) as $index) {
+            if (! isset($result['sources'][$index])) {
+                throw ValidationException::withMessages(['source' => 'Select a source from your current search results.']);
+            }
+            $cards[] = $result['sources'][$index];
+        }
+        if (! empty($input['url'])) {
+            $cards[] = $this->sourceCard($input['url']);
+        }
+        $cards = collect($cards)->unique('url')->values();
+        if ($cards->isEmpty() || $cards->count() > 3 || (($screenshot || filled($input['text'] ?? null)) && $cards->count() !== 1)) {
+            throw ValidationException::withMessages(['source' => 'Select one to three sources, or exactly one source for supplied text or a screenshot.']);
+        }
+        if (! $screenshot && ! filled($input['text'] ?? null) && $cards->contains('type', 'video')) {
+            if ($cards->count() !== 1) {
+                throw ValidationException::withMessages(['source' => 'Analyse one video segment at a time. You can add more sources from Review Import.']);
+            }
+            $this->sources->videoRange($input);
+        }
+        $key = 'ai-import-prepare:'.$user->id.':'.hash('sha256', json_encode([$context, $cards->pluck('url')->all()]));
+
+        return Cache::lock($key.':lock', 240)->get(function () use ($user, $input, $screenshot, $cards, $key) {
+            $proposal = Cache::get($key) ? CatalogImportProposal::find(Cache::get($key)) : null;
+            $proposal ??= $this->start($user, $input);
+            if (! $this->data($proposal)) {
+                throw ValidationException::withMessages(['source' => 'This source has a legacy draft. Open it in Import History & Saved Work.']);
+            }
+            Cache::put($key, $proposal->id, 1800);
+            if ($proposal->status === 'imported') {
+                return ['proposal' => $proposal, 'errors' => []];
+            }
+            $data = $this->data($proposal);
+            $indices = [];
+            foreach ($cards as $card) {
+                $index = collect($data['sources'])->search(fn ($s) => $s['url'] === $card['url']);
+                if ($index === false) {
+                    throw ValidationException::withMessages(['source' => 'This source already has saved work. Open it in Import History & Saved Work to add another source without replacing edits.']);
+                }
+                $indices[] = $index;
+            }
+            try {
+                $this->analyse($proposal, [...$input, 'url' => null, 'source_ids' => $indices, 'select_extracted' => true], $screenshot);
+                $errors = [];
+            } catch (ValidationException $e) {
+                // Preserve recoverable work and expose the failure, never a false success.
+                $errors = $e->errors();
+            }
+
+            return ['proposal' => $proposal->refresh(), 'errors' => $errors];
+        }) ?: throw ValidationException::withMessages(['source' => 'Analysis is already running. Please wait.']);
     }
 
     public function sourceCard(string $url): array
@@ -235,11 +311,11 @@ class CatalogAiImportService
                         $source['analysed_hash'] = $hash;
                         $this->mergeMarketAnalysis($data, $graph, $source['url']);
                         foreach ($graph['stalls'] as $stall) {
-                            $stall['selected'] = false;
+                            $stall['selected'] = ! empty($input['select_extracted']);
                             $stall['parent_confirmed'] = false;
                             $stall['source_url'] = $source['url'];
                             foreach ($stall['foods'] as &$food) {
-                                $food['selected'] = false;
+                                $food['selected'] = ! empty($input['select_extracted']);
                                 $food['currency'] = 'MYR';
                                 $food['source_url'] = $source['url'];
                                 $food['category'] = CatalogCategory::canonical($food['category'], 'food');
@@ -299,12 +375,12 @@ class CatalogAiImportService
         $data['graph']['operating_days'] = $days->values()->all();
     }
 
-    public function saveDraft(CatalogImportProposal $proposal, array $input): void
+    public function saveDraft(CatalogImportProposal $proposal, array $input): string
     {
         $newImages = [];
         $removedImages = [];
         try {
-            DB::transaction(function () use ($proposal, $input, &$newImages, &$removedImages) {
+            return DB::transaction(function () use ($proposal, $input, &$newImages, &$removedImages) {
                 $proposal = CatalogImportProposal::query()->lockForUpdate()->findOrFail($proposal->id);
                 $this->editable($proposal);
                 if (! hash_equals($this->revision($proposal), $input['revision'] ?? '')) {
@@ -385,6 +461,8 @@ class CatalogAiImportService
                         $this->deleteDraftImage($proposal, $path);
                     }
                 });
+
+                return $this->revision($proposal);
             });
         } catch (\Throwable $e) {
             foreach ($newImages as $path) {
@@ -399,6 +477,48 @@ class CatalogAiImportService
         if (preg_match('~\Aai-import/'.preg_quote((string) $proposal->id, '~').'/[a-zA-Z0-9-]+\.(?:jpg|jpeg|png|webp)\z~', $path)) {
             app(CatalogDraftImageStorage::class)->disk()->delete($path);
         }
+    }
+
+    public function complete(User $user, CatalogImportProposal $proposal, array $input): ?array
+    {
+        try {
+            return Cache::lock('ai-import-complete:'.$proposal->id, 120)->block(1, function () use ($user, $proposal, $input) {
+                // Catalog writes remain atomic; saved edits survive an import validation error.
+                $proposal->refresh();
+                if ($proposal->status === 'imported' && isset($this->data($proposal)['import_result'])) {
+                    return $this->data($proposal)['import_result'];
+                }
+                $revision = $this->saveDraft($proposal, $input);
+                if (($input['action'] ?? 'import') === 'save') {
+                    return null;
+                }
+
+                return $this->import($user, $proposal, [...$input, 'revision' => $revision]);
+            });
+        } catch (LockTimeoutException) {
+            throw ValidationException::withMessages(['draft' => 'This import is already being processed. Wait, then open its saved result.']);
+        }
+    }
+
+    public function deleteEmpty(CatalogImportProposal $proposal): void
+    {
+        DB::transaction(function () use ($proposal) {
+            $proposal = CatalogImportProposal::query()->lockForUpdate()->findOrFail($proposal->id);
+            $this->editable($proposal);
+            $data = $this->data($proposal);
+            if (! $this->isUnusedEmpty($proposal, $data)) {
+                throw ValidationException::withMessages(['draft' => 'Only unused empty drafts can be removed. Analysed, edited or imported work is preserved.']);
+            }
+            // Keep the source and any other proposals or catalog provenance intact.
+            $proposal->delete();
+        });
+    }
+
+    private function isUnusedEmpty(CatalogImportProposal $proposal, array $data): bool
+    {
+        return $proposal->status === 'draft' && empty($data['graph']['stalls']) && empty($data['market_reviewed']) && empty($data['market_sources'])
+            && empty($data['graph']['operating_days']) && ! $proposal->proposalMarket()->exists() && ! $proposal->catalogSourceLinks()->exists()
+            && ! collect($data['sources'])->contains(fn ($source) => ! empty($source['text']) || ! empty($source['analysed_hash']) || ! empty($source['images']));
     }
 
     public function review(CatalogImportProposal $proposal): array
@@ -422,7 +542,7 @@ class CatalogAiImportService
             } unset($food);
         } unset($stall);
 
-        return [...$data, 'existingStalls' => $existingStalls, 'categories' => $categories,
+        return [...$data, 'existingStalls' => $existingStalls, 'categories' => $categories, 'canDeleteEmpty' => $this->isUnusedEmpty($proposal, $data),
             'marketIncomplete' => $marketId ? [] : array_values(array_filter([
                 empty($data['graph']['market']['address']) ? 'Address not yet provided' : null,
                 empty($data['graph']['operating_days']) ? 'Operating schedule not yet provided' : null,
@@ -451,6 +571,9 @@ class CatalogAiImportService
                 throw ValidationException::withMessages(['draft' => 'Confirm the current review before importing.']);
             }
             $review = $this->review($proposal);
+            if (empty($review['context']['market_id']) && empty($review['graph']['market']['matched_night_market_id']) && empty($review['graph']['market']['selected'])) {
+                throw ValidationException::withMessages(['draft' => 'Include the new inactive Market or explicitly link an existing Market before importing its Stalls and Foods.']);
+            }
             $selected = [];
             foreach ($review['graph']['stalls'] as $i => $stall) {
                 if (empty($stall['selected'])) {

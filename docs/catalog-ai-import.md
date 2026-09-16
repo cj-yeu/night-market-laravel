@@ -242,3 +242,53 @@ On the Laravel service, the operator must configure securely (no real values bel
 | `CATALOG_SEARCH_TAVILY_FREE_CONFIRMED` | `true` after confirming Free/no PAYG |
 
 Do not change shared `GEMINI_MODEL`, any OpenAI variable, database configuration or Volume in this release step. Do not set new image-root paths before the separate storage backup/layout procedure is verified. Existing public upload paths remain unchanged; private drafts are not proven durable on the current production mount. After the owner publishes, confirm the deployed commit/config, log in through the controllable browser and stop at Review Import for production acceptance. Do not run a production import just to test the feature. No commit, staging, push, merge, deploy, production DB or Volume action was performed here; protected files and existing work remain preserved.
+# Review-first workflow repair — 2026-09-16
+
+The primary flow is now **explicit New/Existing Market mode → Search Sources → select cards → Analyse & Prepare Import → editable Review Import → confirmed transactional import → success summary**. Searching and GET navigation never create drafts. Analysis saves recoverable work automatically; Save and continue later is secondary. One returned source is preselected. Video controls remain collapsed and segments remain bounded to 180 seconds.
+
+Review retains the entered new Market even when video extraction contains only Stalls/Foods. Missing address/schedule remain unknown and the Market remains inactive. Selected Stalls/Foods still require the existing ownership, category, price and private-photo checks. Final submission saves edits before import validation, so incomplete items can be completed or deselected without losing edits. Revision checks, proposal locks, duplicate checks, provenance and idempotent receipts remain in place. Success shows created/linked records and explicitly unselected records; GET/refresh never repeats the import.
+
+Import History & Saved Work offers Draft/Imported filters and meaningful Market names. Only unused empty module drafts can be deleted, with server checks protecting analysed, edited, legacy and imported work; source records are retained. The obsolete read-only Review view is removed; the existing Review route uses the shared editable view. Legacy start/update/import routes remain compatible.
+
+## Tavily 401 diagnosis
+
+- The production Admin source-search page was inspected read-only on 2026-09-16. It displayed **Articles configured**. In the deployed service this requires a nonempty `TAVILY_API_KEY` and `CATALOG_SEARCH_TAVILY_FREE_CONFIRMED=true`; it is not proof of valid authentication or remaining quota.
+- Local Laravel configuration loading also confirmed key presence and free confirmation, without exposing values; no local config cache was active.
+- The request is `POST https://api.tavily.com/search`, with the trimmed key in `Authorization: Bearer …`, consistent with [Tavily's official API reference](https://docs.tavily.com/documentation/api-reference/endpoint/search). No key is placed in the URL or shown in errors.
+- The reported production HTTP 401 means authentication was rejected, not an empty search. Whether the value is wrong, revoked or stale cannot be distinguished without the operator checking the owning Tavily account. Correct **`TAVILY_API_KEY` on the Laravel service**, not the MySQL service. Redeploy through the normal release process so Laravel's deployment configuration cache uses the corrected variable. Keep the free confirmation flag only while the account plan is verified; do not enable billing as a workaround. No Railway variables were changed here.
+- UI diagnostics distinguish missing key/free confirmation, rejected key (401), denied access, rate limit (429), usage limit (432/433), network/TLS failure and successful-but-empty results. No provider body, credentials, automatic retry or paid fallback is exposed.
+
+## Verification and limits
+
+- Targeted HTTP-fake tests: CatalogAiImportTest and CatalogSourceSearchTest **58 passed / 545 assertions**. Affected legacy extraction/import regressions: **29 passed / 252 assertions**. Combined **87 passed / 797 assertions**; no full-suite run. Deselected new Markets cannot be silently created for selected children.
+- Scoped Pint, changed-PHP syntax, JavaScript syntax and `git diff --check` passed. No migration changes. Temporary layout fixture files and their server were removed/stopped after checking; none are project deliverables.
+- Database-backed tests used transactions on verified `testing / mysql / night_market_laravel_testing / 127.0.0.1:3306`; no migration, schema rebuild or seeder. Test records rolled back.
+- Actual Chrome screenshots and interactions at **1440, 1024, 375px** used HTML rendered from the current Blade views with synthetic in-memory data. Search, editable Review and success layouts had no horizontal page overflow. Verified card selection, keyboard selection, source filter/Reset, selection counters (deselecting a Stall excludes its Foods), collapsed video controls and confirmation protection. The collapsed sources panel no longer leaves a wide empty column on desktop.
+- These are **layout/interaction fixtures, not authenticated browser end-to-end acceptance**. The full application workflow is exercised by Laravel feature tests; new-version real login, provider analysis and production import acceptance remain outstanding. Production browsing only verified the old deployed configuration indicator; no source search, analysis or import was submitted there.
+- Real Tavily/Gemini/YouTube/OpenAI requests this change: **0**. Ordinary browser asset requests and official documentation reading are not provider inference/search calls. No production database operation, Volume change, commit, staging, push or deployment.
+
+### Changed files for this repair
+
+```text
+app/Http/Controllers/Admin/CatalogAiImportController.php
+app/Http/Requests/CatalogAiImportRequest.php
+app/Services/CatalogAiImportService.php
+app/Services/CatalogImportProposalImportService.php
+app/Services/CatalogImportProposalService.php
+app/Services/CatalogSourceSearchService.php
+docs/catalog-ai-import.md
+public/assets/catalog-ai-import.css
+public/assets/catalog-ai-import.js
+resources/views/admin/ai-import/_header.blade.php
+resources/views/admin/ai-import/_video-range.blade.php (new)
+resources/views/admin/ai-import/draft.blade.php
+resources/views/admin/ai-import/history.blade.php
+resources/views/admin/ai-import/index.blade.php
+resources/views/admin/ai-import/review.blade.php (obsolete read-only view removed)
+resources/views/admin/ai-import/success.blade.php (new)
+routes/web.php
+tests/Feature/CatalogAiImportTest.php
+tests/Feature/CatalogSourceSearchTest.php
+```
+
+Earlier sections describe prior development and verification, not new real API calls made for this repair.
