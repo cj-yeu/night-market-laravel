@@ -426,6 +426,182 @@ class CatalogAiImportTest extends TestCase
         $this->assertSame(1, $market->stalls->sole()->foods()->count());
     }
 
+    public function test_new_market_can_be_imported_inactive_while_address_and_schedule_are_incomplete(): void
+    {
+        $name = 'TEST Incomplete Market '.Str::random(8);
+        $text = "$name is a night market in Petaling Jaya, Selangor.";
+        $payload = ['market' => ['name' => $name, 'address' => null, 'city' => 'Petaling Jaya', 'state' => 'Selangor',
+            'description' => null, 'evidence_text' => $text, 'confidence' => null, 'operating_days' => []],
+            'stalls' => [], 'warnings' => [], 'insufficient_data' => false];
+        Http::fake([$this->url => Http::response('<article>'.$text.'</article>', 200, ['Content-Type' => 'text/html']),
+            'generativelanguage.googleapis.com/*' => Http::response($this->response($payload))]);
+
+        $this->actingAs($this->admin)->post(route('admin.ai-import.start'), [
+            'name' => $name, 'city' => 'Petaling Jaya', 'url' => $this->url,
+        ])->assertSessionHasNoErrors();
+        $proposal = CatalogImportProposal::where('created_by', $this->admin->id)->sole();
+        $this->post(route('admin.ai-import.analyse', $proposal), ['source_ids' => [0]])->assertSessionHasNoErrors();
+        $proposal->refresh();
+        $this->patch(route('admin.ai-import.update', $proposal), [
+            'revision' => app(CatalogAiImportService::class)->revision($proposal),
+            'market' => ['selected' => 1, 'name' => $name, 'address' => '', 'city' => 'Petaling Jaya'],
+        ])->assertSessionHasNoErrors();
+        $proposal->refresh();
+        $this->post(route('admin.ai-import.import', $proposal), [
+            'revision' => app(CatalogAiImportService::class)->revision($proposal), 'confirm' => 1,
+        ])->assertSessionHasNoErrors();
+
+        $market = NightMarket::where('name', $name)->sole();
+        $this->assertSame(NightMarket::STATUS_INACTIVE, $market->status);
+        $this->assertSame('', $market->address);
+        $this->assertCount(0, $market->operatingDays);
+    }
+
+    public function test_later_article_analysis_enriches_market_after_video_items_were_extracted(): void
+    {
+        $name = 'TEST Enriched Market '.Str::random(8);
+        $firstText = "$name in Petaling Jaya, Selangor. TEST Video Stall sells TEST Cake Dessert RM8.";
+        $firstPayload = ['market' => ['name' => $name, 'address' => null, 'city' => 'Petaling Jaya', 'state' => 'Selangor',
+            'description' => null, 'evidence_text' => $firstText, 'confidence' => null, 'operating_days' => []],
+            'stalls' => [['name' => 'TEST Video Stall', 'description' => null, 'evidence_text' => $firstText, 'confidence' => null,
+                'foods' => [['name' => 'TEST Cake', 'category' => 'Dessert', 'description' => null, 'price_display' => 'RM8',
+                    'price_min' => 8, 'price_max' => 8, 'is_must_try' => false, 'evidence_text' => $firstText, 'confidence' => null]]]],
+            'warnings' => [], 'insufficient_data' => false];
+        $secondText = "$name, 15 Test Road, Petaling Jaya, Selangor opens Saturday 18:00 to 23:00.";
+        $secondPayload = ['market' => ['name' => $name, 'address' => '15 Test Road', 'city' => 'Petaling Jaya', 'state' => 'Selangor',
+            'description' => null, 'evidence_text' => $secondText, 'confidence' => null,
+            'operating_days' => [['day_of_week' => 'Saturday', 'opening_time' => '18:00', 'closing_time' => '23:00',
+                'evidence_text' => $secondText, 'confidence' => null]]],
+            'stalls' => [], 'warnings' => [], 'insufficient_data' => false];
+        Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()
+            ->push($this->response($firstPayload))->push($this->response($secondPayload))]);
+
+        $this->actingAs($this->admin)->post(route('admin.ai-import.start'), [
+            'name' => $name, 'city' => 'Petaling Jaya', 'url' => $this->url,
+        ])->assertSessionHasNoErrors();
+        $proposal = CatalogImportProposal::where('created_by', $this->admin->id)->sole();
+        $this->post(route('admin.ai-import.analyse', $proposal), ['source_ids' => [0], 'text' => $firstText])->assertSessionHasNoErrors();
+        $this->post(route('admin.ai-import.analyse', $proposal), [
+            'url' => 'https://second.example.test/market', 'text' => $secondText,
+        ])->assertSessionHasNoErrors();
+
+        $graph = app(CatalogAiImportService::class)->data($proposal->fresh())['graph'];
+        $this->assertCount(1, $graph['stalls']);
+        $this->assertSame('15 Test Road', $graph['market']['address']);
+        $this->assertSame('Saturday', $graph['operating_days'][0]['day_of_week']);
+    }
+
+    public function test_new_market_video_without_market_payload_imports_full_chain_and_repeated_post_is_idempotent(): void
+    {
+        $name = 'TEST Video Market '.Str::random(8);
+        $text = '00:15 TEST Sweet Stall sells TEST Cake Dessert RM8 per slice.';
+        $payload = $this->payload();
+        $payload['market'] = null;
+        $payload['stalls'][0]['evidence_text'] = $text;
+        $payload['stalls'][0]['foods'][0]['evidence_text'] = $text;
+        Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()
+            ->push(['candidates' => [['finishReason' => 'STOP', 'content' => ['parts' => [['text' => $text]]]]]])
+            ->push($this->response($payload))]);
+        $this->actingAs($this->admin)->post(route('admin.ai-import.start'), [
+            'name' => $name, 'city' => 'Petaling Jaya', 'url' => 'https://www.youtube.com/watch?v=TESTvideo01',
+        ])->assertSessionHasNoErrors();
+        $p = CatalogImportProposal::where('created_by', $this->admin->id)->sole();
+        $this->post(route('admin.ai-import.analyse', $p), ['source_ids' => [0]])->assertSessionHasNoErrors();
+        $p->refresh();
+        $graph = app(CatalogAiImportService::class)->data($p)['graph'];
+        $this->assertSame($name, $graph['market']['name']);
+        $this->assertTrue($graph['market']['selected']);
+        $this->assertNull($graph['market']['address'] ?? null);
+        $this->assertNull($graph['market']['evidence_text'] ?? null);
+        $this->assertFalse($graph['stalls'][0]['parent_confirmed']);
+        $this->get(route('admin.ai-import.show', $p))->assertOk()->assertSee($name)->assertSee('not an AI verification');
+        $this->patch(route('admin.ai-import.update', $p), $this->edit($p))->assertSessionHasNoErrors();
+        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Create new inactive Market')->assertSee('Operating schedule not yet provided');
+        $input = ['revision' => app(CatalogAiImportService::class)->revision($p->fresh()), 'confirm' => 1];
+        $this->post(route('admin.ai-import.import', $p), $input)->assertSessionHasNoErrors();
+        $market = NightMarket::where('name', $name)->sole();
+        $stall = $market->stalls->sole();
+        $food = $stall->foods->sole();
+        $this->assertSame('inactive', $market->status);
+        $this->assertSame('inactive', $stall->status);
+        $this->assertSame('inactive', $food->status);
+        $this->assertSame('unknown', $stall->halal_status);
+        $this->assertSame('8.00', $food->price_max);
+        Storage::disk('public')->assertExists($food->image_path);
+        $this->assertSame(3, CatalogSocialMediaSourceLink::where('catalog_import_proposal_id', $p->id)->count());
+        $this->get(route('night-markets.show', $market))->assertNotFound();
+        $this->post(route('admin.ai-import.import', $p), $input)->assertRedirect(route('admin.night-markets.show', $market));
+        $this->assertSame(1, NightMarket::where('name', $name)->count());
+        $this->assertSame(1, $stall->foods()->count());
+        Http::assertSentCount(2);
+    }
+
+    public function test_empty_and_failed_searches_are_not_reused_but_success_is_cached(): void
+    {
+        config(['services.catalog_search.tavily_key' => 'fake-search', 'services.catalog_search.tavily_free_confirmed' => true]);
+        Http::fake(['api.tavily.com/search' => Http::sequence()->push(['results' => []])
+            ->push(['detail' => 'PRIVATE_API_ERROR'], 401)
+            ->push(['results' => [['url' => $this->url, 'title' => 'Recovered article']]])]);
+        $input = ['market_id' => $this->market->id, 'search_kind' => 'articles'];
+        $this->actingAs($this->admin);
+        $first = $this->post(route('admin.ai-import.search'), $input)->assertStatus(303);
+        $this->get($first->headers->get('Location'))->assertSee('No retrieved sources');
+        $second = $this->post(route('admin.ai-import.search'), $input)->assertStatus(303);
+        $this->get($second->headers->get('Location'))->assertSee('HTTP 401')->assertDontSee('PRIVATE_API_ERROR');
+        $third = $this->post(route('admin.ai-import.search'), $input)->assertStatus(303);
+        $this->get($third->headers->get('Location'))->assertSee('Recovered article');
+        $fourth = $this->post(route('admin.ai-import.search'), $input)->assertStatus(303);
+        $this->assertSame($third->headers->get('Location'), $fourth->headers->get('Location'));
+        Http::assertSentCount(3);
+    }
+
+    public function test_later_source_preserves_admin_cleared_market_fields_and_schedule(): void
+    {
+        $name = 'TEST Reviewed Market '.Str::random(8);
+        $text = "$name, 15 Test Road, Petaling Jaya, Selangor. Saturday 18:00 to 23:00.";
+        $payload = ['market' => ['name' => $name, 'city' => 'Petaling Jaya', 'state' => 'Selangor', 'address' => '15 Test Road',
+            'evidence_text' => $text, 'operating_days' => [['day_of_week' => 'Saturday', 'opening_time' => '18:00', 'closing_time' => '23:00', 'evidence_text' => $text]]],
+            'stalls' => [], 'warnings' => [], 'insufficient_data' => false];
+        Http::fake(['generativelanguage.googleapis.com/*' => Http::response($this->response($payload))]);
+        $this->actingAs($this->admin)->post(route('admin.ai-import.start'), ['name' => $name, 'city' => 'Petaling Jaya', 'url' => $this->url])->assertSessionHasNoErrors();
+        $p = CatalogImportProposal::where('created_by', $this->admin->id)->sole();
+        $this->post(route('admin.ai-import.analyse', $p), ['source_ids' => [0], 'text' => $text])->assertSessionHasNoErrors();
+        $this->patch(route('admin.ai-import.update', $p), ['revision' => app(CatalogAiImportService::class)->revision($p->fresh()),
+            'market' => ['address' => '', 'selected' => false], 'operating_days' => []])->assertSessionHasNoErrors();
+        $this->post(route('admin.ai-import.analyse', $p), ['url' => 'https://second.example.test/market', 'text' => $text])->assertSessionHasNoErrors();
+        $data = app(CatalogAiImportService::class)->data($p->fresh());
+        $this->assertNull($data['graph']['market']['address']);
+        $this->assertFalse($data['graph']['market']['selected']);
+        $this->assertSame([], $data['graph']['operating_days']);
+        $this->assertCount(2, $data['market_sources']);
+    }
+
+    public function test_incomplete_new_market_does_not_duplicate_existing_identity(): void
+    {
+        $this->actingAs($this->admin)->post(route('admin.ai-import.start'), ['name' => $this->market->name, 'city' => $this->market->city, 'url' => $this->url])->assertSessionHasNoErrors();
+        $p = CatalogImportProposal::where('created_by', $this->admin->id)->sole();
+        $this->post(route('admin.ai-import.import', $p), ['revision' => app(CatalogAiImportService::class)->revision($p), 'confirm' => 1])->assertSessionHasErrors();
+        $this->assertSame(1, NightMarket::where('name', $this->market->name)->count());
+        $this->assertSame('draft', $p->fresh()->status);
+        Http::assertNothingSent();
+    }
+
+    public function test_another_city_source_cannot_supply_new_market_evidence(): void
+    {
+        $name = 'TEST Location Market '.Str::random(8);
+        $text = "$name in Shah Alam, Selangor, 55 Other Road.";
+        Http::fake(['generativelanguage.googleapis.com/*' => Http::response($this->response([
+            'market' => ['name' => $name, 'city' => 'Shah Alam', 'state' => 'Selangor', 'address' => '55 Other Road', 'evidence_text' => $text],
+            'stalls' => [], 'warnings' => [], 'insufficient_data' => false,
+        ]))]);
+        $this->actingAs($this->admin)->post(route('admin.ai-import.start'), ['name' => $name, 'city' => 'Petaling Jaya', 'url' => $this->url])->assertSessionHasNoErrors();
+        $p = CatalogImportProposal::where('created_by', $this->admin->id)->sole();
+        $this->post(route('admin.ai-import.analyse', $p), ['source_ids' => [0], 'text' => $text])->assertSessionHasErrors('source');
+        $market = app(CatalogAiImportService::class)->data($p->fresh())['graph']['market'];
+        $this->assertSame('Petaling Jaya', $market['city']);
+        $this->assertArrayNotHasKey('address', $market);
+    }
+
     public function test_candidate_image_requires_actual_source_membership_and_can_be_removed(): void
     {
         $p = $this->draft();

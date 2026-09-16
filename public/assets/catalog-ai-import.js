@@ -8,7 +8,7 @@ document.querySelectorAll('[data-ai-busy]').forEach(form => {
     });
     form.addEventListener('input',()=>{const link=form.querySelector('[data-review-link]');if(link){link.setAttribute('aria-disabled','true');link.title='Save draft edits before reviewing';}});
     form.querySelector('[data-review-link]')?.addEventListener('click',e=>{if(e.currentTarget.getAttribute('aria-disabled')==='true'){e.preventDefault();alert('Save your draft edits before opening Review Import.');}});
-    const update=()=>{const count=form.querySelector('[data-selection-count]');if(count)count.textContent=`${form.querySelectorAll('[name="source_ids[]"]:checked').length} sources · ${form.querySelectorAll('[data-select-stall]:checked').length} stalls · ${form.querySelectorAll('[data-select-food]:checked').length} foods selected`;};
+    const update=()=>{const count=form.querySelector('[data-selection-count]');if(count){const market=form.querySelector('[name="market[selected]"][type="checkbox"]');count.textContent=`${market ? `${market.checked ? 1 : 0} market · ` : ''}${form.querySelectorAll('[name="source_ids[]"]:checked').length} sources · ${form.querySelectorAll('[data-select-stall]:checked').length} stalls · ${form.querySelectorAll('[data-select-food]:checked').length} foods selected`;}};
     form.addEventListener('change',update);update();
 });
 document.querySelectorAll('[data-import-context]').forEach(form=>{

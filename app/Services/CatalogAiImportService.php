@@ -54,7 +54,9 @@ class CatalogAiImportService
             $result = $this->searchProvider->search($context['name'], $context['city'], $kind);
             $id = (string) Str::uuid();
             Cache::put('ai-import-results:'.$user->id.':'.$id, [...$result, 'context' => $context, 'search_kind' => $kind], 1800);
-            Cache::put($key, $id, 300);
+            if ($result['sources'] !== [] && $result['notices'] === []) {
+                Cache::put($key, $id, 300);
+            }
 
             return $id;
         }) ?: throw ValidationException::withMessages(['search' => 'Search is already running. Please wait.']);
@@ -109,7 +111,7 @@ class CatalogAiImportService
                 // Reopen legacy drafts intact; never replace their existing review snapshot.
                 return $proposal;
             }
-            $this->persist($proposal, ['context' => $context, 'sources' => $selected, 'graph' => ['market' => ['name' => $context['name'], 'city' => $context['city'], 'state' => 'Selangor'], 'operating_days' => [], 'stalls' => []]]);
+            $this->persist($proposal, ['context' => $context, 'sources' => $selected, 'graph' => ['market' => ['name' => $context['name'], 'city' => $context['city'], 'state' => 'Selangor', 'selected' => ! $context['market_id']], 'operating_days' => [], 'stalls' => []]]);
         }
 
         return $proposal;
@@ -220,7 +222,7 @@ class CatalogAiImportService
                             }
                         }
                         $read = filled($input['text'] ?? null) ? ['text' => $input['text'], 'images' => [], 'mode' => 'Admin-provided text analysed']
-                            : $this->sources->read($source['url'], $screenshot ? ['mime' => $screenshot->getMimeType(), 'body' => $screenshot->get()] : null, $input);
+                            : $this->sources->read($source['url'], $screenshot ? ['mime' => $screenshot->getMimeType(), 'body' => $screenshot->get()] : null, $input, $data['context']);
                         $source['text'] = $read['text'];
                         $source['images'] = $read['images'];
                         $source['status'] = $read['mode'];
@@ -231,10 +233,7 @@ class CatalogAiImportService
                             throw ValidationException::withMessages(['source' => 'A draft supports at most 30 Stalls and 30 Foods, including source variants. Review this draft and use a separate draft for additional sources.']);
                         }
                         $source['analysed_hash'] = $hash;
-                        if (empty($data['market_reviewed']) && ! $data['graph']['stalls']) {
-                            $data['graph']['market'] = $graph['market'];
-                            $data['graph']['operating_days'] = $graph['operating_days'];
-                        }
+                        $this->mergeMarketAnalysis($data, $graph, $source['url']);
                         foreach ($graph['stalls'] as $stall) {
                             $stall['selected'] = false;
                             $stall['parent_confirmed'] = false;
@@ -263,6 +262,43 @@ class CatalogAiImportService
         }
     }
 
+    private function mergeMarketAnalysis(array &$data, array $graph, string $sourceUrl): void
+    {
+        if (! empty($data['context']['market_id']) || ! empty($data['graph']['market']['matched_night_market_id'])) {
+            return;
+        }
+
+        $current = $data['graph']['market'] ?? [];
+        $incoming = $graph['market'] ?? [];
+        foreach (['name', 'address', 'city', 'description', 'evidence_text', 'confidence'] as $field) {
+            if (in_array($field, $data['market_edited_fields'] ?? [], true)) {
+                continue;
+            }
+            if (($current[$field] ?? null) === null || trim((string) ($current[$field] ?? '')) === '') {
+                if (($incoming[$field] ?? null) !== null && trim((string) $incoming[$field]) !== '') {
+                    $current[$field] = $incoming[$field];
+                }
+            }
+        }
+        $current['state'] = 'Selangor';
+        $data['graph']['market'] = $current;
+
+        if (filled($incoming['evidence_text'] ?? null)) {
+            $data['market_sources'][$sourceUrl] = $incoming['evidence_text'];
+        }
+        if (! empty($data['operating_days_reviewed'])) {
+            return;
+        }
+
+        $days = collect($data['graph']['operating_days'] ?? [])->keyBy('day_of_week');
+        foreach ($graph['operating_days'] ?? [] as $day) {
+            if (! empty($day['day_of_week']) && ! $days->has($day['day_of_week'])) {
+                $days->put($day['day_of_week'], $day);
+            }
+        }
+        $data['graph']['operating_days'] = $days->values()->all();
+    }
+
     public function saveDraft(CatalogImportProposal $proposal, array $input): void
     {
         $newImages = [];
@@ -280,10 +316,14 @@ class CatalogAiImportService
                 }
                 foreach (['name', 'address', 'city', 'matched_night_market_id', 'selected'] as $key) {
                     if (array_key_exists($key, $input['market'] ?? [])) {
+                        if (($data['graph']['market'][$key] ?? null) !== $input['market'][$key]) {
+                            $data['market_edited_fields'] = array_values(array_unique([...($data['market_edited_fields'] ?? []), $key]));
+                        }
                         $data['graph']['market'][$key] = $input['market'][$key];
                     }
                 }
                 if (! $data['context']['market_id'] && array_key_exists('operating_days', $input)) {
+                    $data['operating_days_reviewed'] = true;
                     $data['graph']['operating_days'] = collect($input['operating_days'])->filter(fn ($d) => ! empty($d['selected']))
                         ->map(fn ($d) => Arr::only($d, ['day_of_week', 'opening_time', 'closing_time', 'evidence_text']))->values()->all();
                 }
@@ -383,6 +423,10 @@ class CatalogAiImportService
         } unset($stall);
 
         return [...$data, 'existingStalls' => $existingStalls, 'categories' => $categories,
+            'marketIncomplete' => $marketId ? [] : array_values(array_filter([
+                empty($data['graph']['market']['address']) ? 'Address not yet provided' : null,
+                empty($data['graph']['operating_days']) ? 'Operating schedule not yet provided' : null,
+            ])),
             'marketName' => $targetMarket?->name ?? $data['graph']['market']['name'] ?? 'Market identity incomplete',
             'marketCity' => $targetMarket?->city ?? $data['graph']['market']['city'] ?? ''];
     }
@@ -420,7 +464,7 @@ class CatalogAiImportService
                 $selected[] = $stall;
             }
             if (! $selected && (! empty($review['context']['market_id']) || ! empty($review['graph']['market']['matched_night_market_id']) || empty($review['graph']['market']['selected']))) {
-                throw ValidationException::withMessages(['draft' => 'Select complete Stalls/Foods or explicitly select a complete new Market.']);
+                throw ValidationException::withMessages(['draft' => 'Select complete Stalls/Foods or include the new inactive Market in the draft.']);
             }
             $graph = $review['graph'];
             $graph['stalls'] = $selected;

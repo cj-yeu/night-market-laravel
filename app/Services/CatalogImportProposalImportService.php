@@ -188,10 +188,10 @@ class CatalogImportProposalImportService
                     $suggestion = new CatalogImportProposalMarket($graph['market']);
                     $suggestion->setRelation('operatingDays', new Collection(collect($graph['operating_days'])->map(fn ($d) => new CatalogImportProposalOperatingDay($d))->all()));
                     $this->assertOperatingDays($suggestion->operatingDays);
-                    $this->assertNewMarketDraft($proposal, $suggestion);
+                    $this->assertModuleNewMarketDraft($proposal, $suggestion);
                     $proposal->setRelation('proposalMarket', $suggestion);
-                    $this->preflightConflicts($proposal, ['market' => null, 'stall' => null]);
-                    $market = NightMarket::create(['name' => $suggestion->name, 'address' => $suggestion->address,
+                    $this->preflightConflicts($proposal, ['market' => null, 'stall' => null], true);
+                    $market = NightMarket::create(['name' => $suggestion->name, 'address' => (string) $suggestion->address,
                         'city' => $suggestion->city, 'state' => 'Selangor', 'description' => $suggestion->description,
                         'source_url' => $proposal->socialMediaSource->canonical_url, 'status' => NightMarket::STATUS_INACTIVE]);
                     foreach ($suggestion->operatingDays as $day) {
@@ -574,6 +574,17 @@ class CatalogImportProposalImportService
         }
     }
 
+    private function assertModuleNewMarketDraft(CatalogImportProposal $proposal, CatalogImportProposalMarket $market): void
+    {
+        if ($proposal->matched_night_market_id !== null || $proposal->matched_stall_id !== null
+            || $market->matched_night_market_id !== null
+            || $this->normalizedRequired($market->name, 255) === ''
+            || $this->normalizedRequired($market->city, 100) === ''
+            || $market->state !== 'Selangor') {
+            $this->fail(self::FAILURE_PROPOSAL_INVALID);
+        }
+    }
+
     private function assertFoodDraft(CatalogImportProposalFood $food): void
     {
         $this->normalizedRequired($food->name, 255);
@@ -588,7 +599,7 @@ class CatalogImportProposalImportService
     }
 
     /** @param array{market: NightMarket|null, stall: Stall|null} $targets */
-    private function preflightConflicts(CatalogImportProposal $proposal, array $targets): void
+    private function preflightConflicts(CatalogImportProposal $proposal, array $targets, bool $allowIncompleteNewMarket = false): void
     {
         $market = $proposal->proposalMarket;
         if (! $market) {
@@ -597,12 +608,20 @@ class CatalogImportProposalImportService
 
         if ($proposal->target_type === CatalogImportProposal::TARGET_NEW_MARKET) {
             $name = $this->normalizedRequired($market->name, 255);
-            $address = $this->normalizedRequired($market->address, 255);
+            $address = $allowIncompleteNewMarket
+                ? mb_substr(trim((string) $market->address), 0, 255)
+                : $this->normalizedRequired($market->address, 255);
             $city = $this->normalizedRequired($market->city, 100);
             $state = 'Selangor';
             $identityHash = $this->catalogMarketIdentity->hash($name, $address, $city, $state);
             $conflict = NightMarket::query()
                 ->where('catalog_identity_hash', $identityHash)
+                ->when($allowIncompleteNewMarket, fn ($query) => $query->orWhere(function ($query) use ($name, $address, $city, $state): void {
+                    $query->whereRaw('LOWER(TRIM(name)) = ?', [Str::lower($name)])
+                        ->whereRaw('LOWER(TRIM(city)) = ?', [Str::lower($city)])
+                        ->where('state', $state)
+                        ->when($address !== '', fn ($query) => $query->where(fn ($query) => $query->whereNull('address')->orWhereRaw("TRIM(address) = ''")));
+                }))
                 ->orWhere(function ($query) use ($name, $address, $city, $state): void {
                     $query->whereNull('catalog_identity_hash')
                         ->where('name', $name)
