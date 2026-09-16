@@ -239,7 +239,7 @@ class CatalogImportProposalImportService
                         $counts['linked']++;
                     }
                     $linked($stall, CatalogSocialMediaSourceLink::TYPE_STALL, 'stall_id', $row['source_url'] ?? null);
-                    $records[] = ['type' => 'stall', 'id' => $stall->id, 'name' => $stall->name];
+                    $records[] = ['type' => 'stall', 'id' => $stall->id, 'name' => $stall->name, 'operation' => empty($row['matched_stall_id']) ? 'Created' : 'Linked'];
                     foreach ($row['foods'] as $item) {
                         $name = $this->normalizedRequired($item['name'], 255);
                         $food = empty($item['matched_food_id']) ? null : Food::query()->lockForUpdate()->find($item['matched_food_id']);
@@ -273,10 +273,21 @@ class CatalogImportProposalImportService
                             $counts['foods']++;
                             $linked($food, CatalogSocialMediaSourceLink::TYPE_FOOD, 'food_id', $item['source_url'] ?? null);
                         }
-                        $records[] = ['type' => 'food', 'id' => $food->id, 'name' => $food->name];
+                        $records[] = ['type' => 'food', 'id' => $food->id, 'name' => $food->name, 'operation' => empty($item['matched_food_id']) ? 'Created' : 'Linked'];
                     }
                 }
-                $result = ['market_id' => $market->id, 'stall_id' => $data['context']['stall_id'], 'counts' => $counts, 'records' => $records];
+                $skipped = [];
+                foreach ($data['graph']['stalls'] as $row) {
+                    if (empty($row['selected'])) {
+                        $skipped[] = ['type' => 'Stall', 'name' => $row['name'] ?: 'Unnamed Stall', 'reason' => 'Not selected'];
+                    }
+                    foreach ($row['foods'] as $item) {
+                        if (empty($row['selected']) || empty($item['selected'])) {
+                            $skipped[] = ['type' => 'Food', 'name' => $item['name'] ?: 'Unnamed Food', 'reason' => empty($row['selected']) ? 'Parent Stall not selected' : 'Not selected'];
+                        }
+                    }
+                }
+                $result = ['market_id' => $market->id, 'stall_id' => $data['context']['stall_id'], 'counts' => $counts, 'records' => $records, 'skipped' => $skipped];
                 $data['import_result'] = $result;
                 $proposal->forceFill(['status' => 'imported', 'reviewed_by' => $reviewer->id, 'reviewed_at' => now(), 'imported_at' => now(),
                     'review_metadata_snapshot' => ['ai_import' => $data]])->save();

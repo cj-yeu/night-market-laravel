@@ -81,9 +81,10 @@ class CatalogImportProposalService
     /**
      * @return LengthAwarePaginator<CatalogImportProposal>
      */
-    public function proposals(): LengthAwarePaginator
+    public function proposals(?string $status = null): LengthAwarePaginator
     {
         return CatalogImportProposal::query()
+            ->when(in_array($status, ['draft', 'imported'], true), fn ($query) => $query->where('status', $status))
             ->with([
                 'socialMediaSource:id,platform,canonical_url,metadata_status',
                 'matchedNightMarket:id,name',
@@ -92,7 +93,7 @@ class CatalogImportProposalService
                 'createdBy:id,name',
             ])
             ->latest()
-            ->paginate(15);
+            ->paginate(15)->withQueryString();
     }
 
     public function detail(CatalogImportProposal $proposal): CatalogImportProposal

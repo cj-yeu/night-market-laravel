@@ -32,6 +32,40 @@ class CatalogSourceSearchTest extends TestCase
             'thumbnails' => ['medium' => ['url' => 'https://i.ytimg.com/vi/TESTvideo01/mqdefault.jpg']]]];
     }
 
+    public function test_article_401_reports_present_but_rejected_key_and_exact_variable_without_leaking_response(): void
+    {
+        Http::fake(['api.tavily.com/search' => Http::response(['detail' => 'PRIVATE_AUTH_DATA'], 401)]);
+        $status = app(CatalogSourceSearchService::class)->status();
+        $this->assertTrue($status['article_key_present']);
+        $this->assertTrue($status['article_free_confirmed']);
+        $result = app(CatalogSourceSearchService::class)->search('SS2', 'Petaling Jaya', 'articles');
+        $this->assertSame([], $result['sources']);
+        $this->assertStringContainsString('HTTP 401', $result['notices'][0]);
+        $this->assertStringContainsString('TAVILY_API_KEY', $result['notices'][0]);
+        $this->assertStringContainsString('Bearer authentication', $result['notices'][0]);
+        $this->assertStringNotContainsString('PRIVATE_AUTH_DATA', json_encode($result));
+        $this->assertStringNotContainsString('fake-search', json_encode($result));
+        Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer fake-search') && ! isset($request['api_key']));
+        Http::assertSentCount(1);
+    }
+
+    public function test_empty_success_is_distinct_from_missing_key_and_no_secret_is_in_diagnostic(): void
+    {
+        Http::fake(['api.tavily.com/search' => Http::response(['results' => []])]);
+        $result = app(CatalogSourceSearchService::class)->search('SS2', 'Petaling Jaya', 'articles');
+        $this->assertStringContainsString('succeeded (HTTP 200)', $result['notices'][0]);
+        $this->assertStringContainsString('no usable sources', $result['notices'][0]);
+        config(['services.catalog_search.tavily_key' => '']);
+        $this->assertFalse(app(CatalogSourceSearchService::class)->status()['article_key_present']);
+        try {
+            app(CatalogSourceSearchService::class)->search('SS2', 'Petaling Jaya', 'articles');
+            $this->fail('Missing credentials must not look like empty successful results.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('set TAVILY_API_KEY', $e->errors()['search'][0]);
+        }
+        Http::assertSentCount(1);
+    }
+
     public function test_search_combines_actual_provider_sources_without_gemini_or_generated_answer_urls(): void
     {
         config(['services.gemini.api_key' => null, 'services.catalog_ai.free_tier_confirmed' => false]);

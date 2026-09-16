@@ -122,6 +122,166 @@ class CatalogAiImportTest extends TestCase
             'selected' => 1, 'parent_confirmed' => 1, 'foods' => [$row]]]];
     }
 
+    public function test_explicit_import_mode_and_exact_existing_target_are_required_before_search_or_prepare(): void
+    {
+        $count = CatalogImportProposal::count();
+        $this->actingAs($this->admin)->post(route('admin.ai-import.search'), ['name' => 'TEST Market', 'city' => 'Petaling Jaya'])
+            ->assertSessionHasErrors('import_mode');
+        $this->post(route('admin.ai-import.prepare'), ['import_mode' => 'existing_market', 'url' => $this->url])
+            ->assertSessionHasErrors('market_id');
+        $this->post(route('admin.ai-import.prepare'), ['import_mode' => 'new_market', 'market_id' => $this->market->id, 'url' => $this->url])
+            ->assertSessionHasErrors('market_id');
+        $this->travel(61)->seconds();
+        $this->post(route('admin.ai-import.prepare'), ['import_mode' => 'new_market', 'name' => 'TEST Market', 'city' => 'Petaling Jaya'])
+            ->assertSessionHasErrors('source');
+        $this->assertSame($count, CatalogImportProposal::count());
+        Http::assertNothingSent();
+    }
+
+    public function test_single_video_is_selected_search_creates_no_draft_and_prepare_preserves_new_market_without_ai_market_payload(): void
+    {
+        config(['services.youtube.data_api_key' => 'fake-video']);
+        $name = 'TEST Intended Market '.Str::random(8);
+        $video = Str::random(11);
+        $this->text = str_replace($this->market->name, $name, $this->text);
+        Http::fake(['www.googleapis.com/youtube/v3/search*' => Http::response(['items' => [['id' => ['videoId' => $video], 'snippet' => ['title' => 'TEST video evidence']]]]),
+            'generativelanguage.googleapis.com/*' => Http::sequence()->push(['candidates' => [['finishReason' => 'STOP', 'content' => ['parts' => [['text' => '00:10 '.$this->text]]]]]])->push($this->response($this->payload()))]);
+        $count = CatalogImportProposal::count();
+        $response = $this->actingAs($this->admin)->post(route('admin.ai-import.search'), ['import_mode' => 'new_market', 'name' => $name, 'city' => 'Petaling Jaya', 'search_kind' => 'videos'])->assertStatus(303);
+        $this->get($response->headers->get('Location'))->assertOk()->assertSee('Analyse &amp; Prepare Import', false)
+            ->assertSee('value="0" checked', false)->assertSee('Selected')->assertSee($name);
+        $this->get($response->headers->get('Location'))->assertOk();
+        $this->assertSame($count, CatalogImportProposal::count());
+        parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+        config(['services.youtube.data_api_key' => null]); // Preview metadata is unnecessary for this content test.
+        $input = ['search_id' => $query['search_id'], 'source_ids' => [0]];
+        $response = $this->post(route('admin.ai-import.prepare'), $input)->assertStatus(303)->assertSessionHasNoErrors();
+        $p = CatalogImportProposal::where('created_by', $this->admin->id)->latest('id')->firstOrFail();
+        $response->assertRedirect(route('admin.ai-import.review', $p));
+        $data = app(CatalogAiImportService::class)->data($p);
+        $this->assertSame($name, $data['graph']['market']['name']);
+        $this->assertSame('Petaling Jaya', $data['graph']['market']['city']);
+        $this->assertEmpty($data['graph']['market']['address'] ?? null);
+        $this->assertSame([], $data['graph']['operating_days']);
+        $this->assertTrue($data['graph']['stalls'][0]['selected']);
+        $this->assertTrue($data['graph']['stalls'][0]['foods'][0]['selected']);
+        $this->assertFalse($data['graph']['stalls'][0]['parent_confirmed']);
+        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Create Night Market, Stalls &amp; Foods', false)
+            ->assertSee('name="stalls[0][foods][0][price_min]"', false)->assertSee('Save and continue later');
+        $this->post(route('admin.ai-import.prepare'), $input)->assertRedirect(route('admin.ai-import.review', $p))->assertSessionHasNoErrors();
+        $this->assertSame($count + 1, CatalogImportProposal::count());
+        Http::assertSentCount(3); // One search, one video read, one structured extraction. No GET/repeat calls.
+        $edit = [...$this->edit($p->refresh()), 'action' => 'import', 'confirm' => 1];
+        $this->post(route('admin.ai-import.complete', $p), $edit)->assertRedirect(route('admin.ai-import.success', $p))->assertSessionHasNoErrors();
+        $receipt = app(CatalogAiImportService::class)->data($p->refresh())['import_result'];
+        $this->assertSame(['markets' => 1, 'stalls' => 1, 'foods' => 1, 'linked' => 0], $receipt['counts']);
+        $market = NightMarket::findOrFail($receipt['market_id']);
+        $this->assertSame($name, $market->name);
+        $this->assertSame('inactive', $market->status);
+        $this->assertFalse($market->operatingDays()->exists());
+        $stall = $market->stalls()->firstOrFail();
+        $food = $stall->foods()->firstOrFail();
+        $this->assertSame('inactive', $stall->status);
+        $this->assertSame('inactive', $food->status);
+        Storage::disk('public')->assertExists($food->image_path);
+        $this->post(route('admin.ai-import.complete', $p), $edit)->assertRedirect(route('admin.ai-import.success', $p));
+        $this->assertSame(1, NightMarket::where('name', $name)->count());
+        $this->assertSame(1, $stall->foods()->count());
+        $this->get(route('admin.ai-import.success', $p))->assertOk()->assertSee('Created 1 Night Markets, 1 Stalls and 1 Foods.');
+        Http::assertSentCount(3);
+    }
+
+    public function test_prepare_existing_market_review_edits_import_in_one_step_with_exact_skipped_summary(): void
+    {
+        $payload = $this->payload();
+        $payload['stalls'][0]['foods'][] = [...$payload['stalls'][0]['foods'][0], 'name' => 'TEST Skip Cake'];
+        $text = $this->text.' TEST Skip Cake is also sold by TEST Sweet Stall.';
+        $payload['stalls'][0]['foods'][1]['evidence_text'] = $text;
+        Http::fake([$this->url => Http::response('<article>'.$text.'</article>', 200, ['Content-Type' => 'text/html']),
+            'generativelanguage.googleapis.com/*' => Http::response($this->response($payload))]);
+        $this->actingAs($this->admin)->post(route('admin.ai-import.prepare'), ['import_mode' => 'existing_market', 'market_id' => $this->market->id, 'url' => $this->url])
+            ->assertStatus(303)->assertSessionHasNoErrors();
+        $p = CatalogImportProposal::where('created_by', $this->admin->id)->latest('id')->firstOrFail();
+        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Add Stalls &amp; Foods to Existing Market', false);
+        $original = $this->market->fresh()->getAttributes();
+        $input = [...$this->edit($p), 'action' => 'import', 'confirm' => 1];
+        $this->post(route('admin.ai-import.complete', $p), $input)->assertRedirect(route('admin.ai-import.success', $p))->assertSessionHasNoErrors();
+        $receipt = app(CatalogAiImportService::class)->data($p->refresh())['import_result'];
+        $this->assertSame(['markets' => 0, 'stalls' => 1, 'foods' => 1, 'linked' => 0], $receipt['counts']);
+        $this->assertSame($original, $this->market->fresh()->getAttributes());
+        $this->assertSame([['type' => 'Food', 'name' => 'TEST Skip Cake', 'reason' => 'Not selected']], $receipt['skipped']);
+        $this->get(route('admin.ai-import.success', $p))->assertOk()->assertSee('TEST Skip Cake')->assertSee('Not selected');
+        $this->post(route('admin.ai-import.complete', $p), $input)->assertRedirect(route('admin.ai-import.success', $p));
+        $this->assertSame(1, $this->market->stalls()->where('name', 'TEST Sweet Stall')->count());
+        Http::assertSentCount(2);
+    }
+
+    public function test_complete_preserves_edits_on_missing_photo_and_requires_confirmation_but_save_for_later_does_not(): void
+    {
+        $p = $this->draft();
+        $this->analyse($p);
+        $input = [...$this->edit($p, false), 'action' => 'import', 'confirm' => 1];
+        $input['stalls'][0]['foods'][0]['description'] = 'TEST edited evidence';
+        $this->from(route('admin.ai-import.review', $p))->post(route('admin.ai-import.complete', $p), $input)
+            ->assertRedirect(route('admin.ai-import.review', $p))->assertSessionHasErrors('draft');
+        $this->assertSame('TEST edited evidence', app(CatalogAiImportService::class)->data($p->refresh())['graph']['stalls'][0]['foods'][0]['description']);
+        $this->assertSame(0, $this->market->stalls()->count());
+        $input = [...$this->edit($p), 'action' => 'import'];
+        $this->post(route('admin.ai-import.complete', $p), $input)->assertSessionHasErrors('draft');
+        $this->assertSame('draft', $p->refresh()->status);
+        $this->post(route('admin.ai-import.complete', $p), [...$this->edit($p, false), 'action' => 'save'])
+            ->assertRedirect(route('admin.ai-import.review', $p))->assertSessionHasNoErrors();
+        $this->assertSame(0, $this->market->stalls()->count());
+    }
+
+    public function test_deselecting_new_market_does_not_silently_create_it_for_selected_children(): void
+    {
+        $name = 'TEST Deselected Market '.Str::random(8);
+        $this->text = str_replace($this->market->name, $name, $this->text);
+        $this->actingAs($this->admin)->post(route('admin.ai-import.start'), ['name' => $name, 'city' => 'Petaling Jaya', 'url' => $this->url])->assertSessionHasNoErrors();
+        $p = CatalogImportProposal::where('created_by', $this->admin->id)->latest('id')->firstOrFail();
+        $this->analyse($p);
+        $this->post(route('admin.ai-import.complete', $p), [...$this->edit($p), 'market' => ['selected' => 0], 'action' => 'import', 'confirm' => 1])
+            ->assertSessionHasErrors('draft');
+        $this->assertSame(0, NightMarket::where('name', $name)->count());
+        $this->assertSame('draft', $p->refresh()->status);
+    }
+
+    public function test_analysis_failure_opens_recoverable_review_without_false_success_and_does_not_create_catalog_records(): void
+    {
+        Http::fake([$this->url => Http::response('', 403)]);
+        $input = ['import_mode' => 'new_market', 'name' => 'TEST Recoverable '.Str::random(8), 'city' => 'Petaling Jaya', 'url' => $this->url];
+        $this->actingAs($this->admin)->post(route('admin.ai-import.prepare'), $input)->assertStatus(303)->assertSessionHasErrors('source');
+        $p = CatalogImportProposal::where('created_by', $this->admin->id)->latest('id')->firstOrFail();
+        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Analysis unavailable')->assertSee('TEST Recoverable');
+        $this->assertSame(0, NightMarket::where('name', $input['name'])->count());
+        $this->post(route('admin.ai-import.prepare'), $input)->assertSessionHasErrors('source');
+        $this->assertSame(1, CatalogImportProposal::where('created_by', $this->admin->id)->count());
+        Http::assertSentCount(2); // Explicit second submission, no automatic retry.
+    }
+
+    public function test_new_routes_keep_guest_client_denial_and_only_unused_drafts_can_be_deleted(): void
+    {
+        $p = $this->draft();
+        $this->app['auth']->forgetGuards();
+        $this->post(route('admin.ai-import.prepare'), [])->assertRedirect(route('login'));
+        $this->actingAs(User::factory()->create(['role' => 'client']));
+        $this->post(route('admin.ai-import.complete', $p), [])->assertForbidden();
+        $this->get(route('admin.ai-import.success', $p))->assertForbidden();
+        $this->delete(route('admin.ai-import.destroy-empty', $p))->assertForbidden();
+        $this->actingAs($this->admin);
+        $this->delete(route('admin.ai-import.destroy-empty', $p))->assertRedirect(route('admin.ai-import.history', ['status' => 'draft']));
+        $this->assertModelMissing($p);
+        $this->assertDatabaseHas('social_media_sources', ['id' => $p->social_media_source_id]);
+        $p = $this->draft();
+        $this->analyse($p);
+        $this->delete(route('admin.ai-import.destroy-empty', $p))->assertSessionHasErrors('draft');
+        $this->assertModelExists($p);
+        $this->get(route('admin.ai-import.history', ['status' => 'draft']))->assertOk()->assertSee($this->market->name);
+        $this->get(route('admin.ai-import.history', ['status' => 'imported']))->assertOk()->assertDontSee($this->market->name);
+        $this->get(route('admin.ai-import.history', ['status' => 'bad']))->assertSessionHasErrors('status');
+    }
+
     public function test_module_routes_and_legacy_redirects_keep_admin_authorization(): void
     {
         $url = route('admin.ai-import.index');
@@ -141,7 +301,7 @@ class CatalogAiImportTest extends TestCase
         config(['services.catalog_search.tavily_key' => 'fake-search', 'services.catalog_search.tavily_free_confirmed' => true]);
         Http::fake(['api.tavily.com/search' => Http::response(['answer' => 'Invented https://made-up.example/ignore',
             'results' => [['url' => $this->url, 'title' => 'Retrieved article', 'content' => 'This source concerns the selected market.']]])]);
-        $post = $this->actingAs($this->admin)->post(route('admin.ai-import.search'), ['market_id' => $this->market->id]);
+        $post = $this->actingAs($this->admin)->post(route('admin.ai-import.search'), ['import_mode' => 'existing_market', 'market_id' => $this->market->id]);
         $post->assertStatus(303);
         $location = $post->headers->get('Location');
         $this->get($location)->assertOk()->assertSee('Retrieved article')->assertDontSee('made-up.example');
@@ -154,7 +314,7 @@ class CatalogAiImportTest extends TestCase
     public function test_unconfirmed_search_access_never_enables_paid_requests(): void
     {
         config(['services.catalog_search.tavily_key' => 'fake-search', 'services.catalog_search.tavily_free_confirmed' => false]);
-        $this->actingAs($this->admin)->post(route('admin.ai-import.search'), ['market_id' => $this->market->id])->assertSessionHasErrors('search');
+        $this->actingAs($this->admin)->post(route('admin.ai-import.search'), ['import_mode' => 'existing_market', 'market_id' => $this->market->id])->assertSessionHasErrors('search');
         Http::assertNothingSent();
     }
 
@@ -200,7 +360,7 @@ class CatalogAiImportTest extends TestCase
 
     public function test_tampered_search_kind_is_rejected_without_requests(): void
     {
-        $this->actingAs($this->admin)->post(route('admin.ai-import.search'), ['market_id' => $this->market->id, 'search_kind' => 'paid'])
+        $this->actingAs($this->admin)->post(route('admin.ai-import.search'), ['import_mode' => 'existing_market', 'market_id' => $this->market->id, 'search_kind' => 'paid'])
             ->assertSessionHasErrors('search_kind');
         Http::assertNothingSent();
     }
@@ -297,7 +457,7 @@ class CatalogAiImportTest extends TestCase
         $this->patch(route('admin.ai-import.update', $p), $this->edit($p))->assertStatus(303)->assertSessionHasNoErrors();
         $p->refresh();
         $this->get(route('admin.ai-import.image', [$p, 0, 0]))->assertOk();
-        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Import Selected');
+        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Add Stalls & Foods to Existing Market');
         $input = ['revision' => app(CatalogAiImportService::class)->revision($p), 'confirm' => 1];
         $response = $this->post(route('admin.ai-import.import', $p), $input);
         $response->assertStatus(303)->assertSessionHasNoErrors()->assertRedirect(route('admin.night-markets.show', $this->market));
@@ -516,7 +676,7 @@ class CatalogAiImportTest extends TestCase
         $this->assertFalse($graph['stalls'][0]['parent_confirmed']);
         $this->get(route('admin.ai-import.show', $p))->assertOk()->assertSee($name)->assertSee('not an AI verification');
         $this->patch(route('admin.ai-import.update', $p), $this->edit($p))->assertSessionHasNoErrors();
-        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Create new inactive Market')->assertSee('Operating schedule not yet provided');
+        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Create a new inactive Market')->assertSee('Operating schedule not yet provided');
         $input = ['revision' => app(CatalogAiImportService::class)->revision($p->fresh()), 'confirm' => 1];
         $this->post(route('admin.ai-import.import', $p), $input)->assertSessionHasNoErrors();
         $market = NightMarket::where('name', $name)->sole();
@@ -542,7 +702,7 @@ class CatalogAiImportTest extends TestCase
         Http::fake(['api.tavily.com/search' => Http::sequence()->push(['results' => []])
             ->push(['detail' => 'PRIVATE_API_ERROR'], 401)
             ->push(['results' => [['url' => $this->url, 'title' => 'Recovered article']]])]);
-        $input = ['market_id' => $this->market->id, 'search_kind' => 'articles'];
+        $input = ['import_mode' => 'existing_market', 'market_id' => $this->market->id, 'search_kind' => 'articles'];
         $this->actingAs($this->admin);
         $first = $this->post(route('admin.ai-import.search'), $input)->assertStatus(303);
         $this->get($first->headers->get('Location'))->assertSee('No retrieved sources');
@@ -737,7 +897,7 @@ class CatalogAiImportTest extends TestCase
             $this->url => Http::response('<article>'.$this->text.'</article>', 200, ['Content-Type' => 'text/html']),
             'generativelanguage.googleapis.com/*' => Http::response($this->response($this->payload()))]);
         $counts = [NightMarket::count(), Stall::count(), Food::count()];
-        $response = $this->actingAs($this->admin)->post(route('admin.ai-import.search'), ['market_id' => $this->market->id]);
+        $response = $this->actingAs($this->admin)->post(route('admin.ai-import.search'), ['import_mode' => 'existing_market', 'market_id' => $this->market->id]);
         $response->assertStatus(303)->assertSessionHasNoErrors();
         $location = $response->headers->get('Location');
         $this->get($location)->assertOk()->assertSee('TEST selected article')->assertSee('TEST unselected video')->assertSee('Source type');
@@ -755,7 +915,7 @@ class CatalogAiImportTest extends TestCase
         $this->patch(route('admin.ai-import.update', $p), $remove)->assertSessionHasNoErrors();
         $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Confirmed photo');
         $this->patch(route('admin.ai-import.update', $p), $this->edit($p->refresh()))->assertSessionHasNoErrors();
-        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('TEST Cake')->assertSee('Import Selected');
+        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('TEST Cake')->assertSee('Add Stalls & Foods to Existing Market');
         $this->get($location)->assertOk();
         $this->assertSame($counts, [NightMarket::count(), Stall::count(), Food::count()]);
         Http::assertSentCount(4);

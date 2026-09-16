@@ -18,7 +18,9 @@ class CatalogSourceSearchService
             && config('services.catalog_search.tavily_free_confirmed');
         $videos = filled(config('services.youtube.data_api_key'));
 
-        return ['articles' => (bool) $articles, 'videos' => $videos, 'available' => $articles || $videos];
+        return ['articles' => (bool) $articles, 'videos' => $videos, 'available' => $articles || $videos,
+            'article_key_present' => filled(trim((string) config('services.catalog_search.tavily_key'))),
+            'article_free_confirmed' => (bool) config('services.catalog_search.tavily_free_confirmed')];
     }
 
     public function search(string $name, string $city, string $kind = 'all'): array
@@ -66,7 +68,9 @@ class CatalogSourceSearchService
                 }
                 if (! $response->successful()) {
                     $hint = match ($response->status()) {
-                        401 => 'The provider rejected the API key. Check the key on the running Laravel service.',
+                        401 => $type === 'articles'
+                            ? 'Tavily rejected TAVILY_API_KEY. This Laravel process has a key and sent Bearer authentication. Correct TAVILY_API_KEY on the Railway Laravel service (not MySQL), then redeploy so its configuration cache receives the updated value. Do not share the key in chat.'
+                            : 'The provider rejected the API key. Check the key on the running Laravel service.',
                         403 => 'The provider denied access. Check API restrictions and permissions.',
                         429 => 'The provider rate limit was reached. Wait before trying again.',
                         432, 433 => 'The provider usage or credit limit was reached. Check free quota; no paid fallback is used.',
@@ -91,6 +95,9 @@ class CatalogSourceSearchService
                     if ($card) {
                         $sources[$card['url']] = $card;
                     }
+                }
+                if (! collect($sources)->contains('type', $type === 'articles' ? 'article' : 'video')) {
+                    $notices[] = ucfirst($type).' search succeeded (HTTP 200), but returned no usable sources. Refine the Market name and city; no sources were invented.';
                 }
             } catch (\Throwable $exception) {
                 // Never expose authentication, arbitrary provider errors or raw responses.
