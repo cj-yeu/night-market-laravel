@@ -115,6 +115,21 @@ class CatalogSourceSearchTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_search_excludes_result_that_explicitly_names_a_different_market(): void
+    {
+        Http::fake(['api.tavily.com/search' => Http::response(['results' => [
+            ['url' => 'https://blog.example.test/setia-alam', 'title' => 'Pasar Malam Setia Alam food guide'],
+            ['url' => 'https://blog.example.test/section-7', 'title' => 'Pasar Malam di Seksyen 7 Shah Alam'],
+            ['url' => 'https://blog.example.test/roundup', 'title' => 'Night markets around Shah Alam', 'content' => 'Setia Alam is included.'],
+        ]])]);
+        $result = app(CatalogSourceSearchService::class)->search('Pasar Malam Setia Alam', 'Shah Alam', 'articles');
+        $this->assertSame([
+            'https://blog.example.test/setia-alam',
+            'https://blog.example.test/roundup',
+        ], array_column($result['sources'], 'url'));
+        $this->assertStringContainsString('1 result(s) were excluded', $result['notices'][0]);
+    }
+
     public function test_article_search_transport_error_is_actionable_and_redacted(): void
     {
         $attempts = 0;
