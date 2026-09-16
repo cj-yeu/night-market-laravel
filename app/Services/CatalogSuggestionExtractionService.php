@@ -609,7 +609,7 @@ class CatalogSuggestionExtractionService
         }
 
         $sourceText = $this->normalizeWhitespace($input->sourceTitle."\n".$input->sourceDescription);
-        $market = $this->marketSuggestion($proposal, $payload['market'], $sourceText);
+        $market = $this->marketSuggestion($proposal, $input, $payload['market'], $sourceText);
         $operatingDays = $this->operatingDays($payload['market'], $sourceText, (string) $market['name']);
         $stalls = $this->stalls($proposal, $payload['stalls'], $sourceText, $input->moduleImport);
 
@@ -621,7 +621,7 @@ class CatalogSuggestionExtractionService
     }
 
     /** @return array<string, mixed> */
-    private function marketSuggestion(CatalogImportProposal $proposal, mixed $candidate, string $sourceText): array
+    private function marketSuggestion(CatalogImportProposal $proposal, CatalogSuggestionInput $input, mixed $candidate, string $sourceText): array
     {
         if ($proposal->target_type === CatalogImportProposal::TARGET_EXISTING_MARKET) {
             $market = $proposal->matchedNightMarket;
@@ -653,28 +653,38 @@ class CatalogSuggestionExtractionService
             ];
         }
 
-        if (! is_array($candidate)) {
+        if (! $input->moduleImport && ! is_array($candidate)) {
             throw new CatalogSuggestionException(self::FAILURE_SCHEMA_MISMATCH);
         }
-
+        $candidate = is_array($candidate) ? $candidate : [];
         $evidence = $this->evidence($candidate['evidence_text'] ?? null, $sourceText);
-        $name = $evidence === null ? null : $this->supportedText($candidate['name'] ?? null, $evidence, 255);
-        $state = $this->cleanText($candidate['state'] ?? null, 255);
-        if ($name === null
-            || $evidence === null
-            || $state === null
-            || strcasecmp($state, 'Selangor') !== 0
-            || ! $this->containsLiteral($evidence, 'Selangor')) {
+        $contextName = $this->cleanText($input->authoritativeTarget['market_name'] ?? null, 255);
+        $contextCity = $this->cleanText($input->authoritativeTarget['city'] ?? null, 100);
+        $supportedName = $evidence === null ? null : $this->supportedText($candidate['name'] ?? null, $evidence, 255);
+        $supportedCity = $evidence === null ? null : $this->supportedText($candidate['city'] ?? null, $evidence, 100);
+
+        if (! $input->moduleImport) {
+            // Legacy metadata proposals still require literal location evidence.
+            if ($supportedName === null || $evidence === null
+                || strcasecmp((string) ($candidate['state'] ?? ''), 'Selangor') !== 0
+                || ! $this->containsLiteral($evidence, 'Selangor')) {
+                throw new CatalogSuggestionException(self::FAILURE_UNSUPPORTED_EVIDENCE);
+            }
+        } elseif ($contextName === null || $contextCity === null
+            || ($supportedCity !== null && strcasecmp($supportedCity, $contextCity) !== 0)
+            || ($evidence !== null && filled($candidate['state'] ?? null)
+                && strcasecmp($candidate['state'], 'Selangor') !== 0)) {
+            // Never attach evidence for another city/state to the selected target.
             throw new CatalogSuggestionException(self::FAILURE_UNSUPPORTED_EVIDENCE);
         }
 
         return [
             'matched_night_market_id' => null,
-            'name' => $name,
-            'address' => $this->supportedText($candidate['address'] ?? null, $evidence, 255),
-            'city' => $this->supportedText($candidate['city'] ?? null, $evidence, 255),
+            'name' => $input->moduleImport ? $contextName : $supportedName,
+            'address' => $evidence === null ? null : $this->supportedText($candidate['address'] ?? null, $evidence, 255),
+            'city' => $input->moduleImport ? $contextCity : $supportedCity,
             'state' => 'Selangor',
-            'description' => $this->supportedText($candidate['description'] ?? null, $evidence, 5000),
+            'description' => $evidence === null ? null : $this->supportedText($candidate['description'] ?? null, $evidence, 5000),
             'evidence_text' => $evidence,
             'confidence' => $this->confidence($candidate['confidence'] ?? null),
         ];

@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 
@@ -11,7 +13,9 @@ class CatalogSourceSearchService
 
     public function status(): array
     {
-        $articles = filled(config('services.catalog_search.tavily_key')) && config('services.catalog_search.tavily_free_confirmed');
+        $articles = is_string(config('services.catalog_search.tavily_key'))
+            && trim(config('services.catalog_search.tavily_key')) !== ''
+            && config('services.catalog_search.tavily_free_confirmed');
         $videos = filled(config('services.youtube.data_api_key'));
 
         return ['articles' => (bool) $articles, 'videos' => $videos, 'available' => $articles || $videos];
@@ -23,7 +27,9 @@ class CatalogSourceSearchService
             throw ValidationException::withMessages(['search_kind' => 'Choose All, Articles or Videos.']);
         }
         $status = $this->status();
-        $query = mb_substr(trim($name).' '.trim($city).' Selangor night market pasar malam', 0, 450);
+        // Search for the place first. Requiring every desired catalog field in
+        // the query can exclude articles that only cover some of those fields.
+        $query = mb_substr(trim($name).' '.trim($city).' Selangor', 0, 450);
         $sources = [];
         $notices = [];
         $attempted = false;
@@ -32,7 +38,11 @@ class CatalogSourceSearchService
                 continue;
             }
             if (! $status[$type]) {
-                $notices[] = $type === 'articles' ? 'Article search is not configured. A Tavily Free account key and free-plan confirmation are required.' : 'Video search is not configured. A YouTube Data API key is required.';
+                $notices[] = $type === 'articles'
+                    ? (filled(trim((string) config('services.catalog_search.tavily_key')))
+                        ? 'Article search is not configured: TAVILY_API_KEY is present, but CATALOG_SEARCH_TAVILY_FREE_CONFIRMED must be true after checking the account plan. No article request was sent.'
+                        : 'Article search is not configured: set TAVILY_API_KEY on the running Laravel service. No article request was sent.')
+                    : 'Video search is not configured. A YouTube Data API key is required.';
 
                 continue;
             }
@@ -40,11 +50,12 @@ class CatalogSourceSearchService
             try {
                 $limit = $kind === 'all' ? 4 : 8;
                 if ($type === 'articles') {
-                    $response = Http::acceptJson()->withToken(config('services.catalog_search.tavily_key'))
+                    $response = Http::acceptJson()->withToken(trim(config('services.catalog_search.tavily_key')))
                         ->connectTimeout(4)->timeout(20)->withoutRedirecting()->post('https://api.tavily.com/search', [
                             'query' => $query, 'search_depth' => 'basic', 'topic' => 'general', 'max_results' => $limit,
                             'auto_parameters' => false, 'include_answer' => false, 'include_raw_content' => false,
-                            'include_images' => false, 'include_usage' => true, 'exclude_domains' => ['youtube.com', 'youtu.be'],
+                            'include_images' => false, 'include_usage' => true, 'country' => 'malaysia',
+                            'exclude_domains' => ['youtube.com', 'youtu.be', 'instagram.com', 'facebook.com', 'tiktok.com'],
                         ]);
                 } else {
                     $response = Http::acceptJson()->withHeaders(['x-goog-api-key' => config('services.youtube.data_api_key')])
@@ -54,7 +65,15 @@ class CatalogSourceSearchService
                         ]);
                 }
                 if (! $response->successful()) {
-                    $notices[] = ucfirst($type).' search failed (HTTP '.$response->status().'). Check API access and free quota. No retry or paid fallback was attempted.';
+                    $hint = match ($response->status()) {
+                        401 => 'The provider rejected the API key. Check the key on the running Laravel service.',
+                        403 => 'The provider denied access. Check API restrictions and permissions.',
+                        429 => 'The provider rate limit was reached. Wait before trying again.',
+                        432, 433 => 'The provider usage or credit limit was reached. Check free quota; no paid fallback is used.',
+                        400, 422 => 'The provider rejected the search parameters.',
+                        default => 'The search provider is unavailable. Check its service status.',
+                    };
+                    $notices[] = ucfirst($type).' search failed (HTTP '.$response->status().'). '.$hint.' No retry or paid fallback was attempted.';
 
                     continue;
                 }
@@ -73,9 +92,22 @@ class CatalogSourceSearchService
                         $sources[$card['url']] = $card;
                     }
                 }
-            } catch (\Throwable) {
+            } catch (\Throwable $exception) {
                 // Never expose authentication, arbitrary provider errors or raw responses.
-                $notices[] = ucfirst($type).' search could not be completed. Check connectivity. No automatic retry was made.';
+                $curlCode = 0;
+                for ($cause = $exception; $cause; $cause = $cause->getPrevious()) {
+                    if ($cause instanceof RequestException || $cause instanceof ConnectException) {
+                        $curlCode = (int) ($cause->getHandlerContext()['errno'] ?? 0);
+                    }
+                }
+                $reason = match ($curlCode) {
+                    5, 6 => 'DNS resolution failed.',
+                    7 => 'The outbound HTTPS connection was refused or blocked.',
+                    28 => 'The connection or search response timed out.',
+                    35, 51, 58, 60, 77 => 'TLS verification failed. Check the server CA certificates; do not disable verification.',
+                    default => 'Check server connectivity and search configuration.',
+                };
+                $notices[] = ucfirst($type).' search could not be completed'.($curlCode ? ' (cURL '.$curlCode.')' : '').'. '.$reason.' No automatic retry was made.';
             }
         }
         if (! $attempted) {
@@ -101,8 +133,13 @@ class CatalogSourceSearchService
         } catch (ValidationException) {
             return null;
         }
-        if (! $video && in_array(parse_url($url, PHP_URL_HOST), ['youtube.com', 'www.youtube.com', 'youtu.be'], true)) {
-            return null;
+        if (! $video) {
+            $host = parse_url($url, PHP_URL_HOST);
+            foreach (['youtube.com', 'youtu.be', 'instagram.com', 'facebook.com', 'tiktok.com'] as $domain) {
+                if ($host === $domain || str_ends_with($host, '.'.$domain)) {
+                    return null;
+                }
+            }
         }
         $text = static fn ($value, $max) => is_string($value) ? mb_substr(strip_tags(html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8')), 0, $max) : '';
         $thumbnail = $video ? data_get($row, 'snippet.thumbnails.medium.url') : null;

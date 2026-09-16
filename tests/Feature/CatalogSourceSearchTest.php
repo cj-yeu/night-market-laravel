@@ -6,6 +6,8 @@ use App\Contracts\HostnameResolver;
 use App\Services\CatalogSourceReader;
 use App\Services\CatalogSourceSearchService;
 use App\Services\GeminiCatalogSourceService;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Psr7\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -48,7 +50,8 @@ class CatalogSourceSearchTest extends TestCase
         Http::assertSentCount(2);
         Http::assertSent(fn ($r) => $r->url() === 'https://api.tavily.com/search' && $r['search_depth'] === 'basic'
             && $r['auto_parameters'] === false && $r['include_answer'] === false && $r['include_raw_content'] === false
-            && str_contains($r['query'], 'SS2 Petaling Jaya Selangor') && $r['max_results'] === 4);
+            && $r['query'] === 'Pasar Malam SS2 Petaling Jaya Selangor'
+            && $r['country'] === 'malaysia' && $r['max_results'] === 4);
         Http::assertSent(fn ($r) => str_starts_with($r->url(), 'https://www.googleapis.com/youtube/v3/search?')
             && ! str_contains($r->url(), 'fake-video') && $r->hasHeader('x-goog-api-key', 'fake-video') && $r['type'] === 'video');
     }
@@ -60,6 +63,37 @@ class CatalogSourceSearchTest extends TestCase
         $this->assertCount(1, $r['sources']);
         Http::assertSentCount(1);
         Http::assertSent(fn ($r) => $r['maxResults'] === 8);
+    }
+
+    public function test_article_search_trims_key_and_excludes_social_video_pages(): void
+    {
+        config(['services.catalog_search.tavily_key' => '  fake-search  ']);
+        Http::fake(['api.tavily.com/search' => Http::response(['results' => [
+            ['url' => 'https://www.instagram.com/reel/public-video', 'title' => 'Not an article'],
+            ['url' => 'https://m.facebook.com/posts/public-post', 'title' => 'Not an article'],
+            ['url' => 'https://blog.example.test/ss2', 'title' => 'SS2 food guide'],
+        ]])]);
+        $r = app(CatalogSourceSearchService::class)->search('Pasar Malam SS2', 'Petaling Jaya', 'articles');
+        $this->assertCount(1, $r['sources']);
+        $this->assertSame('https://blog.example.test/ss2', $r['sources'][0]['url']);
+        Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer fake-search')
+            && in_array('instagram.com', $request['exclude_domains'], true));
+        Http::assertSentCount(1);
+    }
+
+    public function test_article_search_transport_error_is_actionable_and_redacted(): void
+    {
+        $attempts = 0;
+        Http::fake(function () use (&$attempts) {
+            $attempts++;
+            throw new ConnectException('SECRET_REQUEST_CONTENT', new Request('POST', 'https://api.tavily.com/search'), null, ['errno' => 60]);
+        });
+        $r = app(CatalogSourceSearchService::class)->search('SS2', 'Petaling Jaya', 'articles');
+        $this->assertSame([], $r['sources']);
+        $this->assertStringContainsString('cURL 60', $r['notices'][0]);
+        $this->assertStringContainsString('TLS verification failed', $r['notices'][0]);
+        $this->assertStringNotContainsString('SECRET_REQUEST_CONTENT', json_encode($r));
+        $this->assertSame(1, $attempts);
     }
 
     public function test_quota_failure_keeps_other_results_without_secret_leak_or_retry(): void
