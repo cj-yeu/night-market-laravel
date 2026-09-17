@@ -24,6 +24,8 @@
                         @endif
                         <a href="{{ route('client.visit-plans.create', ['night_market_id' => $nightMarket->id]) }}"
                             class="btn btn-outline-secondary">Plan a Visit to This Market</a>
+                        <a href="{{ route('social-media-highlights.index', ['night_market_id' => $nightMarket->id]) }}"
+                            class="btn btn-outline-secondary">Social Media Highlights</a>
                         @foreach ($reviewActions as $reviewAction)
                             <a href="{{ $reviewAction['url'] }}" class="btn btn-outline-secondary">{{ $reviewAction['label'] }}</a>
                         @endforeach

@@ -19,6 +19,9 @@ class SocialMediaHighlightController extends Controller
             'records' => $this->socialMediaDataService->publicHighlights($filters),
             'insights' => $this->socialMediaDataService->publicInsights($filters),
             'filters' => $filters,
+            'selectedNightMarket' => isset($filters['night_market_id'])
+                ? $this->socialMediaDataService->publicHighlightMarket((int) $filters['night_market_id'])
+                : null,
         ]);
     }
 }

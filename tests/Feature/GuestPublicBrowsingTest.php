@@ -50,7 +50,11 @@ class GuestPublicBrowsingTest extends TestCase
             ->assertOk()
             ->assertSee($market->name)
             ->assertSee($stall->name)
-            ->assertSee('href="'.route('night-markets.stalls.index', $market).'"', false);
+            ->assertSee('href="'.route('night-markets.stalls.index', $market).'"', false)
+            ->assertSee('href="'.route('social-media-highlights.index', [
+                'night_market_id' => $market->id,
+            ]).'"', false)
+            ->assertSee('Social Media Highlights');
 
         $this->get(route('night-markets.stalls.index', $market))
             ->assertOk()
