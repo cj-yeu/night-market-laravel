@@ -5,16 +5,37 @@
 @section('content')
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">
         <div>
-            <h1 class="display-6 fw-bold text-market mb-1">Social Media Highlights</h1>
+            <h1 class="display-6 fw-bold text-market mb-1">
+                @if ($selectedNightMarket)
+                    Social Media Highlights for {{ $selectedNightMarket->name }}
+                @else
+                    Social Media Highlights
+                @endif
+            </h1>
             <p class="text-secondary mb-0">
-                Administrator-approved public posts about Selangor night markets and foods.
+                @if ($selectedNightMarket)
+                    Administrator-approved public posts related to this night market.
+                @else
+                    Administrator-approved public posts about Selangor night markets and foods.
+                @endif
             </p>
         </div>
+        @if ($selectedNightMarket)
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{{ route('night-markets.show', $selectedNightMarket) }}"
+                    class="btn btn-outline-secondary">Back to Market</a>
+                <a href="{{ route('social-media-highlights.index') }}"
+                    class="btn btn-outline-secondary">View All Highlights</a>
+            </div>
+        @endif
     </div>
 
     <div class="card market-card mb-4">
         <div class="card-body p-4">
             <form method="GET" action="{{ route('social-media-highlights.index') }}">
+                @if ($selectedNightMarket)
+                    <input type="hidden" name="night_market_id" value="{{ $selectedNightMarket->id }}">
+                @endif
                 <div class="row g-3 align-items-end">
                     <div class="col-12 col-lg-8">
                         <label for="search" class="form-label">Keyword Search</label>
@@ -27,7 +48,9 @@
                     <div class="col-12 col-lg-4 d-flex flex-wrap gap-2">
                         <button type="submit" class="btn btn-market">Search Highlights</button>
                         @if ($filters['search'] ?? null)
-                            <a href="{{ route('social-media-highlights.index') }}"
+                            <a href="{{ route('social-media-highlights.index', array_filter([
+                                'night_market_id' => $selectedNightMarket?->id,
+                            ])) }}"
                                 class="btn btn-outline-secondary">Reset Search</a>
                         @endif
                     </div>
@@ -124,8 +147,15 @@
             @if ($filters['search'] ?? null)
                 <h2 class="h5">No approved highlights found</h2>
                 <p>No approved social-media highlights match your search.</p>
-                <a href="{{ route('social-media-highlights.index') }}"
+                <a href="{{ route('social-media-highlights.index', array_filter([
+                    'night_market_id' => $selectedNightMarket?->id,
+                ])) }}"
                     class="btn btn-outline-secondary">Reset Search</a>
+            @elseif ($selectedNightMarket)
+                <h2 class="h5">No approved highlights for this market yet</h2>
+                <p>Approved public-post information related to this night market will appear here.</p>
+                <a href="{{ route('social-media-highlights.index') }}"
+                    class="btn btn-outline-secondary">View All Highlights</a>
             @else
                 <h2 class="h5">No approved social-media highlights yet</h2>
                 <p class="mb-0">Approved public-post information will appear here after administrator review.</p>

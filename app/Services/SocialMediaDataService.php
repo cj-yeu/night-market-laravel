@@ -172,11 +172,13 @@ class SocialMediaDataService
     }
 
     /**
-     * @param  array{search?: string|null}  $filters
+     * @param  array{search?: string|null, night_market_id?: int|null}  $filters
      */
     public function publicHighlights(array $filters): LengthAwarePaginator
     {
         $records = $this->publiclyVisibleQuery()
+            ->when($filters['night_market_id'] ?? null, fn (Builder $query, int $marketId) => $query
+                ->where('night_market_id', $marketId))
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
                 ->applyKeywordSearch($query, $search))
             ->latest('posted_date')
@@ -189,7 +191,7 @@ class SocialMediaDataService
     }
 
     /**
-     * @param  array{search?: string|null}  $filters
+     * @param  array{search?: string|null, night_market_id?: int|null}  $filters
      * @return array{
      *   recordsByPlatform: array<string, int>,
      *   engagementByPlatform: array<string, int>,
@@ -201,6 +203,8 @@ class SocialMediaDataService
     public function publicInsights(array $filters): array
     {
         $records = $this->publiclyVisibleQuery()
+            ->when($filters['night_market_id'] ?? null, fn (Builder $query, int $marketId) => $query
+                ->where('night_market_id', $marketId))
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $this
                 ->applyKeywordSearch($query, $search))
             ->get();
@@ -224,6 +228,14 @@ class SocialMediaDataService
                 ->take(5)
                 ->values(),
         ];
+    }
+
+    public function publicHighlightMarket(int $marketId): NightMarket
+    {
+        return NightMarket::query()
+            ->publiclyVisible()
+            ->select(['id', 'name', 'city', 'state'])
+            ->findOrFail($marketId);
     }
 
     /**

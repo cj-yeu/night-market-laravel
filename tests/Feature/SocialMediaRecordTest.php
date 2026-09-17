@@ -456,6 +456,40 @@ class SocialMediaRecordTest extends TestCase
             ->assertSee($other->content_summary);
     }
 
+    public function test_market_details_link_filters_public_highlights_to_the_selected_market(): void
+    {
+        $matching = SocialMediaRecord::factory()->approved()->create([
+            'night_market_id' => $this->market->id,
+            'content_summary' => 'Highlight for the selected market.',
+        ]);
+        $otherMarket = NightMarket::factory()->create(['name' => 'Another Public Market']);
+        $other = SocialMediaRecord::factory()->approved()->create([
+            'night_market_id' => $otherMarket->id,
+            'content_summary' => 'Highlight for another market.',
+        ]);
+
+        $this->get(route('social-media-highlights.index', [
+            'night_market_id' => $this->market->id,
+        ]))
+            ->assertOk()
+            ->assertSee('Social Media Highlights for '.$this->market->name)
+            ->assertSee($matching->content_summary)
+            ->assertDontSee($other->content_summary)
+            ->assertSee('name="night_market_id" value="'.$this->market->id.'"', false)
+            ->assertSee('Back to Market')
+            ->assertSee('View All Highlights');
+    }
+
+    public function test_public_highlight_market_filter_rejects_non_public_markets(): void
+    {
+        $inactiveMarket = NightMarket::factory()->inactive()->create();
+
+        $this->get(route('social-media-highlights.index', [
+            'night_market_id' => $inactiveMarket->id,
+        ]))
+            ->assertSessionHasErrors('night_market_id');
+    }
+
     public function test_inaccessible_and_removed_market_relations_are_not_exposed_to_clients(): void
     {
         $client = User::factory()->create(['role' => User::ROLE_CLIENT]);
