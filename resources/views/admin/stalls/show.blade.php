@@ -54,4 +54,5 @@
             @endforeach
         </div>
     @endif
+    @include('admin.catalog._source-evidence', ['record' => $stall])
 @endsection

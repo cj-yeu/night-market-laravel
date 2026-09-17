@@ -74,4 +74,5 @@
             <x-night-market-schedule :operating-days="$nightMarket->operatingDays" />
         </div>
     </div>
+    @include('admin.catalog._source-evidence', ['record' => $nightMarket])
 @endsection

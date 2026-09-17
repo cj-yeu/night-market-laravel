@@ -33,4 +33,5 @@
             <dt class="col-sm-3">Description</dt><dd class="col-sm-9">{{ $food->description ?: 'No description available.' }}</dd>
         </dl>
     </div></div>
+    @include('admin.catalog._source-evidence', ['record' => $food])
 @endsection

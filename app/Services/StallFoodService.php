@@ -214,6 +214,8 @@ class StallFoodService
                 'foods' => fn ($query) => $query
                     ->select(['id', 'stall_id', 'name', 'category', 'is_must_try', 'status'])
                     ->orderBy('name'),
+                'catalogSourceLinks.socialMediaSource:id,canonical_url,title,published_at',
+                'catalogSourceLinks.catalogImportProposal:id',
             ])
             ->withCount('foods')
             ->findOrFail($stall->id);
@@ -222,7 +224,9 @@ class StallFoodService
     public function adminFoodDetails(Food $food): Food
     {
         return Food::query()
-            ->with(['stall:id,night_market_id,name,status', 'stall.nightMarket:id,name,city,status'])
+            ->with(['stall:id,night_market_id,name,status', 'stall.nightMarket:id,name,city,status',
+                'catalogSourceLinks.socialMediaSource:id,canonical_url,title,published_at',
+                'catalogSourceLinks.catalogImportProposal:id'])
             ->findOrFail($food->id);
     }
 

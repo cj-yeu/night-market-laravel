@@ -161,7 +161,7 @@ class CatalogImportProposalImportService
             self::FAILURE_CONFLICT_MARKET => 'A matching Night Market already exists. Review the draft instead of merging it automatically.',
             self::FAILURE_CONFLICT_STALL => 'A proposed Stall conflicts with the current catalog. Review the draft before importing.',
             self::FAILURE_CONFLICT_FOOD => 'A proposed Food conflicts with the current catalog. Review the draft before importing.',
-            self::FAILURE_TARGET_INELIGIBLE => 'The selected catalog target is no longer active and eligible in Selangor.',
+            self::FAILURE_TARGET_INELIGIBLE => 'The selected catalog target no longer exists or no longer belongs to the selected Selangor parent.',
             self::FAILURE_IMPORT_FAILED => 'The catalog import could not be completed safely. No partial catalog records were saved.',
             default => 'The proposal is incomplete or is no longer valid for import.',
         };
@@ -190,16 +190,18 @@ class CatalogImportProposalImportService
                     $this->assertOperatingDays($suggestion->operatingDays);
                     $this->assertModuleNewMarketDraft($proposal, $suggestion);
                     $proposal->setRelation('proposalMarket', $suggestion);
-                    $this->preflightConflicts($proposal, ['market' => null, 'stall' => null], true);
+                    $this->preflightConflicts($proposal, ['market' => null, 'stall' => null], true, ! empty($data['allow_duplicate_market']));
                     $market = NightMarket::create(['name' => $suggestion->name, 'address' => (string) $suggestion->address,
                         'city' => $suggestion->city, 'state' => 'Selangor', 'description' => $suggestion->description,
                         'source_url' => $proposal->socialMediaSource->canonical_url, 'status' => NightMarket::STATUS_INACTIVE]);
                     foreach ($suggestion->operatingDays as $day) {
-                        $market->operatingDays()->create(['day_of_week' => $day->day_of_week, 'opening_time' => $this->timeValue($day->opening_time), 'closing_time' => $this->timeValue($day->closing_time)]);
+                        $market->operatingDays()->create(['day_of_week' => $day->day_of_week,
+                            'opening_time' => $day->opening_time === null ? null : $this->timeValue($day->opening_time),
+                            'closing_time' => $day->closing_time === null ? null : $this->timeValue($day->closing_time)]);
                     }
                     $counts['markets']++;
                 }
-                $linked = function ($record, string $type, string $column, ?string $url = null) use ($proposal, $data) {
+                $linked = function ($record, string $type, string $column, ?string $url = null, ?string $evidence = null) use ($proposal, $data) {
                     $sourceId = $proposal->social_media_source_id;
                     if ($url && collect($data['sources'])->contains('url', $url)) {
                         $canonical = in_array(parse_url($url, PHP_URL_HOST), ['youtube.com', 'www.youtube.com', 'youtu.be'], true)
@@ -207,20 +209,35 @@ class CatalogImportProposalImportService
                             : ['platform' => 'web', 'canonical_url' => $url, 'url_fingerprint' => hash('sha256', $url), 'external_content_id' => null];
                         $sourceId = app(CatalogImportProposalService::class)->findOrCreateSource($canonical)->id;
                     }
-                    CatalogSocialMediaSourceLink::firstOrCreate(['social_media_source_id' => $sourceId, $column => $record->id],
-                        ['catalog_import_proposal_id' => $proposal->id, 'catalog_type' => $type]);
+                    $source = collect($data['sources'])->firstWhere('url', $url ?: $proposal->socialMediaSource->canonical_url) ?? [];
+                    CatalogSocialMediaSourceLink::updateOrCreate(['social_media_source_id' => $sourceId, $column => $record->id],
+                        ['catalog_import_proposal_id' => $proposal->id, 'catalog_type' => $type,
+                            'evidence_text' => filled($evidence) ? Str::limit(trim(strip_tags($evidence)), 5000, '') : null,
+                            'evidence_method' => Str::contains((string) ($source['status'] ?? ''), 'Admin-provided') ? 'admin_provided' : 'automatic_extraction',
+                            'source_published_at' => $source['published_at'] ?? null]);
                 };
-                $linked($market, CatalogSocialMediaSourceLink::TYPE_NIGHT_MARKET, 'night_market_id');
+                $marketSources = is_array($data['market_sources'] ?? null) ? $data['market_sources'] : [];
+                if ($marketSources === []) {
+                    $linked($market, CatalogSocialMediaSourceLink::TYPE_NIGHT_MARKET, 'night_market_id', null, $graph['market']['evidence_text'] ?? null);
+                } else {
+                    foreach ($marketSources as $sourceUrl => $evidence) {
+                        $linked($market, CatalogSocialMediaSourceLink::TYPE_NIGHT_MARKET, 'night_market_id', $sourceUrl, $evidence);
+                    }
+                }
                 $records = $counts['markets'] ? [['type' => 'market', 'id' => $market->id, 'name' => $market->name]] : [];
                 $seenStalls = [];
                 $seenFoods = [];
                 foreach ($graph['stalls'] as $row) {
+                    $rowSource = collect($data['sources'])->firstWhere('url', $row['source_url'] ?? null);
+                    if (! empty($rowSource['old_source']) && empty($rowSource['old_source_confirmed'])) {
+                        $this->fail(self::FAILURE_PROPOSAL_INVALID, 'Confirm the old source before importing any Stall or Food supported by it.');
+                    }
                     $name = $this->normalizedRequired($row['name'], 255);
                     if (empty($row['parent_confirmed'])) {
                         $this->fail(self::FAILURE_PROPOSAL_INVALID, 'Confirm each selected Stall belongs to this Market.');
                     }
                     $stall = empty($row['matched_stall_id']) ? null : Stall::query()->lockForUpdate()->find($row['matched_stall_id']);
-                    if (! empty($row['matched_stall_id']) && (! $stall || $stall->night_market_id !== $market->id || $stall->status !== 'active')) {
+                    if (! empty($row['matched_stall_id']) && (! $stall || $stall->night_market_id !== $market->id)) {
                         $this->fail(self::FAILURE_TARGET_INELIGIBLE);
                     }
                     if (! empty($data['context']['stall_id']) && $stall?->id !== $data['context']['stall_id']) {
@@ -238,7 +255,7 @@ class CatalogImportProposalImportService
                     } else {
                         $counts['linked']++;
                     }
-                    $linked($stall, CatalogSocialMediaSourceLink::TYPE_STALL, 'stall_id', $row['source_url'] ?? null);
+                    $linked($stall, CatalogSocialMediaSourceLink::TYPE_STALL, 'stall_id', $row['source_url'] ?? null, $row['evidence_text'] ?? null);
                     $records[] = ['type' => 'stall', 'id' => $stall->id, 'name' => $stall->name, 'operation' => empty($row['matched_stall_id']) ? 'Created' : 'Linked'];
                     foreach ($row['foods'] as $item) {
                         $name = $this->normalizedRequired($item['name'], 255);
@@ -248,7 +265,7 @@ class CatalogImportProposalImportService
                                 $this->fail(self::FAILURE_TARGET_INELIGIBLE);
                             }
                             $counts['linked']++;
-                            $linked($food, CatalogSocialMediaSourceLink::TYPE_FOOD, 'food_id', $item['source_url'] ?? null);
+                            $linked($food, CatalogSocialMediaSourceLink::TYPE_FOOD, 'food_id', $item['source_url'] ?? null, $item['evidence_text'] ?? null);
                         } else {
                             $key = $stall->id.':'.Str::lower(Str::squish($name));
                             if (isset($seenFoods[$key]) || Food::where('stall_id', $stall->id)->where('name', $name)->exists()) {
@@ -257,21 +274,22 @@ class CatalogImportProposalImportService
                             $seenFoods[$key] = true;
                             $suggestion = new CatalogImportProposalFood($item);
                             $this->assertFoodDraft($suggestion);
-                            if (empty($item['photo_confirmed']) || empty($item['image_path']) || ! str_starts_with($item['image_path'], 'ai-import/'.$proposal->id.'/')
-                                || ! app(CatalogDraftImageStorage::class)->disk()->exists($item['image_path'])
-                                || ! $suggestion->category || ! app(CatalogCategoryService::class)->isPermittedSelection('food', $suggestion->category)
-                                || $suggestion->price_min === null || $suggestion->price_max === null || $suggestion->price_min <= 0) {
-                                $this->fail(self::FAILURE_PROPOSAL_INVALID, 'Selected Food requires a category, valid numeric price and confirmed photo.');
+                            if ($suggestion->category && ! app(CatalogCategoryService::class)->isPermittedSelection('food', $suggestion->category)) {
+                                $this->fail(self::FAILURE_PROPOSAL_INVALID, 'Choose an active category or leave it blank for this inactive Food.');
                             }
                             $food = $this->createFoodAndLink($proposal, $suggestion, $stall, false);
-                            $upload = new UploadedFile(app(CatalogDraftImageStorage::class)->disk()->path($item['image_path']), basename($item['image_path']), null, null, true);
-                            app(StallFoodImageService::class)->updateFoodImage($food, $upload);
-                            $createdImages[] = $food->image_path;
+                            if (! empty($item['image_path']) && ! empty($item['photo_confirmed'])
+                                && str_starts_with($item['image_path'], 'ai-import/'.$proposal->id.'/')
+                                && app(CatalogDraftImageStorage::class)->disk()->exists($item['image_path'])) {
+                                $upload = new UploadedFile(app(CatalogDraftImageStorage::class)->disk()->path($item['image_path']), basename($item['image_path']), null, null, true);
+                                app(StallFoodImageService::class)->updateFoodImage($food, $upload);
+                                $createdImages[] = $food->image_path;
+                            }
                             $food->forceFill(['source_url' => $item['source_url'] ?? $proposal->socialMediaSource->canonical_url,
                                 'price_checked_at' => $item['price_checked_at'] ?? null,
-                                'price_display' => 'RM'.number_format((float) $food->price_min, 2).($food->price_max != $food->price_min ? '–RM'.number_format((float) $food->price_max, 2) : '').(! empty($item['unit']) ? ' / '.$item['unit'] : '')])->save();
+                                'price_display' => $food->price_min === null ? null : 'RM'.number_format((float) $food->price_min, 2).($food->price_max != $food->price_min ? '–RM'.number_format((float) $food->price_max, 2) : '').(! empty($item['unit']) ? ' / '.$item['unit'] : '')])->save();
                             $counts['foods']++;
-                            $linked($food, CatalogSocialMediaSourceLink::TYPE_FOOD, 'food_id', $item['source_url'] ?? null);
+                            $linked($food, CatalogSocialMediaSourceLink::TYPE_FOOD, 'food_id', $item['source_url'] ?? null, $item['evidence_text'] ?? null);
                         }
                         $records[] = ['type' => 'food', 'id' => $food->id, 'name' => $food->name, 'operation' => empty($item['matched_food_id']) ? 'Created' : 'Linked'];
                     }
@@ -360,7 +378,7 @@ class CatalogImportProposalImportService
         }
 
         $stall = Stall::query()->lockForUpdate()->find($proposal->matched_stall_id);
-        if (! $stall || $stall->status !== Stall::STATUS_ACTIVE || $stall->night_market_id !== $proposal->matched_night_market_id) {
+        if (! $stall || $stall->night_market_id !== $proposal->matched_night_market_id) {
             $this->fail(self::FAILURE_TARGET_INELIGIBLE);
         }
 
@@ -392,7 +410,7 @@ class CatalogImportProposalImportService
         }
 
         $market = NightMarket::query()->lockForUpdate()->find($marketId);
-        if (! $market || $market->status !== NightMarket::STATUS_ACTIVE || $market->state !== 'Selangor') {
+        if (! $market || $market->state !== 'Selangor') {
             $this->fail(self::FAILURE_TARGET_INELIGIBLE);
         }
 
@@ -525,11 +543,12 @@ class CatalogImportProposalImportService
     {
         $seen = [];
         foreach ($days as $day) {
+            $timesUnknown = $day->opening_time === null && $day->closing_time === null;
             if (! in_array($day->day_of_week, MarketOperatingDay::DAYS, true)
                 || isset($seen[$day->day_of_week])
-                || ! $this->validTime($day->opening_time)
-                || ! $this->validTime($day->closing_time)
-                || $this->timeValue($day->opening_time) >= $this->timeValue($day->closing_time)) {
+                || (! $timesUnknown && (! $this->validTime($day->opening_time)
+                    || ! $this->validTime($day->closing_time)
+                    || $this->timeValue($day->opening_time) >= $this->timeValue($day->closing_time)))) {
                 $this->fail(self::FAILURE_PROPOSAL_INVALID);
             }
             $seen[$day->day_of_week] = true;
@@ -599,7 +618,7 @@ class CatalogImportProposalImportService
     private function assertFoodDraft(CatalogImportProposalFood $food): void
     {
         $this->normalizedRequired($food->name, 255);
-        $this->nullableString($food->category, 100);
+        $this->normalizedRequired($food->category, 100);
         $this->nullableString($food->description, 5000);
         $this->nullableString($food->price_display, 255);
         if (($food->price_min !== null && ! $this->validMoney($food->price_min))
@@ -610,7 +629,7 @@ class CatalogImportProposalImportService
     }
 
     /** @param array{market: NightMarket|null, stall: Stall|null} $targets */
-    private function preflightConflicts(CatalogImportProposal $proposal, array $targets, bool $allowIncompleteNewMarket = false): void
+    private function preflightConflicts(CatalogImportProposal $proposal, array $targets, bool $allowIncompleteNewMarket = false, bool $allowDuplicateMarket = false): void
     {
         $market = $proposal->proposalMarket;
         if (! $market) {
@@ -641,7 +660,7 @@ class CatalogImportProposalImportService
                         ->where('state', $state);
                 })
                 ->exists();
-            if ($conflict) {
+            if ($conflict && ! $allowDuplicateMarket) {
                 $this->fail(self::FAILURE_CONFLICT_MARKET);
             }
 
@@ -761,8 +780,8 @@ class CatalogImportProposalImportService
         foreach ($suggestion->operatingDays as $day) {
             $market->operatingDays()->create([
                 'day_of_week' => $day->day_of_week,
-                'opening_time' => $this->timeValue($day->opening_time),
-                'closing_time' => $this->timeValue($day->closing_time),
+                'opening_time' => $day->opening_time === null ? null : $this->timeValue($day->opening_time),
+                'closing_time' => $day->closing_time === null ? null : $this->timeValue($day->closing_time),
             ]);
         }
 

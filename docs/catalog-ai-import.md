@@ -292,3 +292,16 @@ tests/Feature/CatalogSourceSearchTest.php
 ```
 
 Earlier sections describe prior development and verification, not new real API calls made for this repair.
+
+## Draft hardening and inactive-target support — 17 September 2026
+
+- Existing-target imports now include both active and inactive Selangor Markets and Stalls. Module deep links retain the exact inactive Market/Stall selection; no existing active-target button was changed.
+- Drafts default to the newest unfinished draft for the same Market identity, while an explicit separate-draft choice remains available. Source cards identify ownership by Draft ID and require an explicit copy choice before one source is reused in another draft.
+- Draft history is separated into Active Drafts, Needs Attention, Imported History and Archived views, with ID/name search, type/condition filters, updated-time sorting, status/count/missing-data summaries, rename, archive and delete controls. Imported work opens its immutable import receipt and cannot import twice.
+- Saved JSON is normalized before persistence and round-tripped before replacing the current snapshot. The previous readable snapshot is retained as `ai_import_last_good`. Null collections, missing legacy fields, invalid links and malformed children are isolated as repair warnings; valid siblings remain editable. A recovery page offers restore, extracted-record reset, archive and delete actions, while logs include the Draft/admin/request and structural diagnostics without provider payloads or credentials.
+- Duplicate checks cover active/inactive catalog Markets and unfinished drafts. Matching catalog records are selected by default and linked instead of recreated. A second catalog Market needs an explicit Admin override and a database change from the old identity unique constraint to a lookup index; the service still performs a locked preflight check.
+- Article HTML, fetched PDF content, Admin text and bounded YouTube segments have distinct read paths. Batch analysis continues after an individual source failure. Search-summary fallback is opt-in and labelled low confidence. Malay weekday names are normalized, and a supported weekday may be stored with unknown opening/closing times.
+- Search results reject obvious unrelated/unsafe-location content, prioritize government/exact-place results, show source age/read status/draft ownership, and require confirmation before old sources support imported Stall/Food evidence. Unnamed Stall observations remain non-importable until the Admin supplies or links the parent identity.
+- Inactive Food imports follow the manual catalog constraints: a valid category is required, price and photo may remain empty, and photo confirmation appears only after an image is supplied. Imported Market/Stall/Food detail pages retain source URL, excerpt, publication date, extraction method and Draft ID.
+
+The implementation introduces one forward-only migration to allow unknown operating times, persist catalog evidence fields, and replace the Market identity unique constraint with a non-unique lookup index so the explicit duplicate override can function. It has not been run in this working copy. Database-backed targeted tests remain blocked while the isolated local testing MySQL service is unavailable; no development or production database was contacted.

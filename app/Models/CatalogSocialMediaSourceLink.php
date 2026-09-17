@@ -26,10 +26,18 @@ class CatalogSocialMediaSourceLink extends Model
         'social_media_source_id',
         'catalog_import_proposal_id',
         'catalog_type',
+        'evidence_text',
+        'evidence_method',
+        'source_published_at',
         'night_market_id',
         'stall_id',
         'food_id',
     ];
+
+    protected function casts(): array
+    {
+        return ['source_published_at' => 'date'];
+    }
 
     public function socialMediaSource(): BelongsTo
     {

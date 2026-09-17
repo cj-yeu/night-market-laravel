@@ -703,18 +703,17 @@ class CatalogSuggestionExtractionService
                 continue;
             }
 
-            $day = $this->cleanText($candidate['day_of_week'] ?? null, 16);
+            $sourceDay = $this->cleanText($candidate['day_of_week'] ?? null, 16);
+            $day = $this->englishDay($sourceDay);
             $evidence = $this->evidence($candidate['evidence_text'] ?? null, $sourceText);
             $opening = $this->time($candidate['opening_time'] ?? null, (string) $evidence);
             $closing = $this->time($candidate['closing_time'] ?? null, (string) $evidence);
+            $timeKnown = is_string($opening) && is_string($closing) && $opening < $closing;
 
             if (! in_array($day, MarketOperatingDay::DAYS, true)
                 || $evidence === null
                 || ! $this->containsLiteral($sourceText, $marketName)
-                || ! $this->containsTerm($evidence, (string) $day)
-                || ! is_string($opening)
-                || ! is_string($closing)
-                || $opening >= $closing) {
+                || (! $this->containsTerm($evidence, (string) $sourceDay) && ! $this->containsTerm($evidence, (string) $day))) {
                 continue;
             }
 
@@ -724,14 +723,25 @@ class CatalogSuggestionExtractionService
 
             $days[$day] = [
                 'day_of_week' => $day,
-                'opening_time' => $opening,
-                'closing_time' => $closing,
+                'opening_time' => $timeKnown ? $opening : null,
+                'closing_time' => $timeKnown ? $closing : null,
                 'evidence_text' => $evidence,
                 'confidence' => $this->confidence($candidate['confidence'] ?? null),
             ];
         }
 
         return array_values($days);
+    }
+
+    private function englishDay(?string $day): ?string
+    {
+        if ($day === null) {
+            return null;
+        }
+        $key = Str::lower(trim($day));
+
+        return ['isnin' => 'Monday', 'selasa' => 'Tuesday', 'rabu' => 'Wednesday', 'khamis' => 'Thursday',
+            'jumaat' => 'Friday', 'sabtu' => 'Saturday', 'ahad' => 'Sunday'][$key] ?? Str::title($key);
     }
 
     /** @return list<array<string, mixed>> */

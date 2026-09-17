@@ -78,6 +78,8 @@ class NightMarketService
             ->with([
                 'operatingDays' => fn ($query) => $this->orderOperatingDays($query),
                 'stalls' => fn ($query) => $query->select(['id', 'night_market_id', 'name', 'status'])->orderBy('name'),
+                'catalogSourceLinks.socialMediaSource:id,canonical_url,title,published_at',
+                'catalogSourceLinks.catalogImportProposal:id',
             ])
             ->withCount('stalls')
             ->findOrFail($nightMarket->id);

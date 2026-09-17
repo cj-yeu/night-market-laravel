@@ -1,0 +1,7 @@
+@extends('layouts.app')
+@section('title', 'Repair Catalog Draft | NightBite')
+@section('content')
+<div class="ai-import">@include('admin.ai-import._header', ['heading'=>'Repair Draft #'.$proposal->id,'stage'=>2])
+<div class="alert alert-warning" role="alert"><h1 class="h4">This draft contains saved data that needs repair</h1><p class="mb-0">The technical error was logged with this Draft ID. Other catalog records were not changed. Choose a safe recovery action below.</p></div>
+<div class="d-flex flex-wrap gap-2">@if($hasLastGoodVersion)<form method="POST" action="{{ route('admin.ai-import.restore',$proposal) }}">@csrf<button class="btn btn-market">Restore last saved version</button></form>@endif<form method="POST" action="{{ route('admin.ai-import.reset-extracted',$proposal) }}">@csrf<button class="btn btn-outline-secondary">Reset extracted records</button></form><form method="POST" action="{{ route('admin.ai-import.archive',$proposal) }}">@csrf @method('PATCH')<button class="btn btn-outline-secondary">Archive</button></form><form method="POST" action="{{ route('admin.ai-import.destroy',$proposal) }}" onsubmit="return confirm('Delete this damaged draft? Its source history will remain.');">@csrf @method('DELETE')<button class="btn btn-outline-danger">Delete</button></form><a class="btn btn-outline-secondary" href="{{ route('admin.ai-import.history') }}">Back to Drafts</a></div></div>
+@endsection
