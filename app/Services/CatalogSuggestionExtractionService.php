@@ -710,7 +710,7 @@ class CatalogSuggestionExtractionService
 
             if (! in_array($day, MarketOperatingDay::DAYS, true)
                 || $evidence === null
-                || ! $this->containsLiteral($evidence, $marketName)
+                || ! $this->containsLiteral($sourceText, $marketName)
                 || ! $this->containsTerm($evidence, (string) $day)
                 || ! is_string($opening)
                 || ! is_string($closing)
@@ -1033,10 +1033,21 @@ class CatalogSuggestionExtractionService
             return false;
         }
 
-        return preg_match(
+        if (preg_match(
             '/(?<![0-9:])'.preg_quote($value, '/').'(?![0-9:])/',
             $this->normalizeWhitespace($sourceText),
-        ) === 1 ? $value : false;
+        ) === 1) {
+            return $value;
+        }
+
+        [$hour, $minute] = array_map('intval', explode(':', $value));
+        $suffix = $hour >= 12 ? 'PM' : 'AM';
+        $hour12 = $hour % 12 ?: 12;
+        $twelveHour = $hour12.':'.str_pad((string) $minute, 2, '0', STR_PAD_LEFT);
+
+        return preg_match('/(?<![0-9:])'.preg_quote($twelveHour, '/').'\s*'.preg_quote($suffix, '/').'\b/i', $this->normalizeWhitespace($sourceText)) === 1
+            ? $value
+            : false;
     }
 
     /** @return list<float> */

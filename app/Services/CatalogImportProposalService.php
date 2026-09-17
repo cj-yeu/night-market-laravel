@@ -83,7 +83,7 @@ class CatalogImportProposalService
      */
     public function proposals(?string $status = null): LengthAwarePaginator
     {
-        return CatalogImportProposal::query()
+        $proposals = CatalogImportProposal::query()
             ->when(in_array($status, ['draft', 'imported'], true), fn ($query) => $query->where('status', $status))
             ->with([
                 'socialMediaSource:id,platform,canonical_url,metadata_status',
@@ -94,6 +94,22 @@ class CatalogImportProposalService
             ])
             ->latest()
             ->paginate(15)->withQueryString();
+
+        $draftGroups = $proposals->getCollection()->where('status', CatalogImportProposal::STATUS_DRAFT)
+            ->groupBy(function (CatalogImportProposal $proposal): string {
+                $context = $proposal->review_metadata_snapshot['ai_import']['context'] ?? [];
+                $name = $context['name'] ?? $proposal->matchedNightMarket?->name ?? $proposal->matchedStall?->name ?? '';
+                $city = $context['city'] ?? $proposal->matchedNightMarket?->city ?? $proposal->matchedStall?->nightMarket?->city ?? '';
+
+                return mb_strtolower(trim($name)).'|'.mb_strtolower(trim($city));
+            });
+        foreach ($draftGroups as $key => $group) {
+            if ($key !== '|' && $group->count() > 1) {
+                $group->each->setAttribute('duplicate_draft_count', $group->count());
+            }
+        }
+
+        return $proposals;
     }
 
     public function detail(CatalogImportProposal $proposal): CatalogImportProposal

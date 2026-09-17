@@ -34,6 +34,7 @@ class CatalogSourceSearchService
         $query = mb_substr(trim($name).' '.trim($city).' Selangor', 0, 450);
         $sources = [];
         $notices = [];
+        $irrelevant = 0;
         $attempted = false;
         foreach (['articles', 'videos'] as $type) {
             if ($kind !== 'all' && $kind !== $type) {
@@ -92,8 +93,10 @@ class CatalogSourceSearchService
                         continue;
                     }
                     $card = $this->card($row, $type);
-                    if ($card) {
+                    if ($card && $this->isRelevant($card, $name, $city)) {
                         $sources[$card['url']] = $card;
+                    } elseif ($card) {
+                        $irrelevant++;
                     }
                 }
                 if (! collect($sources)->contains('type', $type === 'articles' ? 'article' : 'video')) {
@@ -120,8 +123,35 @@ class CatalogSourceSearchService
         if (! $attempted) {
             throw ValidationException::withMessages(['search' => implode(' ', $notices).' You can still add a source link, analyse it and review a draft.']);
         }
+        if ($irrelevant) {
+            $notices[] = $irrelevant.' result(s) were excluded because they did not identify the requested Market or city.';
+        }
 
         return ['sources' => array_values($sources), 'search_suggestions' => null, 'notices' => $notices];
+    }
+
+    private function isRelevant(array $card, string $name, string $city): bool
+    {
+        $normalize = static fn (string $value): string => trim(preg_replace('/\s+/u', ' ', mb_strtolower(preg_replace('/[^\pL\pN]+/u', ' ', $value))));
+        $haystack = $normalize(implode(' ', [$card['title'], $card['description'], $card['url']]));
+        $market = $normalize($name);
+        $city = $normalize($city);
+        $tokens = array_values(array_filter(explode(' ', $market), fn ($token) => mb_strlen($token) >= 2
+            && ! in_array($token, ['pasar', 'malam', 'night', 'market'], true)));
+
+        $marketMatch = $market !== '' && str_contains($haystack, $market);
+        if (! $marketMatch && $tokens) {
+            $marketMatch = collect($tokens)->every(fn ($token) => preg_match('/(?<![\pL\pN])'.preg_quote($token, '/').'(?![\pL\pN])/u', $haystack) === 1);
+        }
+
+        // A short search preview may omit the target name. Exclude only a result
+        // that explicitly names another night market; verify all evidence later.
+        $title = $normalize($card['title']);
+        $namesAnotherMarket = preg_match('/\b(?:pasar malam|night market)\s+(?:di |at )?(.+)/u', $title, $matches) === 1
+            && ! $marketMatch && $tokens !== []
+            && ! collect($tokens)->every(fn ($token) => preg_match('/(?<![\pL\pN])'.preg_quote($token, '/').'(?![\pL\pN])/u', $matches[1]) === 1);
+
+        return ! $namesAnotherMarket;
     }
 
     private function card(array $row, string $type): ?array

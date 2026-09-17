@@ -28,7 +28,26 @@ document.querySelectorAll('[data-existing-stall]').forEach(select=>{
     const update=()=>foods.forEach(({input,options})=>{const value=input.value;input.replaceChildren(...options.filter(o=>!o.value||o.dataset.stall===select.value));input.value=[...input.options].some(o=>o.value===value)?value:'';});
     select.addEventListener('change',update);update();
 });
-document.querySelectorAll('[data-review-editor]').forEach(form=>{const market=form.querySelector('[name="market[matched_night_market_id]"]');if(market){const update=()=>form.querySelector('[data-import-label]').textContent=market.value?'Add Stalls & Foods to Existing Market':'Create Night Market, Stalls & Foods';market.addEventListener('change',update);update();}});
+document.querySelectorAll('[data-review-editor]').forEach(form=>{
+    const market=form.querySelector('[name="market[matched_night_market_id]"]');
+    const update=()=>{
+        const stalls=[...form.querySelectorAll('[data-stall-card]')].filter(card=>card.querySelector('[data-select-stall]').checked);
+        const foods=stalls.reduce((count,card)=>count+card.querySelectorAll('[data-select-food]:checked').length,0);
+        const newMarket=market&&!market.value&&form.querySelector('[name="market[selected]"]:checked')?.value==='1';
+        const parts=[newMarket?'1 Night Market':null,stalls.length?`${stalls.length} Stall${stalls.length===1?'':'s'}`:null,foods?`${foods} Food${foods===1?'':'s'}`:null].filter(Boolean);
+        form.querySelector('[data-import-label]').textContent=parts.length?`Create ${parts.join(', ')}`:'Select records to import';
+        if(market?.value)form.querySelector('[data-import-label]').textContent=stalls.length||foods?`Add ${parts.join(', ')} to Existing Market`:'Select records to import';
+        const missing=form.querySelector('[data-market-missing-alert]');
+        if(missing){
+            const address=form.querySelector('[name="market[address]"]')?.value.trim();
+            const schedule=[...form.querySelectorAll('[name^="operating_days"][name$="[selected]"]:checked')].some(input=>input.value==='1');
+            const fields=[!address?'Address not yet provided':null,!schedule?'Operating schedule not yet provided':null].filter(Boolean);
+            missing.hidden=fields.length===0;
+            if(fields.length)missing.querySelector('[data-market-missing-text]').textContent=fields.join(' · ');
+        }
+    };
+    form.addEventListener('change',update);form.addEventListener('input',update);update();
+});
 const cards=[...document.querySelectorAll('[data-source-card]')],filter=document.querySelector('[data-source-filter]'),sort=document.querySelector('[data-source-sort]'),list=document.querySelector('[data-source-list]');
 cards.forEach(card=>{const input=card.querySelector('[name="source_ids[]"]');const update=()=>{card.classList.toggle('is-selected',input.checked);card.querySelector('[data-source-selection]').textContent=input.checked?'Selected':'Not selected';};input.addEventListener('change',update);card.addEventListener('click',event=>{if(event.target.closest('a,button,input,label,summary,details'))return;input.checked=!input.checked;input.dispatchEvent(new Event('change',{bubbles:true}));});update();});
 const arrange=()=>{if(!list)return;cards.forEach(c=>c.hidden=filter.value!=='all'&&c.dataset.type!==filter.value);[...cards].sort((a,b)=>sort.value==='title'?a.dataset.title.localeCompare(b.dataset.title):sort.value==='newest'?b.dataset.date.localeCompare(a.dataset.date):Number(a.dataset.order)-Number(b.dataset.order)).forEach(c=>list.append(c));};filter?.addEventListener('change',arrange);sort?.addEventListener('change',arrange);document.querySelector('[data-source-reset]')?.addEventListener('click',()=>{filter.value='all';sort.value='relevance';arrange();});

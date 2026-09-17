@@ -270,6 +270,8 @@ class CatalogAiImportService
                     }
                     $this->sources->videoRange($input);
                 }
+                $analysisErrors = [];
+                $analysed = 0;
                 foreach (array_unique($indices) as $i) {
                     if (! isset($data['sources'][$i])) {
                         throw ValidationException::withMessages(['source' => 'Select an existing source.']);
@@ -323,15 +325,21 @@ class CatalogAiImportService
                             // Keep source variants separate; Admin explicitly links or skips duplicates.
                             $data['graph']['stalls'][] = $stall;
                         }
+                        $analysed++;
                     } catch (\Throwable $e) {
                         $source['status'] = isset($source['text']) ? 'Source read; catalog suggestions unavailable. Review the extracted text.' : 'Analysis unavailable. Open source or provide text/screenshots.';
-                        $this->persistAnalysis($proposal, $data, $revision);
-                        throw ValidationException::withMessages(['source' => $e instanceof ValidationException ? $e->validator->errors()->first()
+                        $analysisErrors[] = '“'.($source['title'] ?: parse_url($source['url'], PHP_URL_HOST)).'”: '.($e instanceof ValidationException ? $e->validator->errors()->first()
                             : ($e instanceof CatalogSuggestionException ? $this->extraction->failureMessage($e->failureCode)
-                                .($e->httpStatus ? ' (HTTP '.$e->httpStatus.', '.$e->failureCode.').' : '') : $source['status'])]);
+                                .($e->httpStatus ? ' (HTTP '.$e->httpStatus.', '.$e->failureCode.').' : '') : $source['status']));
                     } unset($source);
                 }
                 $this->persistAnalysis($proposal, $data, $revision);
+                if ($analysisErrors) {
+                    $summary = $analysed
+                        ? $analysed.' selected source(s) were analysed. '.count($analysisErrors).' source(s) failed independently: '
+                        : 'The selected source(s) could not be analysed: ';
+                    throw ValidationException::withMessages(['source' => $summary.implode(' ', $analysisErrors)]);
+                }
             });
         } catch (LockTimeoutException) {
             throw ValidationException::withMessages(['source' => 'Analysis is already running for this draft. Wait for it to finish before trying again.']);
@@ -362,11 +370,21 @@ class CatalogAiImportService
         if (filled($incoming['evidence_text'] ?? null)) {
             $data['market_sources'][$sourceUrl] = $incoming['evidence_text'];
         }
+        if (filled($current['address'] ?? null) && filled($incoming['address'] ?? null)
+            && CatalogCategory::key($current['address']) !== CatalogCategory::key($incoming['address'])) {
+            $data['market_conflicts']['address'] = 'Sources report different Market addresses. Compare the source evidence before importing.';
+        }
         if (! empty($data['operating_days_reviewed'])) {
             return;
         }
 
         $days = collect($data['graph']['operating_days'] ?? [])->keyBy('day_of_week');
+        $existingSchedule = $days->map(fn ($day) => [$day['opening_time'] ?? null, $day['closing_time'] ?? null])->all();
+        $incomingSchedule = collect($graph['operating_days'] ?? [])->keyBy('day_of_week')
+            ->map(fn ($day) => [$day['opening_time'] ?? null, $day['closing_time'] ?? null])->all();
+        if ($existingSchedule && $incomingSchedule && $existingSchedule !== $incomingSchedule) {
+            $data['market_conflicts']['schedule'] = 'Sources report different operating days or times. Compare each source before selecting the schedule.';
+        }
         foreach ($graph['operating_days'] ?? [] as $day) {
             if (! empty($day['day_of_week']) && ! $days->has($day['day_of_week'])) {
                 $days->put($day['day_of_week'], $day);
@@ -462,7 +480,7 @@ class CatalogAiImportService
                     }
                 });
 
-                return $this->revision($proposal);
+                return $this->revision($proposal->fresh());
             });
         } catch (\Throwable $e) {
             foreach ($newImages as $path) {
@@ -488,12 +506,18 @@ class CatalogAiImportService
                 if ($proposal->status === 'imported' && isset($this->data($proposal)['import_result'])) {
                     return $this->data($proposal)['import_result'];
                 }
+                $action = $input['action'] ?? 'import';
+                if ($action === 'import' && empty($input['confirm'])) {
+                    throw ValidationException::withMessages(['confirm' => 'Check the review confirmation box before creating catalog records.']);
+                }
                 $revision = $this->saveDraft($proposal, $input);
-                if (($input['action'] ?? 'import') === 'save') {
+                if ($action === 'save') {
                     return null;
                 }
 
-                return $this->import($user, $proposal, [...$input, 'revision' => $revision]);
+                $proposal->refresh();
+
+                return $this->import($user, $proposal, [...$input, 'confirm' => true, 'revision' => $revision]);
             });
         } catch (LockTimeoutException) {
             throw ValidationException::withMessages(['draft' => 'This import is already being processed. Wait, then open its saved result.']);
@@ -567,8 +591,11 @@ class CatalogAiImportService
                 return $this->data($proposal)['import_result'];
             }
             $this->editable($proposal);
-            if (empty($input['confirm']) || ! hash_equals($this->revision($proposal), $input['revision'] ?? '')) {
-                throw ValidationException::withMessages(['draft' => 'Confirm the current review before importing.']);
+            if (empty($input['confirm'])) {
+                throw ValidationException::withMessages(['confirm' => 'Check the review confirmation box before creating catalog records.']);
+            }
+            if (! hash_equals($this->revision($proposal), $input['revision'] ?? '')) {
+                throw ValidationException::withMessages(['draft' => 'This draft changed after the review page loaded. Reload the latest review, check the confirmation box again, and retry.']);
             }
             $review = $this->review($proposal);
             if (empty($review['context']['market_id']) && empty($review['graph']['market']['matched_night_market_id']) && empty($review['graph']['market']['selected'])) {
