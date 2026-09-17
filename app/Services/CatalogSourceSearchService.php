@@ -4,7 +4,9 @@ namespace App\Services;
 
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class CatalogSourceSearchService
@@ -94,6 +96,7 @@ class CatalogSourceSearchService
                     }
                     $card = $this->card($row, $type);
                     if ($card && $this->isRelevant($card, $name, $city)) {
+                        $card['relevance'] = $this->relevance($card, $name, $city);
                         $sources[$card['url']] = $card;
                     } elseif ($card) {
                         $irrelevant++;
@@ -127,7 +130,19 @@ class CatalogSourceSearchService
             $notices[] = $irrelevant.' result(s) were excluded because they did not identify the requested Market or city.';
         }
 
-        return ['sources' => array_values($sources), 'search_suggestions' => null, 'notices' => $notices];
+        $sources = collect($sources)->sortBy(function (array $source): string {
+            $priority = match (true) {
+                Str::contains($source['relevance'] ?? '', 'government/local authority') => '0',
+                Str::contains($source['relevance'] ?? '', 'exact Market and city') => '1',
+                default => '2',
+            };
+            $old = ! empty($source['old_source']) ? '1' : '0';
+            $date = is_string($source['published_at'] ?? null) ? $source['published_at'] : '0000-00-00';
+
+            return $priority.'|'.$old.'|'.(9999999999 - (int) strtotime($date ?: '1970-01-01'));
+        })->values()->all();
+
+        return ['sources' => $sources, 'search_suggestions' => null, 'notices' => $notices];
     }
 
     private function isRelevant(array $card, string $name, string $city): bool
@@ -147,11 +162,27 @@ class CatalogSourceSearchService
         // A short search preview may omit the target name. Exclude only a result
         // that explicitly names another night market; verify all evidence later.
         $title = $normalize($card['title']);
+        if (preg_match('/\b(?:ghost|haunted|kemalangan|accident|murder|seram)\b/u', $haystack) === 1) {
+            return false;
+        }
         $namesAnotherMarket = preg_match('/\b(?:pasar malam|night market)\s+(?:di |at )?(.+)/u', $title, $matches) === 1
             && ! $marketMatch && $tokens !== []
             && ! collect($tokens)->every(fn ($token) => preg_match('/(?<![\pL\pN])'.preg_quote($token, '/').'(?![\pL\pN])/u', $matches[1]) === 1);
 
-        return ! $namesAnotherMarket;
+        $cityTokens = array_values(array_filter(explode(' ', $city), fn ($token) => mb_strlen($token) >= 3));
+        $cityMatch = $cityTokens === [] || collect($cityTokens)->every(fn ($token) => str_contains($haystack, $token));
+
+        return ! $namesAnotherMarket && ($marketMatch || ($cityMatch && $tokens !== []));
+    }
+
+    private function relevance(array $card, string $name, string $city): string
+    {
+        $text = Str::lower($card['title'].' '.$card['description'].' '.$card['url']);
+        $host = Str::lower((string) parse_url($card['url'], PHP_URL_HOST));
+        $official = str_ends_with($host, '.gov.my') || str_ends_with($host, '.gov') || Str::contains($host, ['mbpj', 'mbsa', 'mpkj', 'mpsj', 'mpklang']);
+        $exact = Str::contains($text, Str::lower(trim($name))) && Str::contains($text, Str::lower(trim($city)));
+
+        return $official ? 'High · government/local authority' : ($exact ? 'High · exact Market and city' : 'Medium · verify location before analysis');
     }
 
     private function card(array $row, string $type): ?array
@@ -185,10 +216,18 @@ class CatalogSourceSearchService
         }
         $date = $video ? data_get($row, 'snippet.publishedAt') : ($row['published_date'] ?? null);
 
+        $old = false;
+        if (is_string($date)) {
+            try {
+                $old = Carbon::parse($date)->lt(now()->subYears(5));
+            } catch (\Throwable) {
+            }
+        }
+
         return ['url' => $url, 'title' => $text($video ? data_get($row, 'snippet.title') : ($row['title'] ?? ''), 500),
             'publisher' => $video ? $text(data_get($row, 'snippet.channelTitle'), 255) : parse_url($url, PHP_URL_HOST),
             'type' => $video ? 'video' : 'article', 'description' => $text($video ? data_get($row, 'snippet.description') : ($row['content'] ?? ''), 500),
             'published_at' => is_string($date) && preg_match('/\A\d{4}-\d{2}-\d{2}(?:T[0-9:.+Z-]+)?\z/', $date) ? $date : null,
-            'thumbnail' => $thumbnail, 'status' => 'Not analysed'];
+            'thumbnail' => $thumbnail, 'status' => 'Not analysed', 'old_source' => $old];
     }
 }

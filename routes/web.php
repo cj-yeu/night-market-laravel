@@ -255,6 +255,12 @@ Route::middleware('auth')->group(function () {
             Route::get('/drafts/{proposal}', 'show')->whereNumber('proposal')->name('show');
             Route::post('/drafts/{proposal}/analyse', 'analyse')->whereNumber('proposal')->middleware('throttle:3,1')->name('analyse');
             Route::patch('/drafts/{proposal}', 'update')->whereNumber('proposal')->name('update');
+            Route::patch('/drafts/{proposal}/rename', 'rename')->whereNumber('proposal')->name('rename');
+            Route::patch('/drafts/{proposal}/archive', 'archive')->whereNumber('proposal')->name('archive');
+            Route::post('/drafts/{proposal}/restore', 'restore')->whereNumber('proposal')->name('restore');
+            Route::post('/drafts/{proposal}/reset-extracted', 'resetExtracted')->whereNumber('proposal')->name('reset-extracted');
+            Route::post('/drafts/{proposal}/remove-invalid', 'removeInvalid')->whereNumber('proposal')->name('remove-invalid');
+            Route::delete('/drafts/{proposal}', 'destroy')->whereNumber('proposal')->name('destroy');
             Route::get('/drafts/{proposal}/review', 'review')->whereNumber('proposal')->name('review');
             Route::post('/drafts/{proposal}/import', 'import')->whereNumber('proposal')->name('import');
             Route::get('/drafts/{proposal}/images/{stall}/{food}', 'image')->whereNumber(['proposal', 'stall', 'food'])->name('image');

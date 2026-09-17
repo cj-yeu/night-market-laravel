@@ -2,7 +2,8 @@
 document.querySelectorAll('[data-ai-busy]').forEach(form => {
     form.addEventListener('submit', event => {
         if (form.dataset.submitting) { event.preventDefault(); return; }
-        if(form.hasAttribute('data-review-editor') && event.submitter?.value!=='save' && !form.querySelector('[name="confirm"]').checked){event.preventDefault();const box=form.querySelector('[name="confirm"]');box.setCustomValidity('Confirm the reviewed records before importing.');box.reportValidity();box.addEventListener('change',()=>box.setCustomValidity(''),{once:true});return;}
+        const recoveryAction=event.submitter?.formAction?.includes('/remove-invalid');
+        if(form.hasAttribute('data-review-editor') && event.submitter?.value!=='save' && !recoveryAction && !form.querySelector('[name="confirm"]').checked){event.preventDefault();const box=form.querySelector('[name="confirm"]');box.setCustomValidity('Confirm the reviewed records before importing.');box.reportValidity();box.addEventListener('change',()=>box.setCustomValidity(''),{once:true});return;}
         if(event.submitter?.name){const action=document.createElement('input');action.type='hidden';action.name=event.submitter.name;action.value=event.submitter.value;action.dataset.submitAction='1';form.append(action);}
         form.dataset.submitting='1'; form.setAttribute('aria-busy','true');
         form.querySelectorAll('button[type="submit"],button:not([type])').forEach(button=>button.disabled=true);

@@ -6,6 +6,7 @@ use App\Exceptions\CatalogSuggestionException;
 use App\Exceptions\SocialMediaMetadataException;
 use App\Models\CatalogImportProposal;
 use App\Models\Food;
+use App\Models\MarketOperatingDay;
 use App\Models\NightMarket;
 use App\Models\SocialMediaSource;
 use App\Models\Stall;
@@ -14,6 +15,7 @@ use App\Support\CatalogCategory;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -28,17 +30,17 @@ class CatalogAiImportService
 
     public function context(array $input): array
     {
-        $mode = $input['import_mode'] ?? null;
+        $mode = $input['import_mode'] ?? (! empty($input['market_id']) ? 'existing_market' : null);
         if ($mode === 'new_market' && (! empty($input['market_id']) || ! empty($input['stall_id']))) {
             throw ValidationException::withMessages(['market_id' => 'New Market mode cannot target an existing Market or Stall. Choose the intended mode.']);
         }
         if ($mode === 'existing_market' && empty($input['market_id'])) {
             throw ValidationException::withMessages(['market_id' => 'Select the exact existing Night Market.']);
         }
-        $market = empty($input['market_id']) ? null : NightMarket::query()->publiclyVisible()->find($input['market_id']);
-        $stall = empty($input['stall_id']) ? null : Stall::query()->where('status', 'active')->find($input['stall_id']);
+        $market = empty($input['market_id']) ? null : NightMarket::query()->where('state', 'Selangor')->find($input['market_id']);
+        $stall = empty($input['stall_id']) ? null : Stall::query()->find($input['stall_id']);
         if ((! empty($input['market_id']) && ! $market) || (! empty($input['stall_id']) && (! $stall || $stall->night_market_id !== $market?->id))) {
-            throw ValidationException::withMessages(['market_id' => 'Choose an active Selangor Market and a Stall belonging to it.']);
+            throw ValidationException::withMessages(['market_id' => 'Choose a Selangor Market and a Stall belonging to it. Active and inactive catalog records are supported.']);
         }
 
         return ['import_mode' => $mode, 'module' => $input['module'] ?? 'night-markets', 'market_id' => $market?->id, 'stall_id' => $stall?->id,
@@ -71,7 +73,25 @@ class CatalogAiImportService
 
     public function results(User $user, ?string $id): ?array
     {
-        return $id ? Cache::get('ai-import-results:'.$user->id.':'.$id) : null;
+        $result = $id ? Cache::get('ai-import-results:'.$user->id.':'.$id) : null;
+        if (! is_array($result)) {
+            return null;
+        }
+        foreach ($result['sources'] ?? [] as &$source) {
+            $fingerprint = hash('sha256', $source['url']);
+            if (($source['type'] ?? null) === 'video') {
+                try {
+                    $fingerprint = app(YouTubeVideoUrlCanonicalizer::class)->canonicalize($source['url'])['url_fingerprint'];
+                } catch (\Throwable) {
+                }
+            }
+            $source['existing_draft_id'] = CatalogImportProposal::query()
+                ->where('status', CatalogImportProposal::STATUS_DRAFT)
+                ->whereHas('socialMediaSource', fn ($query) => $query->where('url_fingerprint', $fingerprint))
+                ->latest('updated_at')->value('id');
+        } unset($source);
+
+        return $result;
     }
 
     public function start(User $user, array $input): CatalogImportProposal
@@ -88,17 +108,35 @@ class CatalogAiImportService
             throw ValidationException::withMessages(['name' => 'Provide the Night Market name and city so source ownership can be reviewed.']);
         }
         $selected = [];
+        $unfinished = empty($input['start_separate_draft']) ? $this->unfinishedDraft($context) : null;
+        $copyIndices = array_map('intval', $input['copy_source_ids'] ?? []);
         foreach (array_unique($input['source_ids'] ?? []) as $i) {
             if (! isset($result['sources'][$i])) {
                 throw ValidationException::withMessages(['source' => 'Search results expired. Search again before selecting a source.']);
             }
-            $selected[] = $result['sources'][$i];
+            $card = $result['sources'][$i];
+            $card['_copy_source'] = in_array((int) $i, $copyIndices, true);
+            if (! empty($card['existing_draft_id']) && (int) $card['existing_draft_id'] !== $unfinished?->id && ! $card['_copy_source']) {
+                throw ValidationException::withMessages(['source' => 'This source belongs to Draft #'.$card['existing_draft_id'].'. Open that draft, explicitly choose Copy source into current Draft, or cancel by deselecting it. No draft was opened automatically.']);
+            }
+            $selected[] = $card;
         }
         if (! empty($input['url'])) {
             $selected[] = $this->sourceCard($input['url']);
         }
         if (! $selected) {
             throw ValidationException::withMessages(['source' => 'Select a source or paste its URL.']);
+        }
+        if ($unfinished) {
+            $data = $this->data($unfinished);
+            foreach ($selected as $card) {
+                if (! collect($data['sources'])->contains('url', $card['url'])) {
+                    $data['sources'][] = $card;
+                }
+            }
+            $this->persist($unfinished, $data);
+
+            return $unfinished->refresh();
         }
         $url = $selected[0]['url'];
         $canonical = ['platform' => $selected[0]['type'] === 'video' ? 'youtube' : 'web', 'canonical_url' => $url,
@@ -109,7 +147,10 @@ class CatalogAiImportService
         $proposal = $this->proposals->createSourceDraft($user, [
             'target_type' => $context['stall_id'] ? 'existing_stall' : ($context['market_id'] ? 'existing_market' : 'new_market'),
             'matched_night_market_id' => $context['market_id'], 'matched_stall_id' => $context['stall_id'],
-        ], $canonical);
+        ], $canonical, ! empty($selected[0]['_copy_source']));
+        foreach ($selected as &$card) {
+            unset($card['_copy_source'], $card['existing_draft_id']);
+        } unset($card);
         if ($proposal->matched_night_market_id !== $context['market_id'] || $proposal->matched_stall_id !== $context['stall_id']) {
             throw ValidationException::withMessages(['source' => 'This source already has a draft for another target. Open Drafts to review it.']);
         }
@@ -128,6 +169,32 @@ class CatalogAiImportService
         }
 
         return $proposal;
+    }
+
+    public function unfinishedDraft(array $context): ?CatalogImportProposal
+    {
+        $marketId = $this->draftId($context['market_id'] ?? null);
+        $stallId = $this->draftId($context['stall_id'] ?? null);
+        $name = CatalogCategory::key($context['name'] ?? '');
+        $city = CatalogCategory::key($context['city'] ?? '');
+        if (! $marketId && ($name === '' || $city === '')) {
+            return null;
+        }
+
+        return CatalogImportProposal::query()->where('status', CatalogImportProposal::STATUS_DRAFT)->latest('updated_at')->get()
+            ->first(function (CatalogImportProposal $proposal) use ($marketId, $stallId, $name, $city): bool {
+                $data = $this->data($proposal);
+                if (! $data || ! empty($data['archived_at'])) {
+                    return false;
+                }
+                if ($marketId) {
+                    return (int) ($data['context']['market_id'] ?? $proposal->matched_night_market_id) === $marketId
+                        && (! $stallId || (int) ($data['context']['stall_id'] ?? $proposal->matched_stall_id) === $stallId);
+                }
+
+                return CatalogCategory::key($data['context']['name'] ?? $data['graph']['market']['name'] ?? '') === $name
+                    && CatalogCategory::key($data['context']['city'] ?? $data['graph']['market']['city'] ?? '') === $city;
+            });
     }
 
     public function prepare(User $user, array $input, ?UploadedFile $screenshot = null): array
@@ -207,7 +274,29 @@ class CatalogAiImportService
 
     public function data(CatalogImportProposal $proposal): ?array
     {
-        return $proposal->review_metadata_snapshot['ai_import'] ?? null;
+        $snapshot = $proposal->review_metadata_snapshot;
+        if (! is_array($snapshot)) {
+            return null;
+        }
+
+        $data = $snapshot['ai_import'] ?? null;
+        $usingLastGood = false;
+        if (! is_array($data)) {
+            $data = $snapshot['ai_import_last_good'] ?? null;
+            $usingLastGood = is_array($data);
+        }
+
+        if (! is_array($data)) {
+            return null;
+        }
+
+        $data = $this->normalizeDraftData($data);
+        if ($usingLastGood) {
+            $data['_using_last_good'] = true;
+            $data['repair_warnings'][] = 'The current saved structure was unreadable. This page is showing the last good version.';
+        }
+
+        return $data;
     }
 
     public function revision(CatalogImportProposal $proposal): string
@@ -217,8 +306,375 @@ class CatalogAiImportService
 
     private function persist(CatalogImportProposal $proposal, array $data): void
     {
-        // Namespaced, bounded source/review metadata. No new schema or raw provider response.
-        $proposal->forceFill(['review_metadata_snapshot' => ['ai_import' => $data]])->save();
+        $data = $this->normalizeDraftData($data);
+        $encoded = json_encode($data, JSON_THROW_ON_ERROR);
+        $roundTrip = json_decode($encoded, true, 512, JSON_THROW_ON_ERROR);
+        if (! is_array($roundTrip)) {
+            throw ValidationException::withMessages(['draft' => 'The draft could not be safely saved. The previous version was preserved.']);
+        }
+        $snapshot = is_array($proposal->review_metadata_snapshot) ? $proposal->review_metadata_snapshot : [];
+        $previous = $snapshot['ai_import'] ?? null;
+        if (is_array($previous)) {
+            $snapshot['ai_import_last_good'] = $this->normalizeDraftData($previous);
+        }
+        $snapshot['ai_import'] = $roundTrip;
+        $proposal->forceFill(['review_metadata_snapshot' => $snapshot])->save();
+    }
+
+    /** Tolerantly upgrades old/incomplete snapshots and isolates malformed children. */
+    private function normalizeDraftData(array $data): array
+    {
+        unset($data['_using_last_good']);
+        $repairs = [];
+        $context = is_array($data['context'] ?? null) ? $data['context'] : [];
+        $data['context'] = array_replace([
+            'import_mode' => null, 'module' => 'night-markets', 'market_id' => null, 'stall_id' => null,
+            'name' => '', 'city' => '', 'state' => 'Selangor',
+        ], Arr::only($context, ['import_mode', 'module', 'market_id', 'stall_id', 'name', 'city', 'state']));
+        $data['context']['import_mode'] = in_array($data['context']['import_mode'], ['new_market', 'existing_market'], true)
+            ? $data['context']['import_mode'] : null;
+        $data['context']['module'] = $this->draftString($data['context']['module']) ?: 'night-markets';
+        $data['context']['market_id'] = $this->draftId($data['context']['market_id']);
+        $data['context']['stall_id'] = $this->draftId($data['context']['stall_id']);
+        $data['context']['name'] = $this->draftString($data['context']['name']);
+        $data['context']['city'] = $this->draftString($data['context']['city']);
+        $data['context']['state'] = $this->draftString($data['context']['state']) ?: 'Selangor';
+
+        $sources = is_array($data['sources'] ?? null) ? $data['sources'] : [];
+        $data['sources'] = [];
+        foreach ($sources as $index => $source) {
+            if (! is_array($source)) {
+                $repairs[] = 'Source '.($index + 1).' has invalid saved data.';
+                $data['sources'][] = ['url' => null, 'title' => 'Source needs repair', 'publisher' => null,
+                    'type' => 'article', 'status' => 'Needs Repair', 'thumbnail' => null, 'published_at' => null,
+                    'description' => null, 'images' => [], 'needs_repair' => true];
+
+                continue;
+            }
+            $images = is_array($source['images'] ?? null) ? $source['images'] : [];
+            $source['images'] = [];
+            foreach ($images as $imageIndex => $image) {
+                if (! is_array($image) || ! $this->draftString($image['url'] ?? null)) {
+                    $repairs[] = 'Image '.($imageIndex + 1).' in Source '.($index + 1).' has invalid saved data.';
+
+                    continue;
+                }
+                $source['images'][] = [
+                    ...$image,
+                    'url' => $this->draftString($image['url']),
+                    'caption' => $this->draftNullableString($image['caption'] ?? null),
+                ];
+            }
+            $source += ['url' => null, 'title' => 'Untitled source', 'publisher' => null, 'type' => 'article',
+                'status' => 'Not analysed', 'thumbnail' => null, 'published_at' => null, 'description' => null];
+            foreach (['url', 'publisher', 'thumbnail', 'published_at', 'description', 'text', 'metadata_status', 'mode'] as $field) {
+                if (array_key_exists($field, $source)) {
+                    $source[$field] = $this->draftNullableString($source[$field]);
+                }
+            }
+            $source['title'] = $this->draftString($source['title']) ?: 'Untitled source';
+            $source['type'] = in_array($source['type'] ?? null, ['article', 'video'], true) ? $source['type'] : 'article';
+            $source['status'] = $this->draftString($source['status']) ?: 'Not analysed';
+            foreach (['needs_repair', 'old_source', 'old_source_confirmed', 'low_confidence_fallback'] as $field) {
+                if (array_key_exists($field, $source)) {
+                    $source[$field] = (bool) $source[$field];
+                }
+            }
+            $data['sources'][] = $source;
+        }
+
+        $graph = is_array($data['graph'] ?? null) ? $data['graph'] : [];
+        $market = is_array($graph['market'] ?? null) ? $graph['market'] : [];
+        $graph['market'] = array_replace(['name' => $data['context']['name'], 'address' => null,
+            'city' => $data['context']['city'], 'state' => 'Selangor', 'description' => null,
+            'matched_night_market_id' => null, 'selected' => empty($data['context']['market_id'])], $market);
+        foreach (['name', 'address', 'city', 'state', 'description', 'evidence_text', 'source_url'] as $field) {
+            if (array_key_exists($field, $graph['market'])) {
+                $graph['market'][$field] = $field === 'name' || $field === 'city' || $field === 'state'
+                    ? $this->draftString($graph['market'][$field]) : $this->draftNullableString($graph['market'][$field]);
+            }
+        }
+        $graph['market']['state'] = $graph['market']['state'] ?: 'Selangor';
+        $graph['market']['matched_night_market_id'] = $this->draftId($graph['market']['matched_night_market_id']);
+        $graph['market']['selected'] = (bool) $graph['market']['selected'];
+
+        $days = is_array($graph['operating_days'] ?? null) ? $graph['operating_days'] : [];
+        $graph['operating_days'] = [];
+        foreach ($days as $index => $day) {
+            if (! is_array($day)) {
+                $repairs[] = 'Operating day '.($index + 1).' has invalid saved data.';
+
+                continue;
+            }
+            $day['day_of_week'] = $this->englishDay($day['day_of_week'] ?? null);
+            if (! in_array($day['day_of_week'], MarketOperatingDay::DAYS, true)) {
+                $repairs[] = 'Operating day '.($index + 1).' needs repair.';
+
+                continue;
+            }
+            $normalizedDay = array_replace(['opening_time' => null, 'closing_time' => null,
+                'evidence_text' => null, 'confidence' => null], Arr::only($day,
+                    ['day_of_week', 'opening_time', 'closing_time', 'evidence_text', 'confidence']));
+            $normalizedDay['opening_time'] = $this->draftNullableString($normalizedDay['opening_time']);
+            $normalizedDay['closing_time'] = $this->draftNullableString($normalizedDay['closing_time']);
+            $normalizedDay['evidence_text'] = $this->draftNullableString($normalizedDay['evidence_text']);
+            $normalizedDay['confidence'] = $this->draftNullableString($normalizedDay['confidence']);
+            $graph['operating_days'][] = $normalizedDay;
+        }
+
+        $stalls = is_array($graph['stalls'] ?? null) ? $graph['stalls'] : [];
+        $graph['stalls'] = [];
+        foreach ($stalls as $stallIndex => $stall) {
+            if (! is_array($stall)) {
+                $repairs[] = 'Stall '.($stallIndex + 1).' has invalid saved data.';
+                $stall = ['name' => '', 'needs_repair' => true];
+            }
+            $foods = is_array($stall['foods'] ?? null) ? $stall['foods'] : [];
+            $stall = array_replace(['matched_stall_id' => null, 'name' => '', 'description' => null,
+                'halal_status' => Stall::HALAL_UNKNOWN, 'evidence_text' => null, 'confidence' => null,
+                'selected' => false, 'parent_confirmed' => false, 'source_url' => null], $stall);
+            $stall['matched_stall_id'] = $this->draftId($stall['matched_stall_id']);
+            $stall['name'] = $this->draftString($stall['name']);
+            foreach (['description', 'evidence_text', 'confidence', 'source_url'] as $field) {
+                $stall[$field] = $this->draftNullableString($stall[$field]);
+            }
+            $stall['halal_status'] = is_string($stall['halal_status']) ? $stall['halal_status'] : Stall::HALAL_UNKNOWN;
+            $stall['selected'] = (bool) $stall['selected'];
+            $stall['parent_confirmed'] = (bool) $stall['parent_confirmed'];
+            $stall['foods'] = [];
+            foreach ($foods as $foodIndex => $food) {
+                if (! is_array($food)) {
+                    $repairs[] = 'Food '.($foodIndex + 1).' in Stall '.($stallIndex + 1).' has invalid saved data.';
+                    $food = ['name' => '', 'needs_repair' => true];
+                }
+                $food = array_replace(['matched_food_id' => null, 'name' => '', 'category' => null,
+                    'description' => null, 'price_display' => null, 'price_min' => null, 'price_max' => null,
+                    'currency' => 'MYR', 'unit' => null, 'price_checked_at' => null, 'evidence_text' => null,
+                    'selected' => false, 'photo_confirmed' => false, 'source_url' => null], $food);
+                $food['matched_food_id'] = $this->draftId($food['matched_food_id']);
+                $food['name'] = $this->draftString($food['name']);
+                foreach (['category', 'description', 'price_display', 'currency', 'unit', 'price_checked_at',
+                    'evidence_text', 'source_url', 'image_path'] as $field) {
+                    if (array_key_exists($field, $food)) {
+                        $food[$field] = $this->draftNullableString($food[$field]);
+                    }
+                }
+                $food['currency'] = $food['currency'] ?: 'MYR';
+                $food['price_min'] = is_numeric($food['price_min']) ? (float) $food['price_min'] : null;
+                $food['price_max'] = is_numeric($food['price_max']) ? (float) $food['price_max'] : null;
+                $food['selected'] = (bool) $food['selected'];
+                $food['photo_confirmed'] = (bool) $food['photo_confirmed'];
+                $stall['foods'][] = $food;
+            }
+            $graph['stalls'][] = $stall;
+        }
+        $data['graph'] = $graph;
+        $marketSources = is_array($data['market_sources'] ?? null) ? $data['market_sources'] : [];
+        $data['market_sources'] = [];
+        foreach ($marketSources as $url => $evidence) {
+            $url = $this->draftString($url);
+            if ($url !== '') {
+                $data['market_sources'][$url] = $this->draftString($evidence);
+            }
+        }
+        $conflicts = is_array($data['market_conflicts'] ?? null) ? $data['market_conflicts'] : [];
+        $data['market_conflicts'] = [];
+        foreach ($conflicts as $field => $conflict) {
+            $message = $this->draftString($conflict);
+            if ($message !== '') {
+                $data['market_conflicts'][$field] = $message;
+            }
+        }
+        $warnings = is_array($data['repair_warnings'] ?? null) ? $data['repair_warnings'] : [];
+        $warnings = array_filter(array_map(fn (mixed $warning): string => $this->draftString($warning), $warnings));
+        $data['repair_warnings'] = array_values(array_unique([...$warnings, ...$repairs]));
+        $data['draft_name'] = $this->draftNullableString($data['draft_name'] ?? null);
+        $data['archived_at'] = $this->draftNullableString($data['archived_at'] ?? null);
+
+        return $data;
+    }
+
+    private function draftString(mixed $value): string
+    {
+        return is_scalar($value) ? trim((string) $value) : '';
+    }
+
+    private function draftNullableString(mixed $value): ?string
+    {
+        $value = $this->draftString($value);
+
+        return $value === '' ? null : $value;
+    }
+
+    private function draftId(mixed $value): ?int
+    {
+        return filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+    }
+
+    private function englishDay(mixed $day): ?string
+    {
+        if (! is_string($day)) {
+            return null;
+        }
+        $key = Str::lower(trim($day));
+
+        return ['isnin' => 'Monday', 'selasa' => 'Tuesday', 'rabu' => 'Wednesday', 'khamis' => 'Thursday',
+            'jumaat' => 'Friday', 'sabtu' => 'Saturday', 'ahad' => 'Sunday'][$key] ?? Str::title($key);
+    }
+
+    public function hasLastGoodVersion(CatalogImportProposal $proposal): bool
+    {
+        return is_array($proposal->review_metadata_snapshot['ai_import_last_good'] ?? null);
+    }
+
+    public function restoreLastGood(CatalogImportProposal $proposal): void
+    {
+        DB::transaction(function () use ($proposal): void {
+            $proposal = CatalogImportProposal::query()->lockForUpdate()->findOrFail($proposal->id);
+            if ($proposal->status !== CatalogImportProposal::STATUS_DRAFT) {
+                throw ValidationException::withMessages(['draft' => 'Only an active draft can be restored.']);
+            }
+            $snapshot = is_array($proposal->review_metadata_snapshot) ? $proposal->review_metadata_snapshot : [];
+            if (! is_array($snapshot['ai_import_last_good'] ?? null)) {
+                throw ValidationException::withMessages(['draft' => 'No previous valid draft version is available.']);
+            }
+            $current = $snapshot['ai_import'] ?? null;
+            $snapshot['ai_import'] = $this->normalizeDraftData($snapshot['ai_import_last_good']);
+            $snapshot['ai_import_last_good'] = is_array($current) ? $this->normalizeDraftData($current) : null;
+            $proposal->forceFill(['review_metadata_snapshot' => $snapshot])->save();
+        });
+    }
+
+    public function resetExtractedRecords(CatalogImportProposal $proposal): void
+    {
+        DB::transaction(function () use ($proposal): void {
+            $proposal = CatalogImportProposal::query()->lockForUpdate()->findOrFail($proposal->id);
+            if ($proposal->status !== CatalogImportProposal::STATUS_DRAFT) {
+                throw ValidationException::withMessages(['draft' => 'Only an active draft can be reset.']);
+            }
+            $data = $this->data($proposal) ?? $this->baseDraftData($proposal);
+            $data['graph']['stalls'] = [];
+            $data['repair_warnings'] = [];
+            $this->persist($proposal, $data);
+        });
+    }
+
+    public function removeInvalidItem(CatalogImportProposal $proposal, string $item, ?string $revision): void
+    {
+        DB::transaction(function () use ($proposal, $item, $revision): void {
+            $proposal = CatalogImportProposal::query()->lockForUpdate()->findOrFail($proposal->id);
+            $this->editable($proposal);
+            if (! is_string($revision) || ! hash_equals($this->revision($proposal), $revision)) {
+                throw ValidationException::withMessages(['draft' => 'This draft changed in another tab. Reload before removing an invalid item.']);
+            }
+            $data = $this->data($proposal);
+            if (preg_match('/\Astall:(\d+)\z/', $item, $match)) {
+                $index = (int) $match[1];
+                $stall = $data['graph']['stalls'][$index] ?? null;
+                if (! is_array($stall) || (empty($stall['needs_repair']) && filled($stall['name'] ?? null))) {
+                    throw ValidationException::withMessages(['draft' => 'Only a damaged or unidentified Stall group can be removed with this recovery action.']);
+                }
+                array_splice($data['graph']['stalls'], $index, 1);
+            } elseif (preg_match('/\Afood:(\d+):(\d+)\z/', $item, $match)) {
+                $stallIndex = (int) $match[1];
+                $foodIndex = (int) $match[2];
+                $food = $data['graph']['stalls'][$stallIndex]['foods'][$foodIndex] ?? null;
+                if (! is_array($food) || (empty($food['needs_repair']) && filled($food['name'] ?? null) && filled($food['category'] ?? null))) {
+                    throw ValidationException::withMessages(['draft' => 'Only a damaged or incomplete Food can be removed with this recovery action.']);
+                }
+                array_splice($data['graph']['stalls'][$stallIndex]['foods'], $foodIndex, 1);
+            } else {
+                throw ValidationException::withMessages(['draft' => 'Choose a valid damaged draft item.']);
+            }
+            $data['repair_warnings'] = [];
+            $this->persist($proposal, $data);
+        });
+    }
+
+    public function rename(CatalogImportProposal $proposal, string $name): void
+    {
+        $name = trim($name);
+        if ($name === '') {
+            throw ValidationException::withMessages(['draft_name' => 'Enter a draft name.']);
+        }
+        DB::transaction(function () use ($proposal, $name): void {
+            $proposal = CatalogImportProposal::query()->lockForUpdate()->findOrFail($proposal->id);
+            $this->editable($proposal);
+            $data = $this->data($proposal);
+            $data['draft_name'] = Str::limit($name, 255, '');
+            $this->persist($proposal, $data);
+        });
+    }
+
+    public function archive(CatalogImportProposal $proposal): void
+    {
+        DB::transaction(function () use ($proposal): void {
+            $proposal = CatalogImportProposal::query()->lockForUpdate()->findOrFail($proposal->id);
+            if ($proposal->status !== CatalogImportProposal::STATUS_DRAFT) {
+                throw ValidationException::withMessages(['draft' => 'Only a draft can be archived.']);
+            }
+            $data = $this->data($proposal) ?? $this->baseDraftData($proposal);
+            $data['archived_at'] = now()->toIso8601String();
+            $this->persist($proposal, $data);
+        });
+    }
+
+    public function deleteDraft(CatalogImportProposal $proposal): void
+    {
+        DB::transaction(function () use ($proposal): void {
+            $proposal = CatalogImportProposal::query()->lockForUpdate()->findOrFail($proposal->id);
+            if ($proposal->status !== CatalogImportProposal::STATUS_DRAFT) {
+                throw ValidationException::withMessages(['draft' => 'Imported history cannot be deleted.']);
+            }
+            if ($proposal->catalogSourceLinks()->exists()) {
+                throw ValidationException::withMessages(['draft' => 'A draft with imported catalog evidence cannot be deleted. Archive it instead.']);
+            }
+            $proposal->delete();
+        });
+    }
+
+    /** @return list<string> */
+    public function repairDiagnostics(CatalogImportProposal $proposal): array
+    {
+        $data = $proposal->review_metadata_snapshot['ai_import'] ?? null;
+        if (! is_array($data)) {
+            return ['ai_import snapshot is not an object'];
+        }
+        $issues = [];
+        foreach (['sources', 'graph'] as $field) {
+            if (! is_array($data[$field] ?? null)) {
+                $issues[] = $field.' is not an object/collection';
+            }
+        }
+        foreach (is_array($data['sources'] ?? null) ? $data['sources'] : [] as $i => $source) {
+            if (! is_array($source)) {
+                $issues[] = 'source['.$i.'] has invalid structure';
+            }
+        }
+        foreach (is_array($data['graph']['stalls'] ?? null) ? $data['graph']['stalls'] : [] as $i => $stall) {
+            if (! is_array($stall)) {
+                $issues[] = 'stall['.$i.'] has invalid structure';
+
+                continue;
+            }
+            foreach (is_array($stall['foods'] ?? null) ? $stall['foods'] : [] as $j => $food) {
+                if (! is_array($food)) {
+                    $issues[] = 'stall['.$i.'].food['.$j.'] has invalid structure';
+                }
+            }
+        }
+
+        return $issues ?: ['rendering failed after structural normalization'];
+    }
+
+    private function baseDraftData(CatalogImportProposal $proposal): array
+    {
+        $market = $proposal->matchedNightMarket ?? $proposal->matchedStall?->nightMarket;
+
+        return $this->normalizeDraftData(['context' => ['import_mode' => $market ? 'existing_market' : 'new_market',
+            'module' => 'night-markets', 'market_id' => $market?->id, 'stall_id' => $proposal->matched_stall_id,
+            'name' => $market?->name ?? '', 'city' => $market?->city ?? '', 'state' => 'Selangor'],
+            'sources' => [], 'graph' => ['market' => [], 'operating_days' => [], 'stalls' => []]]);
     }
 
     private function editable(CatalogImportProposal $proposal): void
@@ -294,13 +750,27 @@ class CatalogAiImportService
                                     $source['publisher'] = $metadata->creatorName;
                                     $source['thumbnail'] = $metadata->thumbnailUrl;
                                     $source['published_at'] = $metadata->publishedAt->toDateString();
+                                    $source['old_source'] = Carbon::parse($source['published_at'])->lt(now()->subYears(5));
                                 } catch (SocialMediaMetadataException) {
                                     $source['metadata_status'] = 'Preview metadata unavailable; content analysis is separate.';
                                 }
                             }
                         }
-                        $read = filled($input['text'] ?? null) ? ['text' => $input['text'], 'images' => [], 'mode' => 'Admin-provided text analysed']
-                            : $this->sources->read($source['url'], $screenshot ? ['mime' => $screenshot->getMimeType(), 'body' => $screenshot->get()] : null, $input, $data['context']);
+                        if (filled($input['text'] ?? null)) {
+                            $read = ['text' => $input['text'], 'images' => [], 'mode' => 'Admin-provided text analysed'];
+                        } else {
+                            try {
+                                $read = $this->sources->read($source['url'], $screenshot ? ['mime' => $screenshot->getMimeType(), 'body' => $screenshot->get()] : null, $input, $data['context']);
+                            } catch (ValidationException $exception) {
+                                $allowSummary = in_array((int) $i, array_map('intval', $input['use_search_summary_ids'] ?? []), true);
+                                if (! $allowSummary || mb_strlen(trim((string) ($source['description'] ?? ''))) < 40) {
+                                    throw $exception;
+                                }
+                                $read = ['text' => (string) $source['description'], 'images' => [],
+                                    'mode' => 'Search summary fallback analysed — low confidence; article body was not read'];
+                                $source['low_confidence_fallback'] = true;
+                            }
+                        }
                         $source['text'] = $read['text'];
                         $source['images'] = $read['images'];
                         $source['status'] = $read['mode'];
@@ -328,7 +798,8 @@ class CatalogAiImportService
                         $analysed++;
                     } catch (\Throwable $e) {
                         $source['status'] = isset($source['text']) ? 'Source read; catalog suggestions unavailable. Review the extracted text.' : 'Analysis unavailable. Open source or provide text/screenshots.';
-                        $analysisErrors[] = '“'.($source['title'] ?: parse_url($source['url'], PHP_URL_HOST)).'”: '.($e instanceof ValidationException ? $e->validator->errors()->first()
+                        $sourceLabel = $source['title'] ?: (is_string($source['url'] ?? null) ? parse_url($source['url'], PHP_URL_HOST) : 'Source needs repair');
+                        $analysisErrors[] = '“'.$sourceLabel.'”: '.($e instanceof ValidationException ? $e->validator->errors()->first()
                             : ($e instanceof CatalogSuggestionException ? $this->extraction->failureMessage($e->failureCode)
                                 .($e->httpStatus ? ' (HTTP '.$e->httpStatus.', '.$e->failureCode.').' : '') : $source['status']));
                     } unset($source);
@@ -408,6 +879,7 @@ class CatalogAiImportService
                 if (isset($input['market']) || isset($input['operating_days'])) {
                     $data['market_reviewed'] = true;
                 }
+                $data['allow_duplicate_market'] = (bool) ($input['allow_duplicate_market'] ?? false);
                 foreach (['name', 'address', 'city', 'matched_night_market_id', 'selected'] as $key) {
                     if (array_key_exists($key, $input['market'] ?? [])) {
                         if (($data['graph']['market'][$key] ?? null) !== $input['market'][$key]) {
@@ -473,6 +945,11 @@ class CatalogAiImportService
                         }
                     } unset($food);
                 } unset($stall);
+                foreach ($data['sources'] as $i => &$source) {
+                    if (array_key_exists('old_source_confirmed', $input['sources'][$i] ?? [])) {
+                        $source['old_source_confirmed'] = (bool) $input['sources'][$i]['old_source_confirmed'];
+                    }
+                } unset($source);
                 $this->persist($proposal, $data);
                 DB::afterCommit(function () use ($proposal, $removedImages) {
                     foreach ($removedImages as $path) {
@@ -553,20 +1030,61 @@ class CatalogAiImportService
         $marketId = $data['context']['market_id'] ?? $data['graph']['market']['matched_night_market_id'] ?? null;
         $targetMarket = $marketId ? NightMarket::query()->find($marketId) : null;
         $existingStalls = $marketId ? Stall::query()->where('night_market_id', $marketId)->with('foods')->get() : collect();
+        if ($marketId && ! $targetMarket) {
+            $data['repair_warnings'][] = 'Linked Night Market no longer exists. Choose another Market before importing.';
+        }
         foreach ($data['graph']['stalls'] as &$stall) {
-            $stall['missing'] = array_values(array_filter([empty($stall['name']) ? 'Stall name' : null, empty($stall['parent_confirmed']) ? 'Confirm Market ownership' : null]));
+            if (! empty($stall['matched_stall_id']) && ! $existingStalls->contains('id', $stall['matched_stall_id'])) {
+                $stall['needs_repair'] = true;
+                $stall['matched_stall_id'] = null;
+            }
+            $stall['missing'] = array_values(array_filter([empty($stall['name']) ? 'Stall name' : null,
+                ! empty($stall['needs_repair']) ? 'Linked record no longer exists' : null,
+                empty($stall['parent_confirmed']) ? 'Confirm Market ownership' : null]));
             $stall['duplicates'] = $existingStalls->filter(fn ($s) => CatalogCategory::key($s->name) === CatalogCategory::key($stall['name']))->pluck('id')->all();
             foreach ($stall['foods'] as &$food) {
-                $food['missing'] = array_values(array_filter([empty($food['name']) ? 'Food name' : null,
-                    ! in_array($food['category'] ?? null, $categories, true) ? 'Category' : null,
-                    ! is_numeric($food['price_min'] ?? null) || ! is_numeric($food['price_max'] ?? null) || $food['price_min'] <= 0 || $food['price_max'] < $food['price_min'] ? 'Valid price / range' : null,
-                    empty($food['image_path']) || ! app(CatalogDraftImageStorage::class)->disk()->exists($food['image_path']) || empty($food['photo_confirmed']) ? 'Confirmed photo' : null]));
                 $target = $existingStalls->firstWhere('id', $stall['matched_stall_id'] ?? null);
+                $linkedFoodExists = empty($food['matched_food_id']) || $existingStalls->flatMap->foods->contains('id', $food['matched_food_id']);
+                if (! $linkedFoodExists) {
+                    $food['needs_repair'] = true;
+                    $food['matched_food_id'] = null;
+                }
+                $food['missing'] = array_values(array_filter([empty($food['name']) ? 'Food name' : null,
+                    empty($food['category']) ? 'Category' : null,
+                    ! empty($food['needs_repair']) ? 'Linked record no longer exists' : null]));
                 $food['duplicates'] = $target ? $target->foods->filter(fn ($f) => CatalogCategory::key($f->name) === CatalogCategory::key($food['name']))->pluck('id')->all() : [];
             } unset($food);
         } unset($stall);
 
-        return [...$data, 'existingStalls' => $existingStalls, 'categories' => $categories, 'canDeleteEmpty' => $this->isUnusedEmpty($proposal, $data),
+        $duplicateMarkets = collect();
+        $duplicateDrafts = collect();
+        if (! $marketId && filled($data['graph']['market']['name'] ?? null) && filled($data['graph']['market']['city'] ?? null)) {
+            $name = CatalogCategory::key($data['graph']['market']['name']);
+            $city = CatalogCategory::key($data['graph']['market']['city']);
+            $address = CatalogCategory::key($data['graph']['market']['address'] ?? '');
+            $duplicateMarkets = NightMarket::query()->where('state', 'Selangor')->get(['id', 'name', 'address', 'city', 'status'])
+                ->filter(fn ($market) => CatalogCategory::key($market->name) === $name && CatalogCategory::key($market->city) === $city
+                    && ($address === '' || CatalogCategory::key($market->address ?? '') === $address));
+            if ($duplicateMarkets->isNotEmpty() && empty($data['graph']['market']['matched_night_market_id'])) {
+                $data['graph']['market']['matched_night_market_id'] = $duplicateMarkets->first()->id;
+            }
+            $duplicateDrafts = CatalogImportProposal::query()->where('status', CatalogImportProposal::STATUS_DRAFT)
+                ->whereKeyNot($proposal->id)->get()->filter(function (CatalogImportProposal $other) use ($name, $city, $address): bool {
+                    $otherData = $this->data($other);
+                    if (! $otherData || ! empty($otherData['archived_at'])) {
+                        return false;
+                    }
+                    $otherMarket = $otherData['graph']['market'];
+
+                    return CatalogCategory::key($otherMarket['name'] ?? $otherData['context']['name'] ?? '') === $name
+                        && CatalogCategory::key($otherMarket['city'] ?? $otherData['context']['city'] ?? '') === $city
+                        && ($address === '' || CatalogCategory::key($otherMarket['address'] ?? '') === $address);
+                });
+        }
+
+        return [...$data, 'existingStalls' => $existingStalls, 'categories' => $categories,
+            'duplicateMarkets' => $duplicateMarkets, 'duplicateDrafts' => $duplicateDrafts,
+            'canDeleteEmpty' => $this->isUnusedEmpty($proposal, $data),
             'marketIncomplete' => $marketId ? [] : array_values(array_filter([
                 empty($data['graph']['market']['address']) ? 'Address not yet provided' : null,
                 empty($data['graph']['operating_days']) ? 'Operating schedule not yet provided' : null,
@@ -598,6 +1116,10 @@ class CatalogAiImportService
                 throw ValidationException::withMessages(['draft' => 'This draft changed after the review page loaded. Reload the latest review, check the confirmation box again, and retry.']);
             }
             $review = $this->review($proposal);
+            if (($review['duplicateDrafts']->isNotEmpty() || $review['duplicateMarkets']->isNotEmpty())
+                && empty($review['graph']['market']['matched_night_market_id']) && empty($input['allow_duplicate_market'])) {
+                throw ValidationException::withMessages(['draft' => 'A matching Market or unfinished draft already exists. Link the existing Market, continue the existing draft, or explicitly confirm a genuinely separate Market.']);
+            }
             if (empty($review['context']['market_id']) && empty($review['graph']['market']['matched_night_market_id']) && empty($review['graph']['market']['selected'])) {
                 throw ValidationException::withMessages(['draft' => 'Include the new inactive Market or explicitly link an existing Market before importing its Stalls and Foods.']);
             }

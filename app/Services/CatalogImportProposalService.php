@@ -12,8 +12,11 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
+use Illuminate\Pagination\LengthAwarePaginator as ConcreteLengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -31,10 +34,10 @@ class CatalogImportProposalService
         return $this->createSourceDraft($user, $data, $canonicalSource);
     }
 
-    public function createSourceDraft(User $user, array $data, array $canonicalSource): CatalogImportProposal
+    public function createSourceDraft(User $user, array $data, array $canonicalSource, bool $allowSharedSource = false): CatalogImportProposal
     {
 
-        return DB::transaction(function () use ($user, $data, $canonicalSource): CatalogImportProposal {
+        return DB::transaction(function () use ($user, $data, $canonicalSource, $allowSharedSource): CatalogImportProposal {
             $source = $this->findOrCreateSource($canonicalSource);
             $target = $this->resolveTarget($data);
 
@@ -44,7 +47,7 @@ class CatalogImportProposalService
                 ->lockForUpdate()
                 ->first();
 
-            if ($existingDraft) {
+            if ($existingDraft && ! $allowSharedSource) {
                 return $existingDraft;
             }
 
@@ -81,25 +84,59 @@ class CatalogImportProposalService
     /**
      * @return LengthAwarePaginator<CatalogImportProposal>
      */
-    public function proposals(?string $status = null): LengthAwarePaginator
+    /** @param array{status?: string|null, draft_search?: string|null, draft_type?: string|null, draft_condition?: string|null, draft_sort?: string|null} $filters */
+    public function proposals(array $filters = []): LengthAwarePaginator
     {
-        $proposals = CatalogImportProposal::query()
-            ->when(in_array($status, ['draft', 'imported'], true), fn ($query) => $query->where('status', $status))
+        $items = CatalogImportProposal::query()
             ->with([
                 'socialMediaSource:id,platform,canonical_url,metadata_status',
-                'matchedNightMarket:id,name',
-                'matchedStall:id,night_market_id,name',
-                'matchedStall.nightMarket:id,name',
+                'matchedNightMarket:id,name,city,status',
+                'matchedStall:id,night_market_id,name,status',
+                'matchedStall.nightMarket:id,name,city,status',
                 'createdBy:id,name',
             ])
-            ->latest()
-            ->paginate(15)->withQueryString();
+            ->get()
+            ->each(function (CatalogImportProposal $proposal): void {
+                $summary = $this->draftSummary($proposal);
+                foreach ($summary as $key => $value) {
+                    $proposal->setAttribute($key, $value);
+                }
+            });
 
-        $draftGroups = $proposals->getCollection()->where('status', CatalogImportProposal::STATUS_DRAFT)
+        if (filled($filters['draft_search'] ?? null)) {
+            $needle = Str::lower(trim($filters['draft_search']));
+            $items = $items->filter(fn (CatalogImportProposal $proposal) => str_contains((string) $proposal->id, $needle)
+                || str_contains(Str::lower((string) $proposal->draft_market_name), $needle));
+        }
+        if (($filters['draft_type'] ?? null) === 'new_market') {
+            $items = $items->where('target_type', CatalogImportProposal::TARGET_NEW_MARKET);
+        } elseif (($filters['draft_type'] ?? null) === 'existing') {
+            $items = $items->whereIn('target_type', [CatalogImportProposal::TARGET_EXISTING_MARKET, CatalogImportProposal::TARGET_EXISTING_STALL]);
+        }
+        $status = $filters['status'] ?? 'active';
+        $items = match ($status) {
+            'imported' => $items->where('status', CatalogImportProposal::STATUS_IMPORTED),
+            'archived' => $items->where('draft_archived', true),
+            'attention' => $items->where('status', CatalogImportProposal::STATUS_DRAFT)
+                ->where('draft_archived', false)->filter(fn ($item) => in_array($item->draft_display_status, ['Analysis Failed', 'Missing Information'], true)),
+            'ready' => $items->where('status', CatalogImportProposal::STATUS_DRAFT)
+                ->where('draft_archived', false)->where('draft_display_status', 'Ready to Import'),
+            default => $items->where('status', CatalogImportProposal::STATUS_DRAFT)->where('draft_archived', false)
+                ->filter(fn ($item) => ! in_array($item->draft_display_status, ['Analysis Failed', 'Missing Information'], true)),
+        };
+        $items = match ($filters['draft_condition'] ?? null) {
+            'ready' => $items->where('draft_display_status', 'Ready to Import'),
+            'failed' => $items->where('draft_display_status', 'Analysis Failed'),
+            'incomplete' => $items->filter(fn ($item) => in_array($item->draft_display_status, ['Missing Information', 'Needs Review', 'Searching Sources'], true)),
+            default => $items,
+        };
+
+        $items = ($filters['draft_sort'] ?? 'updated_desc') === 'updated_asc'
+            ? $items->sortBy('updated_at') : $items->sortByDesc('updated_at');
+        $draftGroups = $items->where('status', CatalogImportProposal::STATUS_DRAFT)
             ->groupBy(function (CatalogImportProposal $proposal): string {
-                $context = $proposal->review_metadata_snapshot['ai_import']['context'] ?? [];
-                $name = $context['name'] ?? $proposal->matchedNightMarket?->name ?? $proposal->matchedStall?->name ?? '';
-                $city = $context['city'] ?? $proposal->matchedNightMarket?->city ?? $proposal->matchedStall?->nightMarket?->city ?? '';
+                $name = $proposal->draft_market_name ?? '';
+                $city = $proposal->draft_market_city ?? '';
 
                 return mb_strtolower(trim($name)).'|'.mb_strtolower(trim($city));
             });
@@ -109,7 +146,82 @@ class CatalogImportProposalService
             }
         }
 
+        $page = Paginator::resolveCurrentPage();
+        $perPage = 15;
+        $proposals = new ConcreteLengthAwarePaginator($items->forPage($page, $perPage)->values(), $items->count(), $perPage, $page,
+            ['path' => Paginator::resolveCurrentPath(), 'query' => request()->query()]);
+
         return $proposals;
+    }
+
+    /** @return array<string, mixed> */
+    private function draftSummary(CatalogImportProposal $proposal): array
+    {
+        $data = is_array($proposal->review_metadata_snapshot['ai_import'] ?? null)
+            ? $proposal->review_metadata_snapshot['ai_import'] : [];
+        $context = is_array($data['context'] ?? null) ? $data['context'] : [];
+        $graph = is_array($data['graph'] ?? null) ? $data['graph'] : [];
+        $market = is_array($graph['market'] ?? null) ? $graph['market'] : [];
+        $sources = is_array($data['sources'] ?? null) ? array_filter($data['sources'], 'is_array') : [];
+        $stalls = is_array($graph['stalls'] ?? null) ? array_filter($graph['stalls'], 'is_array') : [];
+        $foodCount = collect($stalls)->sum(fn ($stall) => is_array($stall['foods'] ?? null) ? count($stall['foods']) : 0);
+        $missing = [];
+        $marketName = $this->summaryString($market['name'] ?? $context['name'] ?? null);
+        $marketCity = $this->summaryString($market['city'] ?? $context['city'] ?? null);
+        if ($marketName === '') {
+            $missing[] = 'Market name';
+        }
+        if ($marketCity === '') {
+            $missing[] = 'City';
+        }
+        if ($proposal->status === CatalogImportProposal::STATUS_DRAFT && $sources === []) {
+            $missing[] = 'Source';
+        }
+        if (($context['import_mode'] ?? null) === 'new_market' && $this->summaryString($market['address'] ?? null) === '') {
+            $missing[] = 'Address';
+        }
+        if (($context['import_mode'] ?? null) === 'new_market' && empty($graph['operating_days'])) {
+            $missing[] = 'Operating schedule';
+        }
+        $missingStallNames = collect($stalls)->filter(fn ($stall) => $this->summaryString($stall['name'] ?? null) === '')->count();
+        $missingFoodNames = collect($stalls)->sum(fn ($stall) => collect(is_array($stall['foods'] ?? null) ? $stall['foods'] : [])
+            ->filter(fn ($food) => ! is_array($food) || $this->summaryString($food['name'] ?? null) === '')->count());
+        $missingFoodCategories = collect($stalls)->sum(fn ($stall) => collect(is_array($stall['foods'] ?? null) ? $stall['foods'] : [])
+            ->filter(fn ($food) => is_array($food) && $this->summaryString($food['category'] ?? null) === '')->count());
+        if ($missingStallNames) {
+            $missing[] = $missingStallNames.' Stall name'.($missingStallNames === 1 ? '' : 's');
+        }
+        if ($missingFoodNames) {
+            $missing[] = $missingFoodNames.' Food name'.($missingFoodNames === 1 ? '' : 's');
+        }
+        if ($missingFoodCategories) {
+            $missing[] = $missingFoodCategories.' Food categor'.($missingFoodCategories === 1 ? 'y' : 'ies');
+        }
+        $failed = collect($sources)->contains(fn ($source) => Str::contains(Str::lower($this->summaryString($source['status'] ?? null)), ['failed', 'unavailable', 'needs repair']));
+        $repairs = is_array($data['repair_warnings'] ?? null)
+            ? array_values(array_filter(array_map(fn ($repair) => $this->summaryString($repair), $data['repair_warnings']))) : [];
+        $displayStatus = match (true) {
+            $proposal->status === CatalogImportProposal::STATUS_IMPORTED => 'Imported',
+            $failed => 'Analysis Failed',
+            $missing !== [] || $repairs !== [] => 'Missing Information',
+            $stalls !== [] || ! empty($market['selected']) => 'Ready to Import',
+            collect($sources)->contains(fn ($source) => ! empty($source['analysed_hash'])) => 'Needs Review',
+            default => 'Searching Sources',
+        };
+
+        return [
+            'draft_name' => $this->summaryString($data['draft_name'] ?? null) ?: null,
+            'draft_market_name' => $marketName ?: $proposal->matchedNightMarket?->name ?? $proposal->matchedStall?->nightMarket?->name ?? 'Market identity incomplete',
+            'draft_market_city' => $marketCity ?: $proposal->matchedNightMarket?->city ?? $proposal->matchedStall?->nightMarket?->city ?? '',
+            'draft_display_status' => $displayStatus,
+            'draft_source_count' => count($sources), 'draft_stall_count' => count($stalls), 'draft_food_count' => $foodCount,
+            'draft_missing' => [...$missing, ...$repairs], 'draft_archived' => filled($data['archived_at'] ?? null),
+        ];
+    }
+
+    private function summaryString(mixed $value): string
+    {
+        return is_scalar($value) ? trim((string) $value) : '';
     }
 
     public function detail(CatalogImportProposal $proposal): CatalogImportProposal
@@ -175,7 +287,7 @@ class CatalogImportProposalService
     {
         return [
             'nightMarkets' => NightMarket::query()
-                ->publiclyVisible()
+                ->where('state', 'Selangor')
                 ->withCount([
                     'stalls as active_stalls_count' => fn (Builder $query) => $query
                         ->where('status', Stall::STATUS_ACTIVE),
@@ -185,8 +297,7 @@ class CatalogImportProposalService
                 ->orderBy('id')
                 ->get(['id', 'name', 'city', 'state', 'status']),
             'stalls' => Stall::query()
-                ->where('status', Stall::STATUS_ACTIVE)
-                ->whereHas('nightMarket', fn (Builder $query) => $query->publiclyVisible())
+                ->whereHas('nightMarket', fn (Builder $query) => $query->where('state', 'Selangor'))
                 ->with([
                     'nightMarket:id,name,city,state,status',
                 ])
@@ -266,13 +377,13 @@ class CatalogImportProposalService
         }
 
         $market = NightMarket::query()
-            ->publiclyVisible()
+            ->where('state', 'Selangor')
             ->lockForUpdate()
             ->find($data['matched_night_market_id']);
 
         if (! $market) {
             throw ValidationException::withMessages([
-                'matched_night_market_id' => 'The selected Night Market must be active and located in Selangor.',
+                'matched_night_market_id' => 'The selected Night Market must be located in Selangor.',
             ]);
         }
 
@@ -292,24 +403,23 @@ class CatalogImportProposalService
         }
 
         $stall = Stall::query()
-            ->where('status', Stall::STATUS_ACTIVE)
             ->lockForUpdate()
             ->find($data['matched_stall_id']);
 
         if (! $stall) {
             throw ValidationException::withMessages([
-                'matched_stall_id' => 'The selected Stall must be active and belong to an active Selangor Night Market.',
+                'matched_stall_id' => 'The selected Stall must belong to a Selangor Night Market.',
             ]);
         }
 
         $market = NightMarket::query()
-            ->publiclyVisible()
+            ->where('state', 'Selangor')
             ->lockForUpdate()
             ->find($stall->night_market_id);
 
         if (! $market) {
             throw ValidationException::withMessages([
-                'matched_stall_id' => 'The selected Stall must be active and belong to an active Selangor Night Market.',
+                'matched_stall_id' => 'The selected Stall must belong to a Selangor Night Market.',
             ]);
         }
 

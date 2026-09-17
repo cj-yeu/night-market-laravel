@@ -198,6 +198,27 @@ class CatalogAiImportTest extends TestCase
         $this->assertSame(['Saturday', '16:30', '22:00'], [$day['day_of_week'], $day['opening_time'], $day['closing_time']]);
     }
 
+    public function test_malay_day_without_times_is_retained_as_time_unknown(): void
+    {
+        $name = 'TEST Khamis Market '.Str::random(8);
+        $text = $name.' in Rawang, Selangor. '.$name.' beroperasi setiap Khamis.';
+        $payload = ['market' => ['name' => $name, 'address' => null, 'city' => 'Rawang', 'state' => 'Selangor',
+            'description' => null, 'evidence_text' => $name.' in Rawang, Selangor.', 'confidence' => null,
+            'operating_days' => [['day_of_week' => 'Khamis', 'opening_time' => null, 'closing_time' => null,
+                'evidence_text' => $name.' beroperasi setiap Khamis.', 'confidence' => null]]],
+            'stalls' => [], 'warnings' => [], 'insufficient_data' => false];
+        Http::fake(['generativelanguage.googleapis.com/*' => Http::response($this->response($payload))]);
+        $this->actingAs($this->admin)->post(route('admin.ai-import.start'), [
+            'import_mode' => 'new_market', 'name' => $name, 'city' => 'Rawang', 'url' => $this->url,
+        ])->assertSessionHasNoErrors();
+        $proposal = CatalogImportProposal::where('created_by', $this->admin->id)->sole();
+        $this->post(route('admin.ai-import.analyse', $proposal), ['source_ids' => [0], 'text' => $text])->assertSessionHasNoErrors();
+        $day = app(CatalogAiImportService::class)->data($proposal->fresh())['graph']['operating_days'][0];
+        $this->assertSame('Thursday', $day['day_of_week']);
+        $this->assertNull($day['opening_time']);
+        $this->assertNull($day['closing_time']);
+    }
+
     public function test_conflicting_source_schedules_are_flagged_for_admin_review(): void
     {
         $name = 'TEST Conflict Market '.Str::random(8);
@@ -230,12 +251,119 @@ class CatalogAiImportTest extends TestCase
         foreach (['one', 'two'] as $suffix) {
             $this->post(route('admin.ai-import.start'), [
                 'import_mode' => 'new_market', 'name' => $name, 'city' => 'Shah Alam',
-                'url' => 'https://'.$suffix.'.example.test/'.Str::uuid(),
+                'url' => 'https://'.$suffix.'.example.test/'.Str::uuid(), 'start_separate_draft' => 1,
             ])->assertSessionHasNoErrors();
         }
-        $this->get(route('admin.ai-import.history', ['status' => 'draft']))->assertOk()
-            ->assertSee('Possible duplicate saved work: 2 drafts for this Market appear on this page.');
+        $this->get(route('admin.ai-import.history', ['status' => 'attention']))->assertOk()
+            ->assertSee('2 unfinished drafts appear to reference this Market.');
         Http::assertNothingSent();
+    }
+
+    public function test_inactive_market_and_stall_are_selectable_and_preserved_as_exact_targets(): void
+    {
+        $market = NightMarket::factory()->inactive()->create(['state' => 'Selangor']);
+        $stall = Stall::factory()->inactive()->create(['night_market_id' => $market->id]);
+
+        $this->actingAs($this->admin)->get(route('admin.ai-import.index', [
+            'module' => 'foods', 'market_id' => $market->id, 'stall_id' => $stall->id,
+        ]))->assertOk()->assertSee($market->name)->assertSee($stall->name)
+            ->assertSee('value="existing_market" required checked', false)
+            ->assertSee('Inactive');
+
+        $this->post(route('admin.ai-import.start'), [
+            'module' => 'foods', 'market_id' => $market->id, 'stall_id' => $stall->id, 'url' => $this->url,
+        ])->assertSessionHasNoErrors();
+        $proposal = CatalogImportProposal::where('created_by', $this->admin->id)->latest('id')->firstOrFail();
+        $data = app(CatalogAiImportService::class)->data($proposal);
+        $this->assertSame($market->id, $data['context']['market_id']);
+        $this->assertSame($stall->id, $data['context']['stall_id']);
+    }
+
+    public function test_malformed_child_is_isolated_and_corrupt_snapshot_has_recovery_page(): void
+    {
+        $proposal = $this->draft();
+        $data = app(CatalogAiImportService::class)->data($proposal);
+        $data['sources'][0]['url'] = ['invalid'];
+        $data['sources'][0]['images'] = [['url' => ['invalid']]];
+        $data['graph']['stalls'] = [['name' => 'Valid Stall', 'foods' => [null]]];
+        $proposal->forceFill(['review_metadata_snapshot' => ['ai_import' => $data]])->save();
+
+        $this->get(route('admin.ai-import.show', $proposal))->assertOk()->assertSee('Needs Repair')
+            ->assertSee('Valid Stall')->assertSee('Source URL needs repair');
+        $this->post(route('admin.ai-import.remove-invalid', $proposal), [
+            'repair_item' => 'food:0:0', 'revision' => app(CatalogAiImportService::class)->revision($proposal),
+        ])
+            ->assertRedirect(route('admin.ai-import.show', $proposal));
+        $this->assertSame([], app(CatalogAiImportService::class)->data($proposal->fresh())['graph']['stalls'][0]['foods']);
+
+        $proposal->forceFill(['review_metadata_snapshot' => ['ai_import' => 'invalid internal structure']])->save();
+        $this->get(route('admin.ai-import.show', $proposal))->assertStatus(422)->assertSee('Repair Draft #'.$proposal->id);
+        $this->post(route('admin.ai-import.reset-extracted', $proposal))->assertRedirect(route('admin.ai-import.show', $proposal));
+        $this->get(route('admin.ai-import.show', $proposal))->assertOk();
+    }
+
+    public function test_last_good_version_opens_when_current_snapshot_is_unreadable_and_can_be_restored(): void
+    {
+        $proposal = $this->draft();
+        $this->actingAs($this->admin)->patch(route('admin.ai-import.rename', $proposal), [
+            'draft_name' => 'TEST last good draft',
+        ])->assertSessionHasNoErrors();
+
+        $proposal->refresh();
+        $snapshot = $proposal->review_metadata_snapshot;
+        $this->assertIsArray($snapshot['ai_import_last_good']);
+        $snapshot['ai_import'] = 'invalid saved structure';
+        $proposal->forceFill(['review_metadata_snapshot' => $snapshot])->save();
+
+        $this->get(route('admin.ai-import.show', $proposal))->assertOk()->assertSee($this->market->name)
+            ->assertSee('showing the last good version')->assertSee('Restore this last good version');
+        $this->post(route('admin.ai-import.restore', $proposal))->assertRedirect(route('admin.ai-import.show', $proposal));
+        $this->assertIsArray($proposal->fresh()->review_metadata_snapshot['ai_import']);
+    }
+
+    public function test_pdf_analysis_does_not_require_url_context_metadata_after_the_document_is_fetched(): void
+    {
+        $pdfUrl = 'https://catalog.example.test/source.pdf';
+        Http::fake([
+            $pdfUrl => Http::response('%PDF-1.7 fake test document', 200, ['Content-Type' => 'application/pdf']),
+            'generativelanguage.googleapis.com/*' => Http::response(['candidates' => [[
+                'finishReason' => 'STOP',
+                'content' => ['parts' => [['text' => 'This PDF identifies a TEST market and its Thursday operating day with source evidence.']]],
+            ]]]),
+        ]);
+
+        $result = app(GeminiCatalogSourceService::class)->read($pdfUrl);
+
+        $this->assertSame('PDF text extracted and analysed', $result['mode']);
+        $this->assertStringContainsString('Thursday', $result['text']);
+        Http::assertSentCount(2);
+    }
+
+    public function test_source_owned_by_another_draft_requires_explicit_copy(): void
+    {
+        $this->actingAs($this->admin)->post(route('admin.ai-import.start'), [
+            'import_mode' => 'new_market', 'name' => 'TEST First '.Str::random(6), 'city' => 'Shah Alam', 'url' => $this->url,
+        ])->assertSessionHasNoErrors();
+        $first = CatalogImportProposal::where('created_by', $this->admin->id)->sole();
+        config(['services.catalog_search.tavily_key' => 'fake-search', 'services.catalog_search.tavily_free_confirmed' => true]);
+        Http::fake(['api.tavily.com/search' => Http::response(['results' => [[
+            'url' => $this->url, 'title' => 'TEST Second Market Shah Alam source',
+            'content' => 'TEST Second Market in Shah Alam, Selangor.',
+        ]]])]);
+        $search = $this->post(route('admin.ai-import.search'), [
+            'import_mode' => 'new_market', 'name' => 'TEST Second Market', 'city' => 'Shah Alam', 'search_kind' => 'articles',
+        ]);
+        parse_str(parse_url($search->headers->get('Location'), PHP_URL_QUERY), $query);
+
+        $this->post(route('admin.ai-import.start'), ['search_id' => $query['search_id'], 'source_ids' => [0]])
+            ->assertSessionHasErrors('source');
+        $this->assertSame(1, CatalogImportProposal::where('created_by', $this->admin->id)->count());
+
+        $this->post(route('admin.ai-import.start'), [
+            'search_id' => $query['search_id'], 'source_ids' => [0], 'copy_source_ids' => [0], 'start_separate_draft' => 1,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(2, CatalogImportProposal::where('created_by', $this->admin->id)->count());
+        $this->assertDatabaseHas('catalog_import_proposals', ['id' => $first->id, 'status' => 'draft']);
     }
 
     public function test_explicit_import_mode_and_exact_existing_target_are_required_before_search_or_prepare(): void
@@ -282,7 +410,7 @@ class CatalogAiImportTest extends TestCase
         $this->assertTrue($data['graph']['stalls'][0]['selected']);
         $this->assertTrue($data['graph']['stalls'][0]['foods'][0]['selected']);
         $this->assertFalse($data['graph']['stalls'][0]['parent_confirmed']);
-        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Create Night Market, Stalls &amp; Foods', false)
+        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Create Selected Catalog Records')
             ->assertSee('name="stalls[0][foods][0][price_min]"', false)->assertSee('Save and continue later');
         $this->post(route('admin.ai-import.prepare'), $input)->assertRedirect(route('admin.ai-import.review', $p))->assertSessionHasNoErrors();
         $this->assertSame($count + 1, CatalogImportProposal::count());
@@ -318,7 +446,7 @@ class CatalogAiImportTest extends TestCase
         $this->actingAs($this->admin)->post(route('admin.ai-import.prepare'), ['import_mode' => 'existing_market', 'market_id' => $this->market->id, 'url' => $this->url])
             ->assertStatus(303)->assertSessionHasNoErrors();
         $p = CatalogImportProposal::where('created_by', $this->admin->id)->latest('id')->firstOrFail();
-        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Add Stalls &amp; Foods to Existing Market', false);
+        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Add Selected Records');
         $original = $this->market->fresh()->getAttributes();
         $input = [...$this->edit($p), 'action' => 'import', 'confirm' => 1];
         $this->post(route('admin.ai-import.complete', $p), $input)->assertRedirect(route('admin.ai-import.success', $p))->assertSessionHasNoErrors();
@@ -332,16 +460,19 @@ class CatalogAiImportTest extends TestCase
         Http::assertSentCount(2);
     }
 
-    public function test_complete_preserves_edits_on_missing_photo_and_requires_confirmation_but_save_for_later_does_not(): void
+    public function test_inactive_food_without_photo_imports_and_confirmation_is_still_required(): void
     {
         $p = $this->draft();
         $this->analyse($p);
         $input = [...$this->edit($p, false), 'action' => 'import', 'confirm' => 1];
         $input['stalls'][0]['foods'][0]['description'] = 'TEST edited evidence';
-        $this->from(route('admin.ai-import.review', $p))->post(route('admin.ai-import.complete', $p), $input)
-            ->assertRedirect(route('admin.ai-import.review', $p))->assertSessionHasErrors('draft');
-        $this->assertSame('TEST edited evidence', app(CatalogAiImportService::class)->data($p->refresh())['graph']['stalls'][0]['foods'][0]['description']);
-        $this->assertSame(0, $this->market->stalls()->count());
+        $this->post(route('admin.ai-import.complete', $p), $input)->assertSessionHasNoErrors();
+        $food = $this->market->stalls()->firstOrFail()->foods()->firstOrFail();
+        $this->assertSame('TEST edited evidence', $food->description);
+        $this->assertNull($food->image_path);
+        $this->assertSame(Food::STATUS_INACTIVE, $food->status);
+        $p = $this->draft();
+        $this->analyse($p);
         $input = [...$this->edit($p), 'action' => 'import'];
         $this->post(route('admin.ai-import.complete', $p), $input)->assertSessionHasErrors('confirm');
         $this->assertSame('draft', $p->refresh()->status);
@@ -386,14 +517,14 @@ class CatalogAiImportTest extends TestCase
         $this->get(route('admin.ai-import.success', $p))->assertForbidden();
         $this->delete(route('admin.ai-import.destroy-empty', $p))->assertForbidden();
         $this->actingAs($this->admin);
-        $this->delete(route('admin.ai-import.destroy-empty', $p))->assertRedirect(route('admin.ai-import.history', ['status' => 'draft']));
+        $this->delete(route('admin.ai-import.destroy-empty', $p))->assertRedirect(route('admin.ai-import.history', ['status' => 'active']));
         $this->assertModelMissing($p);
         $this->assertDatabaseHas('social_media_sources', ['id' => $p->social_media_source_id]);
         $p = $this->draft();
         $this->analyse($p);
         $this->delete(route('admin.ai-import.destroy-empty', $p))->assertSessionHasErrors('draft');
         $this->assertModelExists($p);
-        $this->get(route('admin.ai-import.history', ['status' => 'draft']))->assertOk()->assertSee($this->market->name);
+        $this->get(route('admin.ai-import.history', ['status' => 'active']))->assertOk()->assertSee($this->market->name);
         $this->get(route('admin.ai-import.history', ['status' => 'imported']))->assertOk()->assertDontSee($this->market->name);
         $this->get(route('admin.ai-import.history', ['status' => 'bad']))->assertSessionHasErrors('status');
     }
@@ -408,7 +539,7 @@ class CatalogAiImportTest extends TestCase
         $this->get(route('admin.social-media.automation.create'))->assertRedirect($url);
         $p = $this->draft();
         $this->get(route('admin.social-media.automation.show', $p))->assertRedirect(route('admin.ai-import.show', $p));
-        $this->get(route('admin.ai-import.history'))->assertOk()->assertSee('Open Draft');
+        $this->get(route('admin.ai-import.history'))->assertOk()->assertSee('Continue Review');
         Http::assertNothingSent();
     }
 
@@ -591,18 +722,21 @@ class CatalogAiImportTest extends TestCase
         Notification::assertNothingSent();
     }
 
-    public function test_incomplete_drafts_persist_but_selected_incomplete_food_cannot_import(): void
+    public function test_inactive_food_may_import_without_price_or_photo(): void
     {
         $p = $this->draft();
         $this->analyse($p);
         $input = $this->edit($p, false);
         $input['stalls'][0]['foods'][0]['price_min'] = null;
+        $input['stalls'][0]['foods'][0]['price_max'] = null;
         $this->patch(route('admin.ai-import.update', $p), $input)->assertSessionHasNoErrors();
         $p->refresh();
-        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('Confirmed photo')->assertSee('Valid price');
-        $this->post(route('admin.ai-import.import', $p), ['revision' => app(CatalogAiImportService::class)->revision($p), 'confirm' => 1])->assertSessionHasErrors('draft');
-        $this->assertSame('draft', $p->fresh()->status);
-        $this->assertSame(0, $this->market->stalls()->count());
+        $this->get(route('admin.ai-import.review', $p))->assertOk()->assertSee('No photo yet')->assertDontSee('Confirmed photo');
+        $this->post(route('admin.ai-import.import', $p), ['revision' => app(CatalogAiImportService::class)->revision($p), 'confirm' => 1])->assertSessionHasNoErrors();
+        $food = $this->market->stalls()->firstOrFail()->foods()->firstOrFail();
+        $this->assertNull($food->price_min);
+        $this->assertSame('Dessert', $food->category);
+        $this->assertNull($food->image_path);
     }
 
     public function test_deselecting_incomplete_food_keeps_draft_and_imports_selected_stall(): void
@@ -611,6 +745,7 @@ class CatalogAiImportTest extends TestCase
         $this->analyse($p);
         $input = $this->edit($p, false);
         $input['stalls'][0]['foods'][0]['selected'] = 0;
+        $input['stalls'][0]['foods'][0]['category'] = null;
         $this->patch(route('admin.ai-import.update', $p), $input)->assertSessionHasNoErrors();
         $p->refresh();
         $this->post(route('admin.ai-import.import', $p), ['revision' => app(CatalogAiImportService::class)->revision($p), 'confirm' => 1])->assertSessionHasNoErrors();

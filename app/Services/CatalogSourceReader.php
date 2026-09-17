@@ -66,7 +66,7 @@ class CatalogSourceReader
     public function fetch(string $url, bool $image = false): array
     {
         $url = $this->url($url);
-        $limit = $image ? 5 * 1024 * 1024 : 2 * 1024 * 1024;
+        $limit = $image ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
         try {
             for ($hop = 0; $hop <= 3; $hop++) {
                 $r = Http::timeout(12)->connectTimeout(4)->withoutRedirecting()->withOptions($this->options($url, $limit))->get($url);
@@ -84,7 +84,7 @@ class CatalogSourceReader
             $mime = strtolower(trim(explode(';', $r->header('Content-Type'))[0]));
             if (! $r->successful() || strlen($r->body()) > $limit || ($image
                 ? ! in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)
-                : ! in_array($mime, ['text/html', 'text/plain'], true))) {
+                : ! in_array($mime, ['text/html', 'text/plain', 'application/pdf'], true))) {
                 throw new \RuntimeException;
             }
 
@@ -97,6 +97,9 @@ class CatalogSourceReader
     public function article(string $url): array
     {
         $data = $this->fetch($url);
+        if ($data['mime'] === 'application/pdf') {
+            return ['text' => null, 'images' => [], 'mode' => 'PDF document fetched', 'pdf' => $data['body'], 'mime' => $data['mime']];
+        }
         $url = $data['url'];
         $dom = new \DOMDocument;
         @$dom->loadHTML('<?xml encoding="UTF-8">'.$data['body'], LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
